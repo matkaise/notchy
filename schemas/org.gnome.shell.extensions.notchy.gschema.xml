@@ -1,0 +1,33 @@
+<schemalist>
+  <schema id="org.gnome.shell.extensions.notchy" path="/org/gnome/shell/extensions/notchy/">
+    <key name="style" type="s"><default>'dynamic'</default><choices><choice value="dynamic"/><choice value="liquid"/></choices><summary>Dynamic Glass (black notch fading into glass) or Liquid Glass (floating glass capsule)</summary></key>
+    <key name="glass-level" type="i"><default>55</default><range min="0" max="100"/><summary>Share of the opened Dynamic Glass surface that is black before it fades into glass; 100 is entirely black</summary></key>
+    <key name="width" type="i"><default>700</default><range min="600" max="900"/><summary>Expanded width</summary></key>
+    <key name="hover-open" type="b"><default>true</default><summary>Expand on hover</summary></key>
+    <key name="hover-delay" type="i"><default>250</default><range min="0" max="2000"/><summary>Hover delay</summary></key>
+    <key name="collapse-delay" type="i"><default>700</default><range min="100" max="5000"/><summary>Collapse delay</summary></key>
+    <key name="animation-duration" type="i"><default>260</default><range min="0" max="800"/><summary>Animation duration</summary></key>
+    <key name="clock-opens-notchy" type="b"><default>true</default><summary>Integrated clock opens the Kalender tab instead of GNOME's calendar popup</summary></key>
+    <key name="scroll-volume" type="b"><default>true</default><summary>Scrolling over the closed island changes the output volume</summary></key>
+    <key name="hide-fullscreen" type="b"><default>true</default><summary>Hide over fullscreen apps</summary></key>
+    <key name="clipboard-enabled" type="b"><default>false</default><summary>Record clipboard history</summary></key>
+    <key name="clipboard-limit" type="i"><default>100</default><range min="10" max="1000"/><summary>Clipboard history limit</summary></key>
+    <key name="clipboard-persist" type="b"><default>false</default><summary>Save clipboard across sessions</summary></key>
+    <key name="clipboard-retention-days" type="i"><default>7</default><range min="1" max="365"/><summary>Clipboard retention</summary></key>
+    <key name="exclude-apps" type="as"><default>['org.gnome.World.Secrets.desktop', 'org.keepassxc.KeePassXC.desktop', '1password.desktop', 'bitwarden.desktop']</default><summary>Apps excluded from clipboard recording</summary></key>
+    <key name="media-enabled" type="b"><default>true</default><summary>Media controls</summary></key>
+    <key name="media-waveform" type="b"><default>true</default><summary>Visualize output-monitor audio while playing</summary></key>
+    <key name="airplay-enabled" type="b"><default>true</default><summary>Discover AirPlay receivers on the local network as audio outputs</summary></key>
+    <key name="hud-enabled" type="b"><default>true</default><summary>Volume and brightness as island live activity</summary></key>
+    <key name="notifications-enabled" type="b"><default>true</default><summary>Notification live activities</summary></key>
+    <key name="snap-enabled" type="b"><default>true</default><summary>Offer snap layouts when a window is dragged into the notch</summary></key>
+    <key name="jiggle-enabled" type="b"><default>true</default><summary>Summon basket by jiggling during a file drag</summary></key>
+    <key name="drag-summon" type="b"><default>true</default><summary>Show drop area when dragging over island</summary></key>
+    <key name="preferred-player" type="s"><default>''</default><summary>Preferred MPRIS player bus name</summary></key>
+    <key name="toggle-search" type="as"><default>['&lt;Super&gt;space']</default><summary>Thunderstorm search in the island</summary></key>
+    <key name="toggle-island" type="as"><default>['&lt;Super&gt;&lt;Control&gt;space']</default><summary>Toggle island</summary></key>
+    <key name="toggle-clipboard" type="as"><default>['&lt;Super&gt;&lt;Shift&gt;space']</default><summary>Open clipboard</summary></key>
+    <key name="toggle-basket" type="as"><default>['&lt;Super&gt;&lt;Shift&gt;b']</default><summary>Open floating basket</summary></key>
+    <key name="toggle-ring" type="as"><default>['&lt;Super&gt;&lt;Shift&gt;r']</default><summary>Open radial capture menu</summary></key>
+  </schema>
+</schemalist>

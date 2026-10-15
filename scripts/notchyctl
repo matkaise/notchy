@@ -1,0 +1,30 @@
+#!/usr/bin/python3
+"""Small local CLI for file-manager scripts and agent hooks."""
+import argparse
+import json
+from pathlib import Path
+from gi.repository import Gio, GLib
+
+parser = argparse.ArgumentParser(description='Notchy local integration')
+commands = parser.add_subparsers(dest='command', required=True)
+add = commands.add_parser('add', help='Add files to the tray'); add.add_argument('files', nargs='+')
+commands.add_parser('list', help='List tray entries')
+activity = commands.add_parser('activity', help='Publish an agent live activity'); activity.add_argument('name'); activity.add_argument('status'); activity.add_argument('--progress', type=float, default=0)
+clear = commands.add_parser('clear-activity'); clear.add_argument('name')
+commands.add_parser('activities')
+args = parser.parse_args()
+proxy = Gio.DBusProxy.new_for_bus_sync(Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, None, 'org.gnome.Shell.Extensions.Notchy', '/org/gnome/Shell/Extensions/Notchy', 'org.gnome.Shell.Extensions.Notchy', None)
+if not proxy.get_name_owner():
+    parser.exit(1, 'Notchy is not enabled.\n')
+if args.command == 'add':
+    files = [Path(path).expanduser().resolve() for path in args.files]
+    if not all(path.exists() for path in files):
+        parser.exit(1, 'One or more files do not exist.\n')
+    print(proxy.call_sync('AddUris', GLib.Variant('(s)', ('\r\n'.join(p.as_uri() for p in files),)), Gio.DBusCallFlags.NONE, 5000, None).unpack()[0])
+elif args.command in ('list', 'activities'):
+    reply = proxy.call_sync('GetItems' if args.command == 'list' else 'GetActivities', None, Gio.DBusCallFlags.NONE, 5000, None)
+    print(json.dumps(json.loads(reply.unpack()[0]), ensure_ascii=False, indent=2))
+elif args.command == 'activity':
+    proxy.call_sync('SetActivity', GLib.Variant('(ssd)', (args.name, args.status, args.progress)), Gio.DBusCallFlags.NONE, 5000, None)
+elif args.command == 'clear-activity':
+    proxy.call_sync('ClearActivity', GLib.Variant('(s)', (args.name,)), Gio.DBusCallFlags.NONE, 5000, None)

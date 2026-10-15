@@ -1,0 +1,265 @@
+/* Droppy for GNOME: GNOME's clock grown into an island.
+   Dynamic Glass = black notch fading into liquid glass;
+   Liquid Glass  = floating glass capsule.
+   Controls are flat (as in Droppy): no gradients, rims or shadows; quiet
+   translucent white fills, icons instead of words, white type in two weights.
+   Accent: Ubuntu orange #E95420, soft #ffb38a, used sparingly. Glass tints are
+   shared with helper/tray.py and helper/drop.py. */
+#notchy-island, .notchy-capsule, #notchy-radial { color: #f4f4f6; font-size: 13px; }
+
+/* ── Capsule in the top bar ─────────────────────────────────────────── */
+#panel .notchy-panel-button { -minimum-hpadding: 0; -natural-hpadding: 0 !important; margin: 0; padding: 0; border: 0 !important; border-radius: 0; background-color: transparent; box-shadow: none; }
+.notchy-capsule { padding: 0 8px; margin: 0; }
+.notchy-capsule.notchy-dynamic { background-color: #000000; border-radius: 0 0 16px 16px; }
+.notchy-capsule.notchy-liquid { background-color: rgba(26,22,30,0.86); border-radius: 13px; margin: 3px 0; }
+.notchy-capsule.notchy-attached { background-color: transparent; border-width: 0; border-radius: 0; margin: 0; box-shadow: none; }
+.notchy-capsule .clock-display { -minimum-hpadding: 0; -natural-hpadding: 0 !important; margin: 0; padding: 0; border: 0 !important; background-color: transparent; }
+.notchy-capsule .clock { color: #ffffff; font-weight: bold; background-color: transparent; box-shadow: none; border: 0 !important; margin: 0; border-radius: 0; padding: 0 12px; }
+.notchy-capsule .clock-display:hover .clock, .notchy-capsule .clock-display:active .clock { background-color: rgba(255,255,255,0.08); border-radius: 12px; }
+.notchy-slot { padding: 0 2px; border-radius: 10px; background-color: transparent; color: #f4f4f6; }
+.notchy-slot:hover { background-color: rgba(255,255,255,0.06); }
+.notchy-slot-row { spacing: 8px; }
+.notchy-wide .notchy-slot { min-width: 64px; }
+.notchy-hud .notchy-slot-right { min-width: 112px; }
+.notchy-mini-art { border-radius: 5px; color: #ffb38a; }
+.notchy-liquid .notchy-mini-art { icon-size: 17px; }
+.notchy-hud-icon { color: #ffffff; }
+.notchy-hud-track { height: 5px; border-radius: 3px; background-color: rgba(255,255,255,0.2); }
+.notchy-hud-fill { height: 5px; border-radius: 3px; background-color: #ffffff; }
+.notchy-hud-fill.boost { background-color: #ffb38a; }
+.notchy-hud-text { font-size: 12px; font-weight: bold; color: #ffb38a; }
+.notchy-hud-value { font-family: monospace; font-size: 11px; min-width: 28px; text-align: right; }
+.notchy-activity-text { font-size: 12px; font-weight: bold; color: #ffb38a; max-width: 140px; }
+.notchy-waveform { color: #ffb38a; }
+
+/* ── Island surface ─────────────────────────────────────────────────── */
+/* The surface itself is clear: src/ui/glass.js paints blur, refraction, tint
+   and rim below it; Dynamic Glass adds the black shade on top of the glass. */
+.notchy-surface { background-color: transparent; }
+.notchy-shade-black { background-color: #000000; }
+.notchy-shade-fade { background-gradient-direction: vertical; background-color: #000000; background-gradient-end: rgba(0,0,0,0); }
+.notchy-shade-black.bottom, .notchy-shade-fade.bottom { border-radius: 0 0 30px 30px; }
+.notchy-shade-black.bottom.compact { border-radius: 0 0 16px 16px; }
+.notchy-header-actions { padding: 0 10px; }
+.notchy-panel-header-slot { padding: 0; }
+.notchy-body.with-gap { padding-top: 8px; }
+.notchy-button.notchy-round-button { width: 30px; height: 30px; padding: 0; border-radius: 15px; color: rgba(255,255,255,0.62); background-color: transparent; }
+.notchy-button.notchy-round-button:hover, .notchy-button.notchy-round-button:focus { color: #ffffff; background-color: rgba(255,255,255,0.08); }
+.notchy-button.notchy-round-button.accent { color: #ffffff; background-color: rgba(255,255,255,0.12); }
+.notchy-button.notchy-round-button.accent:hover { background-color: rgba(255,255,255,0.2); }
+.notchy-button.notchy-round-button.active, .notchy-button.notchy-round-button.favorite { color: #ffb38a; background-color: transparent; }
+.notchy-button.notchy-round-button.small { width: 24px; height: 24px; border-radius: 12px; }
+
+/* Tab bar: a small flat pill of icons with a sliding flat highlight. */
+.notchy-tabbar-area { padding: 0 0 12px; }
+.notchy-tabs { border-radius: 18px; background-color: rgba(18,16,20,0.62); }
+.notchy-tab-indicator { border-radius: 15px; background-color: rgba(255,255,255,0.16); }
+.notchy-tab { border-radius: 15px; color: rgba(255,255,255,0.55); transition-duration: 200ms; }
+.notchy-tab:hover { color: rgba(255,255,255,0.85); }
+.notchy-tab:focus { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.35); }
+.notchy-tab.active { color: #ffffff; }
+
+/* A native GTK pane (Regal, drop zone) shows through the joined surface. */
+.notchy-surface.notchy-native-joined { background-color: transparent; }
+.notchy-native-joined .notchy-header-row { background-color: #000000; }
+/* 100 % black: no glass anywhere, also under the tab bar beside a native pane. */
+.notchy-opaque.notchy-native-joined .notchy-tabbar-area { background-color: #000000; border-radius: 0 0 30px 30px; }
+.notchy-native-joined.notchy-liquid .notchy-header-row { background-color: transparent; }
+
+
+/* ── Shared widgets ─────────────────────────────────────────────────── */
+.notchy-page { padding: 0 22px; spacing: 12px; }
+.notchy-title { font-size: 14px; font-weight: bold; color: #ffffff; }
+.notchy-muted { font-size: 12.5px; color: rgba(255,255,255,0.5); padding-top: 2px; }
+.notchy-small { font-size: 11px; color: rgba(255,255,255,0.5); }
+.notchy-button { border-radius: 15px; padding: 6px 10px; color: rgba(255,255,255,0.7); background-color: transparent; }
+.notchy-button:hover, .notchy-button:focus { color: #ffffff; background-color: rgba(255,255,255,0.08); }
+.notchy-button.active { color: #ffffff; background-color: rgba(255,255,255,0.14); }
+.notchy-primary, .notchy-button.notchy-pill-button { background-color: rgba(255,255,255,0.12); color: #ffffff; padding: 6px 14px; border-radius: 15px; font-size: 12px; }
+.notchy-primary:hover, .notchy-button.notchy-pill-button:hover { background-color: rgba(255,255,255,0.2); }
+.notchy-empty { padding: 26px 12px 8px; spacing: 8px; }
+.notchy-empty-icon { color: rgba(255,255,255,0.45); padding-bottom: 4px; }
+.notchy-scroll { padding-right: 2px; }
+.notchy-entry { background-color: rgba(255,255,255,0.07); color: #ffffff; border: 0; border-radius: 17px; padding: 8px 12px; selection-background-color: #E95420; }
+
+/* ── Media tab („Medien“) ───────────────────────────────────────────── */
+/* Droppy's player: small cover, two-line title, one timeline row, flat
+   transport icons without circles, the source app as a quiet tile. */
+.notchy-media { padding: 4px 24px 10px; spacing: 14px; }
+.notchy-media-top { spacing: 14px; }
+.notchy-album { border-radius: 14px; color: rgba(255,255,255,0.6); background-color: rgba(255,255,255,0.06); }
+.notchy-track { font-size: 17px; font-weight: bold; color: #ffffff; }
+.notchy-artist { font-size: 14px; color: rgba(255,255,255,0.55); padding-top: 3px; }
+.notchy-timeline { spacing: 12px; }
+.notchy-seek { height: 12px; -barlevel-height: 4px; -barlevel-background-color: rgba(255,255,255,0.18); -barlevel-active-background-color: #ffffff; -slider-handle-radius: 0px; }
+.notchy-time { font-size: 12px; color: rgba(255,255,255,0.6); font-feature-settings: "tnum"; min-width: 38px; }
+.notchy-time-end { text-align: right; }
+.notchy-controls { spacing: 34px; }
+.notchy-button.notchy-transport { width: 40px; height: 40px; padding: 0; border-radius: 12px; color: #ffffff; }
+.notchy-button.notchy-play { width: 44px; height: 44px; padding: 0; border-radius: 12px; color: #ffffff; background-color: transparent; }
+.notchy-button.notchy-transport:hover, .notchy-button.notchy-play:hover { background-color: rgba(255,255,255,0.08); }
+.notchy-source { width: 30px; height: 30px; border-radius: 8px; background-color: rgba(255,255,255,0.1); color: rgba(255,255,255,0.85); }
+.notchy-source:hover { background-color: rgba(255,255,255,0.18); }
+
+/* ── Shelf tab („Regal“, Shell copy of helper/tray.py) ─────────────── */
+.notchy-shelf-preview { spacing: 12px; }
+.notchy-shelf-head { height: 30px; }
+.notchy-shelf-count { font-size: 12.5px; color: rgba(255,255,255,0.6); }
+.notchy-shelf-add { width: 30px; height: 30px; border-radius: 15px; color: rgba(255,255,255,0.8); }
+.notchy-shelf-row { spacing: 6px; }
+.notchy-file-tile { padding: 8px 6px; spacing: 6px; border-radius: 16px; }
+.notchy-file-thumb { width: 62px; height: 76px; border-radius: 10px; background-color: rgba(255,255,255,0.1); }
+.notchy-file-thumb.pdf { background-color: #a8432f; }
+.notchy-file-thumb.text { background-color: #3f5b8c; }
+.notchy-file-thumb.archive { background-color: #8b742f; }
+.notchy-file-ext { font-family: monospace; font-size: 9.5px; color: rgba(255,255,255,0.9); padding-bottom: 6px; }
+.notchy-file-name { font-size: 11.5px; }
+.notchy-drop-hint { height: 150px; spacing: 6px; border-radius: 18px; border: 1.5px dashed rgba(255,255,255,0.18); color: rgba(255,255,255,0.5); }
+
+/* ── Clipboard tab („Ablage“) ───────────────────────────────────────── */
+.notchy-clipboard { padding: 0 18px; spacing: 8px; }
+.notchy-clip-top { spacing: 8px; }
+.notchy-search-pill { height: 34px; padding: 0 12px; border-radius: 17px; background-color: rgba(255,255,255,0.07); border: 0; color: #ffffff; font-size: 13px; selection-background-color: #E95420; }
+.notchy-search-pill:focus { background-color: rgba(255,255,255,0.1); box-shadow: none; }
+.notchy-search-pill StIcon { color: rgba(255,255,255,0.5); padding-right: 8px; }
+.notchy-chips { spacing: 2px; }
+.notchy-button.notchy-chip { width: 34px; height: 32px; padding: 0; border-radius: 16px; color: rgba(255,255,255,0.5); }
+.notchy-button.notchy-chip.active { color: #ffffff; background-color: rgba(255,255,255,0.14); }
+.notchy-clip-list { spacing: 1px; }
+.notchy-clip-row { padding: 7px 8px; spacing: 10px; border-radius: 14px; }
+.notchy-clip-row:hover { background-color: rgba(255,255,255,0.06); }
+.notchy-clip-row.selected { background-color: rgba(255,255,255,0.1); }
+.notchy-clip-icon { width: 26px; height: 26px; border-radius: 8px; background-color: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); }
+.notchy-clip-text { font-size: 12.5px; color: #f4f4f6; }
+.notchy-clip-text.mono { font-family: monospace; }
+.notchy-clip-meta { font-size: 11px; color: rgba(255,255,255,0.55); padding-top: 2px; }
+.notchy-clip-open { text-align: left; }
+.notchy-clip-actions { spacing: 2px; }
+.notchy-clip-time { font-size: 11px; color: rgba(255,255,255,0.4); }
+.notchy-star { color: #ffb38a; }
+
+/* ── Calendar tab („Kalender“) ──────────────────────────────────────── */
+.notchy-calendar { padding: 0 18px; spacing: 12px; }
+/* Week strip: seven flat day pills between two chevrons. */
+.notchy-cal-strip { spacing: 6px; }
+.notchy-cal-days { spacing: 4px; }
+.notchy-cal-day { height: 46px; border-radius: 16px; color: #ffffff; transition-duration: 200ms; }
+.notchy-cal-day:hover { background-color: rgba(255,255,255,0.08); }
+.notchy-cal-day.weekend { color: rgba(255,255,255,0.5); }
+.notchy-cal-day.today { color: #ffb38a; }
+.notchy-cal-day.selected { color: #ffffff; background-color: rgba(255,255,255,0.16); }
+.notchy-cal-day.today.selected { background-color: #E95420; }
+.notchy-cal-weekday { font-size: 10.5px; color: rgba(255,255,255,0.6); }
+.notchy-cal-day.selected .notchy-cal-weekday { color: rgba(255,255,255,0.85); }
+.notchy-cal-daynum { font-size: 14px; padding: 1px 0; }
+.notchy-cal-day.today .notchy-cal-daynum, .notchy-cal-day.selected .notchy-cal-daynum { font-weight: bold; }
+.notchy-cal-dot { width: 4px; height: 4px; border-radius: 2px; }
+.notchy-cal-dot.busy { background-color: rgba(255,255,255,0.45); }
+.notchy-cal-day.selected .notchy-cal-dot.busy { background-color: rgba(255,255,255,0.9); }
+/* Two columns: the day's agenda and the notifications. */
+.notchy-cal-columns { spacing: 20px; }
+.notchy-cal-column { spacing: 8px; }
+.notchy-cal-head { height: 26px; spacing: 4px; }
+.notchy-cal-title { font-size: 13.5px; font-weight: bold; }
+.notchy-cal-meta { font-size: 11.5px; color: rgba(255,255,255,0.5); }
+.notchy-cal-agenda { spacing: 0; }
+.notchy-cal-now { height: 22px; spacing: 6px; }
+.notchy-cal-now-time { width: 40px; font-size: 10.5px; font-weight: bold; color: #E95420; font-feature-settings: "tnum"; }
+.notchy-cal-now-dot { width: 7px; height: 7px; border-radius: 4px; background-color: #E95420; }
+.notchy-cal-now-line { height: 2px; border-radius: 1px; background-color: rgba(233,84,32,0.7); }
+.notchy-cal-event { spacing: 8px; padding: 4px 0; }
+.notchy-cal-event.past { opacity: 128; }
+.notchy-cal-event-time { width: 40px; font-size: 11px; color: rgba(255,255,255,0.6); padding-top: 7px; font-feature-settings: "tnum"; }
+.notchy-cal-event-card { padding: 7px 10px 7px 0; spacing: 9px; border-radius: 12px; background-color: rgba(255,255,255,0.08); }
+.notchy-cal-event.past .notchy-cal-event-card { background-color: rgba(255,255,255,0.04); }
+.notchy-cal-event-bar { width: 3px; border-radius: 0 2px 2px 0; background-color: #8fb4ff; }
+.notchy-cal-event-bar.tone-1 { background-color: #8ed6a5; }
+.notchy-cal-event-bar.tone-2 { background-color: #ffb38a; }
+.notchy-cal-event-bar.tone-3 { background-color: #d9a3f0; }
+.notchy-cal-event-title { font-size: 12.5px; font-weight: 500; }
+.notchy-cal-event-sub { font-size: 11px; color: rgba(255,255,255,0.55); }
+.notchy-cal-empty { spacing: 6px; padding-top: 52px; color: rgba(255,255,255,0.45); font-size: 12.5px; }
+.notchy-cal-dnd { height: 26px; padding: 0 9px; border-radius: 13px; background-color: rgba(255,255,255,0.07); color: rgba(255,255,255,0.7); font-size: 11px; transition-duration: 200ms; }
+.notchy-cal-dnd:hover { background-color: rgba(255,255,255,0.12); }
+.notchy-cal-dnd.on { background-color: rgba(255,179,138,0.2); color: #ffb38a; }
+.notchy-cal-dnd-row { spacing: 5px; }
+.notchy-cal-notes { spacing: 8px; padding-bottom: 6px; }
+.notchy-cal-group { spacing: 4px; }
+/* A closed stack shows a sliver of the card below it. */
+.notchy-cal-group.stacked { padding-bottom: 6px; }
+.notchy-cal-note { padding: 9px 6px 9px 10px; spacing: 10px; border-radius: 16px; background-color: rgba(255,255,255,0.09); }
+.notchy-cal-group.stacked .notchy-cal-note { box-shadow: 0 6px 0 -1px rgba(255,255,255,0.05); }
+.notchy-cal-note-icon { width: 28px; height: 28px; border-radius: 9px; background-color: rgba(255,255,255,0.1); color: #ffffff; }
+.notchy-cal-note-meta { spacing: 6px; }
+.notchy-cal-note-app { font-size: 11px; color: rgba(255,255,255,0.55); }
+.notchy-cal-note-count { font-size: 10px; padding: 0 6px; border-radius: 8px; background-color: rgba(255,255,255,0.12); }
+.notchy-cal-note-time { font-size: 10.5px; color: rgba(255,255,255,0.45); }
+.notchy-cal-note-title { font-size: 12.5px; font-weight: 500; padding-top: 2px; }
+.notchy-cal-note-body { font-size: 11.5px; color: rgba(255,255,255,0.68); padding-top: 1px; }
+.notchy-cal-note-sub { margin-left: 12px; padding: 7px 10px; spacing: 1px; border-radius: 13px; background-color: rgba(255,255,255,0.05); }
+.notchy-button.notchy-round-button.tiny { width: 22px; height: 22px; border-radius: 11px; }
+
+/* ── Thunderstorm search ────────────────────────────────────────────── */
+.notchy-search { padding: 0 10px 10px; }
+.notchy-search-bar { height: 64px; padding: 0 12px; spacing: 12px; }
+.notchy-search-bolt { color: #ffb38a; }
+.notchy-search-entry { font-size: 18px; color: #ffffff; background-color: transparent; border: 0; box-shadow: none; padding: 0; selection-background-color: #E95420; }
+.notchy-search-entry:focus { border: 0; box-shadow: none; }
+.notchy-keycap { font-family: monospace; font-size: 10.5px; padding: 3px 7px; border-radius: 7px; background-color: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); }
+.notchy-results { spacing: 2px; }
+.notchy-result { height: 44px; padding: 0 12px; spacing: 12px; border-radius: 14px; }
+.notchy-result.selected { background-color: rgba(255,255,255,0.1); }
+.notchy-result-icon { width: 28px; height: 28px; border-radius: 8px; background-color: rgba(255,255,255,0.12); }
+.notchy-result-icon.accent { background-color: #E95420; }
+.notchy-result-title { font-size: 13.5px; }
+.notchy-result-kind { font-size: 11.5px; color: rgba(255,255,255,0.5); }
+
+/* ── Live activity banner (notifications) ───────────────────────────── */
+.notchy-peek { padding: 12px 14px 14px 16px; spacing: 12px; }
+.notchy-peek-app-icon { color: #ffb38a; border-radius: 9px; }
+.notchy-peek-meta { spacing: 8px; }
+.notchy-peek-app { font-size: 11.5px; color: rgba(255,255,255,0.55); }
+.notchy-peek-title { font-size: 13.5px; font-weight: bold; color: #ffffff; padding-top: 2px; }
+.notchy-peek-body { font-size: 12.5px; color: rgba(255,255,255,0.72); padding-top: 2px; }
+.notchy-peek-open { border-radius: 10px; }
+.notchy-peek-actions { spacing: 6px; padding-top: 8px; }
+
+/* ── Radial capture menu ────────────────────────────────────────────── */
+/* Toasts are a live activity in the capsule: symbol left, words right of the clock. */
+.notchy-toast-icon { color: #ffb38a; }
+.notchy-toast-text { font-size: 12px; font-weight: bold; color: #ffffff; }
+.notchy-radial-backdrop { background-color: rgba(0,0,0,0.18); }
+.notchy-radial-button { border-radius: 32px; background-color: rgba(18,16,20,0.9); color: #ffffff; }
+.notchy-radial-button:hover, .notchy-radial-button:focus { background-color: rgba(233,84,32,0.75); }
+.notchy-radial-content { spacing: 3px; }
+.notchy-radial-label { font-size: 9.5px; }
+
+/* ── Audio output and AirPlay (media tab) ───────────────────────────── */
+.notchy-output-button { height: 30px; padding: 0 12px; border-radius: 15px; color: rgba(255,255,255,0.7); background-color: rgba(255,255,255,0.06); transition-duration: 200ms; }
+.notchy-output-button:hover, .notchy-output-button:focus { color: #ffffff; background-color: rgba(255,255,255,0.12); }
+.notchy-output-button.airplay { color: #ffb38a; background-color: rgba(255,179,138,0.14); }
+.notchy-output-row { spacing: 7px; }
+.notchy-output-name { font-size: 12px; }
+.notchy-outputs { padding: 0 24px; spacing: 10px; }
+.notchy-outputs-head { height: 28px; spacing: 8px; }
+.notchy-outputs-list { spacing: 4px; }
+.notchy-output-item, .notchy-output-find { padding: 6px 10px 6px 6px; border-radius: 14px; color: #ffffff; transition-duration: 160ms; }
+.notchy-output-item:hover, .notchy-output-item:focus, .notchy-output-find:hover, .notchy-output-find:focus { background-color: rgba(255,255,255,0.08); }
+.notchy-output-item.active { background-color: rgba(255,255,255,0.1); }
+.notchy-output-item-row { spacing: 10px; }
+.notchy-output-tile { width: 32px; height: 32px; border-radius: 10px; background-color: rgba(255,255,255,0.1); color: #ffffff; }
+.notchy-output-tile.airplay { background-color: rgba(255,179,138,0.16); color: #ffb38a; }
+.notchy-output-item-name { font-size: 13px; }
+.notchy-output-item-sub { font-size: 11px; color: rgba(255,255,255,0.5); }
+.notchy-output-check { color: #ffb38a; }
+.notchy-output-hint { font-size: 12px; color: rgba(255,255,255,0.45); padding: 10px 6px; }
+
+/* ── Snap layouts for windows dragged into the notch ────────────────── */
+.notchy-snap { padding: 4px 22px 18px; spacing: 12px; }
+.notchy-snap-head { spacing: 8px; color: rgba(255,255,255,0.7); }
+.notchy-snap-title { font-size: 12.5px; font-weight: bold; color: #ffffff; }
+.notchy-snap-row { spacing: 10px; }
+.notchy-snap-tile { border-radius: 10px; background-color: rgba(255,255,255,0.06); }
+.notchy-snap-tile.hover { background-color: rgba(255,255,255,0.1); }
+.notchy-snap-zone { border-radius: 6px; background-color: rgba(255,255,255,0.16); transition-duration: 120ms; }
+.notchy-snap-zone.hover { background-color: #E95420; }

@@ -1,0 +1,9 @@
+*.pyc
+__pycache__/
+schemas/gschemas.compiled
+dist/
+tests/output/
+# Local source snapshots from earlier redesigns
+archive/
+# Reference copy of GNOME Shell source, not part of Notchy
+/osdWindow.js
