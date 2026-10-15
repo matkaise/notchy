@@ -1,0 +1,58 @@
+#!/bin/bash
+# A stand-in for airdrop-mt7921's daemon/airdropd in the headless test: the
+# same verbs (run/status/stop/send), the same state JSON and the same
+# AIRDROP_CONFIRM contract, but no radio. It never touches Wi-Fi or Bluetooth.
+#
+# An incoming transfer is simulated by writing "sender|file name" to
+# $RUNDIR/incoming while `run` is up: the hook is asked exactly as OpenDrop
+# asks it, and an accepted file arrives in an NSIRD_AirDrop_* wrapper that is
+# then flattened into RECV_DIR, as the real backend's tidy step does.
+set -u
+RUNDIR="${NOTCHY_AIRDROP_RUNDIR:-${XDG_RUNTIME_DIR:-/tmp}/airdropd}"
+STATE="$RUNDIR/state.json"
+LOCK="$RUNDIR/lock"
+mkdir -p "$RUNDIR"
+
+state() { printf '{"state":"%s","detail":"%s","ts":%s}\n' "$1" "${2:-}" "$(date +%s)" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
+
+case "${1:-run}" in
+  status)
+    if [ -r "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null && [ -r "$STATE" ]; then cat "$STATE"; else echo '{"state":"off"}'; fi ;;
+  stop)
+    pid=$(cat "$LOCK" 2>/dev/null); [ -n "$pid" ] && kill "$pid" 2>/dev/null && echo stopped ;;
+  run)
+    [ "${AIRDROP_MODE:-}" = exclusive ] || { echo "mock: expected AIRDROP_MODE=exclusive" >&2; exit 3; }
+    echo $$ > "$LOCK"
+    trap 'state restoring; sleep 0.3; state off; rm -f "$LOCK"; exit 0' TERM INT
+    state waking; sleep 0.4; state armed
+    while :; do
+      if [ -s "$RUNDIR/incoming" ]; then
+        IFS='|' read -r sender name < "$RUNDIR/incoming"; rm -f "$RUNDIR/incoming"
+        if "$AIRDROP_CONFIRM" "$sender" "$name"; then
+          state receiving 40; sleep 0.5
+          wrap="$RECV_DIR/NSIRD_AirDrop_test"; mkdir -p "$wrap"
+          printf 'received over AirDrop\n' > "$wrap/$name"; printf 'x' > "$wrap/._$name"
+          state receiving 100; sleep 0.3
+          mv "$wrap/$name" "$RECV_DIR/$name"; rm -rf "$wrap"
+          echo accepted > "$RUNDIR/answer"
+        else
+          echo declined > "$RUNDIR/answer"
+        fi
+        state armed
+      fi
+      sleep 0.2
+    done ;;
+  send)
+    shift
+    [ "${AIRDROP_MODE:-}" = exclusive ] || { echo "mock: expected AIRDROP_MODE=exclusive" >&2; exit 3; }
+    state waking send; sleep 0.6
+    if [ -n "${MOCK_AIRDROP_NO_RECEIVER:-}" ] || [ -e "$RUNDIR/no-receiver" ]; then
+      echo "airdropd: no receiver found" >&2; state off; exit 1
+    fi
+    state sending "ch 149"
+    echo "sending to Test iPhone"; sleep 1.2
+    for f in "$@"; do echo "sent: $(basename "$f")"; sleep 0.3; done
+    printf '%s\n' "$@" > "$RUNDIR/sent"
+    state off ;;
+  *) echo "usage: airdropd [run|status|stop|send <file>...]" >&2; exit 2 ;;
+esac

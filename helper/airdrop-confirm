@@ -1,0 +1,39 @@
+#!/usr/bin/python3
+"""Accept-or-decline hook for the airdrop-mt7921 backend (AIRDROP_CONFIRM).
+
+    airdrop-confirm "<sender>" "<file names>"
+
+OpenDrop runs this for every incoming /Ask. It asks Notchy over the session bus
+and waits for the answer shown in the notch. Exit 0 accepts; anything else -
+"Ablehnen", no answer in time, Notchy not running, any error - declines, so the
+phone shows "Declined". An unaskable question is never consent.
+"""
+import os
+import sys
+
+from gi.repository import Gio, GLib
+
+BUS = 'org.gnome.Shell.Extensions.Notchy'
+PATH = '/org/gnome/Shell/Extensions/Notchy'
+
+
+def main():
+    sender = sys.argv[1] if len(sys.argv) > 1 else ''
+    files = sys.argv[2] if len(sys.argv) > 2 else ''
+    # Answer one second before the backend gives up on us.
+    try:
+        timeout = max(5, int(os.environ.get('AIRDROP_CONFIRM_TIMEOUT', '15')) - 1)
+    except ValueError:
+        timeout = 14
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        reply = bus.call_sync(BUS, PATH, BUS, 'AirDropAsk', GLib.Variant('(ssu)', (sender, files, timeout * 1000)),
+                              GLib.VariantType.new('(b)'), Gio.DBusCallFlags.NONE, (timeout + 1) * 1000, None)
+        return 0 if reply.unpack()[0] is True else 1
+    except GLib.Error as error:
+        print(f'airdrop-confirm: could not ask Notchy ({error.message}) - declining', file=sys.stderr)
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

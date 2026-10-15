@@ -22,6 +22,7 @@ import {Notifications} from './src/services/notifications.js';
 import {Spectrum} from './src/services/spectrum.js';
 import {Outputs} from './src/services/outputs.js';
 import {Snap} from './src/services/snap.js';
+import {AirDrop} from './src/services/airdrop.js';
 import {Cover} from './src/services/cover.js';
 import {Capture} from './src/services/capture.js';
 import {RadialMenu} from './src/ui/radial.js';
@@ -59,6 +60,7 @@ export default class Notchy extends Extension {
             this.outputs = new Outputs(this, this.system, this.settings);
             this.productivity = new Productivity(); this.calendar = new Calendar(); this.notifications = new Notifications();
             this.capture = new Capture(this); this.radial = new RadialMenu(this);
+            this.airdrop = new AirDrop(this, this.shelf, this.settings);
             this.operations = new Operations(this, this.shelf); this.companion = new Companion(this, this.shelf, this.operations, this.productivity);
             this.drops = new Drops(this); this.backdrop = new Backdrop(this); this.snap = new Snap(this);
             this._rebuild();
@@ -80,7 +82,7 @@ export default class Notchy extends Extension {
         for (const island of this.islands) island.dispose(); this.islands = [];
         // Notchy lives in the top bar, which GNOME shows on the primary monitor.
         const services = {cover: this.cover, spectrum: this.spectrum, calendar: this.calendar, notifications: this.notifications, productivity: this.productivity, settings: this.settings, store: this.store, shelf: this.shelf, clipboard: this.clipboard,
-            media: this.media, system: this.system, outputs: this.outputs, operations: this.operations, companion: this.companion};
+            media: this.media, system: this.system, outputs: this.outputs, airdrop: this.airdrop, operations: this.operations, companion: this.companion};
         this.services = services;
         const monitor = Main.layoutManager.primaryMonitor;
         if (monitor) this.islands.push(new Island(this, monitor, services));
@@ -177,7 +179,7 @@ export default class Notchy extends Extension {
         this.radial?.dispose(); this.capture?.dispose();
         this.injections?.clear(); this.injections = null; this.life?.dispose();
         for (const island of this.islands ?? []) island.dispose(); this.islands = [];
-        this.companion?.dispose(); this.operations?.dispose(); this.clipboard?.dispose(); this.cover?.dispose(); this.cover = null; this.spectrum?.dispose(); this.spectrum = null; this.outputs?.dispose(); this.outputs = null; this.snap?.dispose(); this.snap = null; this.media?.dispose(); this.system?.dispose(); this.productivity?.dispose(); this.calendar?.dispose(); this.calendar = null; this.notifications?.dispose(); this.notifications = null; this.shelf?.dispose(); this.store?.dispose();
+        this.companion?.dispose(); this.operations?.dispose(); this.clipboard?.dispose(); this.cover?.dispose(); this.cover = null; this.spectrum?.dispose(); this.spectrum = null; this.outputs?.dispose(); this.outputs = null; this.snap?.dispose(); this.snap = null; this.airdrop?.dispose(); this.airdrop = null; this.media?.dispose(); this.system?.dispose(); this.productivity?.dispose(); this.calendar?.dispose(); this.calendar = null; this.notifications?.dispose(); this.notifications = null; this.shelf?.dispose(); this.store?.dispose();
         this.companion = this.operations = this.clipboard = this.media = this.system = this.shelf = this.store = this.life = this.settings = null;
         this.notificationSources?.clear(); this.productivity = this.radial = this.capture = this.services = null;
     }

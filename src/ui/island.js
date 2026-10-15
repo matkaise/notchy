@@ -53,6 +53,9 @@ export class Island {
         this.pinButton = button('view-pin-symbolic', 'Offen halten', () => this.togglePin(), 'notchy-round-button');
         this.headerActions.add_child(this.pinButton);
         this.headerActions.add_child(new St.Widget({x_expand: true}));
+        // AirDrop: receiving on demand, only offered when its backend is installed.
+        this.airdropButton = button('notchy-airdrop-symbolic', 'AirDrop: für iPhones sichtbar werden', () => this.toggleAirDrop(), 'notchy-round-button notchy-airdrop-button');
+        this.headerActions.add_child(this.airdropButton);
         this.headerActions.add_child(button('emblem-system-symbolic', 'Einstellungen', () => extension.openPreferences(), 'notchy-round-button'));
         this.panelHeader = new St.Bin({style_class: 'notchy-panel-header-slot', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.FILL});
         this.headerRow.add_child(this.headerActions); this.headerRow.add_child(this.panelHeader);
@@ -91,8 +94,9 @@ export class Island {
         for (const signal of ['notify::x', 'notify::y']) this.life.connect(this.actor, signal, () => this.syncShade());
         this.life.connect(this.actor, 'key-press-event', (_a, event) => {
             const key = event.get_key_symbol();
-            if (key === Clutter.KEY_Escape) { this.close(); return Clutter.EVENT_STOP; }
+            // The page may claim Esc first (an AirDrop question declines with it).
             if (this.views.keyPress?.(event) === Clutter.EVENT_STOP) return Clutter.EVENT_STOP;
+            if (key === Clutter.KEY_Escape) { this.close(); return Clutter.EVENT_STOP; }
             // Entries consume typed digits first; elsewhere 1–4 select a tab.
             const tab = TABS[key - Clutter.KEY_1];
             if (this.expanded && !this.peeking && tab) { this.open(tab[0]); return Clutter.EVENT_STOP; }
@@ -111,8 +115,9 @@ export class Island {
         this.life.cleanups.push(this.productivity.subscribe(() => this.updateCompact()));
         this.life.cleanups.push(this.operations.subscribe(() => this.updateCompact()));
         this.life.cleanups.push(this.companion.subscribe(() => this.syncVisibility()));
+        if (this.airdrop) this.life.cleanups.push(this.airdrop.subscribe(() => this.syncAirDrop()));
         this.ears = new NotchEars(this);
-        this.applyStyle(); this.updateCompact(); this.position(); this.syncVisibility();
+        this.applyStyle(); this.updateCompact(); this.position(); this.syncVisibility(); this.syncAirDrop();
     }
     buildPanel() {
         // The capsule in the bar: left and right slots around GNOME's live clock.
@@ -377,6 +382,8 @@ export class Island {
         this.syncTabs(); this.syncPin();
     }
     close(immediate = false) {
+        // Folding an AirDrop question away is an answer: no.
+        if (this.peekKind === 'airdrop-ask') this.airdrop?.question?.answer(false);
         if (this.life.closed) return; this.endPeek(); this.expanded = false; this.pinned = false; this.cancelCollapse(); this.life.cancel(this.hoverTimeout); this.hoverTimeout = 0;
         if (this.nativeShelf) this.companion.closeShelf();
         const focus = global.stage.get_key_focus(); if (focus && this.actor.contains(focus)) global.stage.set_key_focus(null);
@@ -404,7 +411,7 @@ export class Island {
         if (this.expanded && !this.views.focusEntry?.has_key_focus?.() && !this.views.focusEntry?.clutter_text?.has_key_focus()) this.actor.grab_key_focus();
     }
     cancelCollapse() { this.life.cancel(this.collapseTimeout); this.collapseTimeout = 0; }
-    scheduleCollapse() { this.cancelCollapse(); if (this.pinned || !this.expanded || this.page === 'search' || this.peekKind === 'snap' || (this.nativeShelf && this.companion.shelfHeld) || this.views.menu?.isOpen) return;
+    scheduleCollapse() { this.cancelCollapse(); if (this.pinned || !this.expanded || this.page === 'search' || ['snap', 'airdrop', 'airdrop-ask'].includes(this.peekKind) || (this.nativeShelf && this.companion.shelfHeld) || this.views.menu?.isOpen) return;
         this.collapseTimeout = this.life.later(this.settings.get_int('collapse-delay'), () => { this.collapseTimeout = 0; if (!this.hovered && !this.pinned && !(this.nativeShelf && this.companion.shelfHeld) && !this.views.menu?.isOpen) this.close(); }); }
 
     // Live activities in the capsule: cover and waveform frame the clock;
@@ -415,8 +422,18 @@ export class Island {
         const state = this.settings.get_boolean('media-enabled') ? this.media.state : null;
         const activity = [...this.productivity.activities.values()][0];
         let wide = false;
-        const hud = this.hudState, toast = this.toastState;
-        if (toast && !hud) {
+        const hud = this.hudState, toast = this.toastState, airdrop = !hud && !toast ? this.airdropActivity : null;
+        if (airdrop) {
+            const glyph = new St.Icon({gicon: gicon(airdrop.icon), icon_size: 16, style_class: 'notchy-airdrop-icon', y_align: Clutter.ActorAlign.CENTER});
+            this.leftRow.add_child(glyph);
+            if (airdrop.progress !== null) {
+                const track = new St.Widget({style_class: 'notchy-hud-track', width: 70, y_align: Clutter.ActorAlign.CENTER});
+                track.add_child(new St.Widget({style_class: 'notchy-hud-fill notchy-airdrop-fill', width: Math.round(70 * airdrop.progress / 100)}));
+                this.rightRow.add_child(track);
+                this.rightRow.add_child(label(String(airdrop.progress), 'notchy-hud-value', {y_align: Clutter.ActorAlign.CENTER}));
+            } else this.rightRow.add_child(label(airdrop.text, 'notchy-airdrop-text', {y_align: Clutter.ActorAlign.CENTER}));
+            wide = true;
+        } else if (toast && !hud) {
             const glyph = new St.Icon({gicon: toast.icon, icon_size: 16, style_class: 'notchy-toast-icon', y_align: Clutter.ActorAlign.CENTER});
             const words = label(toast.text, 'notchy-toast-text', {y_align: Clutter.ActorAlign.CENTER});
             this.leftRow.add_child(glyph); this.rightRow.add_child(words);
@@ -451,6 +468,41 @@ export class Island {
         wide ? this.panelSurface.add_style_class_name('notchy-wide') : this.panelSurface.remove_style_class_name('notchy-wide');
         hud ? this.panelSurface.add_style_class_name('notchy-hud') : this.panelSurface.remove_style_class_name('notchy-hud');
         toast && !hud ? this.panelSurface.add_style_class_name('notchy-toasting') : this.panelSurface.remove_style_class_name('notchy-toasting');
+    }
+    // AirDrop as a live activity: what the radio is doing right now.
+    get airdropActivity() {
+        const airdrop = this.airdrop; if (!airdrop) return null;
+        if (airdrop.sendProc) return {icon: 'notchy-airdrop-symbolic', text: airdrop.send?.peer ? `An ${airdrop.send.peer}` : 'Sucht iPhone …', progress: null};
+        if (airdrop.progress !== null) return {icon: 'notchy-airdrop-symbolic', progress: airdrop.progress};
+        if (airdrop.state === 'restoring') return {icon: 'network-wireless-acquiring-symbolic', text: 'WLAN verbindet …', progress: null};
+        if (airdrop.receiving || airdrop.active) return {icon: 'notchy-airdrop-symbolic', text: airdrop.state === 'waking' ? 'Startet …' : airdrop.state === 'unreachable' ? 'Kein iPhone' : 'Sichtbar', progress: null};
+        return null;
+    }
+    toggleAirDrop() {
+        const airdrop = this.airdrop;
+        if (!airdrop?.available) return;
+        const on = !airdrop.receiving;
+        if (airdrop.receive(on) && on) this.toast('notchy-airdrop-symbolic', 'AirDrop: sichtbar, WLAN pausiert');
+    }
+    syncAirDrop() {
+        if (this.life.closed) return;
+        const airdrop = this.airdrop;
+        this.airdropButton.visible = Boolean(airdrop?.available);
+        airdrop?.receiving ? this.airdropButton.add_style_class_name('active') : this.airdropButton.remove_style_class_name('active');
+        this.airdropButton.accessible_name = airdrop?.receiving ? 'AirDrop: Empfang beenden' : 'AirDrop: für iPhones sichtbar werden';
+        // A transfer asking for consent always gets the notch, even over an open tab.
+        if (airdrop?.question && this.peekKind !== 'airdrop-ask') {
+            if (this.expanded && !this.peeking) this.close(true);
+            const question = airdrop.question;
+            this.peek('airdrop-ask', 0, () => this.views.airdropAskView(question));
+        } else if (!airdrop?.question && this.peekKind === 'airdrop-ask') this.close();
+        // A send shows its own view until it settles.
+        if (airdrop?.send && ['searching', 'waiting', 'sending'].includes(airdrop.send.phase) && !airdrop.question && this.peekKind !== 'airdrop' && this.peekKind !== 'airdrop-ask') {
+            if (this.expanded && !this.peeking) this.close(true);
+            this.peek('airdrop', 0, () => this.views.airdropSendView());
+        }
+        if (airdrop?.state === 'error' && airdrop.detail && this.airdropErrorShown !== airdrop.detail) { this.airdropErrorShown = airdrop.detail; this.toast('dialog-warning-symbolic', 'AirDrop konnte nicht starten'); }
+        this.updateCompact();
     }
     // Volume/brightness: inline in the closed capsule; GNOME's OSD otherwise.
     hud(gicon, text, level, maxLevel = 1) {

@@ -1,0 +1,19 @@
+#!/usr/bin/python3
+"""Opens a web link received over AirDrop (AIRDROP_URL_HOOK), after it was accepted.
+
+Only http and https are opened, in the desktop's default browser.
+"""
+import sys
+from urllib.parse import urlparse
+
+from gi.repository import Gio, GLib
+
+url = sys.argv[1] if len(sys.argv) > 1 else ''
+if urlparse(url).scheme not in ('http', 'https'):
+    print(f'airdrop-url: not opening {url!r}: only http and https links are opened', file=sys.stderr)
+    sys.exit(1)
+try:
+    Gio.AppInfo.launch_default_for_uri(url, None)
+except GLib.Error as error:
+    print(f'airdrop-url: {error.message}', file=sys.stderr)
+    sys.exit(1)

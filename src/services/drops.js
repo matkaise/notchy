@@ -90,7 +90,7 @@ export class Drops {
         this.position = {x: island.centeredX(width), y: island.dropTop, width, height};
         island.life.cancel(island.hoverTimeout); island.hoverTimeout = 0; island.cancelCollapse();
         island.beginDrop();
-        this.extension.companion.dropTarget({visible: true, backend: this.backend, joined: true, style: island.settings.get_string('style'), shade: island.dropShade, ...this.position});
+        this.extension.companion.dropTarget({visible: true, backend: this.backend, joined: true, style: island.settings.get_string('style'), shade: island.dropShade, airdrop: Boolean(this.extension.airdrop?.available), ...this.position});
     }
     hide() {
         this.extension.companion?.dropTarget({visible: false});
@@ -106,6 +106,15 @@ export class Drops {
             if (island && !island.life.closed) { island.open('shelf'); island.scheduleCollapse(); }
         });
         return count;
+    }
+    // Dropped on the AirDrop zone: the zone folds away, then the notch shows the send.
+    airdropped(text) {
+        const airdrop = this.extension.airdrop;
+        const paths = text.split(/\r?\n/).filter(Boolean).map(uri => Gio.File.new_for_uri(uri).get_path()).filter(Boolean);
+        if (!airdrop?.available || airdrop.sendProc || !paths.length) return false;
+        this.setDragging(false); const serial = this.serial;
+        this.life.later(120, () => { if (serial === this.serial) this.hide(); airdrop.sendFiles(paths); });
+        return true;
     }
     receiverReady(backend) { const receiver = this.receivers.get(backend); if (receiver) receiver.ready = true; if (backend === this.backend && this.dragging) this.motion(...global.get_pointer()); }
     dispose() { this.hide(); this.life.dispose(); for (const receiver of this.receivers.values()) receiver.proc?.force_exit(); this.receivers.clear(); }

@@ -414,6 +414,63 @@ async function interactionRegressions(ext, path, screenshot) {
                 `releasing over the left half tiles the window there (${placed.x},${placed.y} ${placed.width}x${placed.height})`);
             await Scripting.sleep(400); assert(!ext.snap.preview.visible, 'the tile preview fades once the window is placed');
         } finally { await press(Clutter.ButtonState.RELEASED); windowFixture.force_exit(); await move(20, 600); await Scripting.sleep(300); }
+        // AirDrop against a stand-in backend: the same commands, state and accept hook, no radio.
+        const airdropDir = GLib.getenv('NOTCHY_AIRDROP_RUNDIR'), recvDir = `${path}/airdrop-received`;
+        GLib.mkdir_with_parents(airdropDir, 0o700);
+        for (const name of ['answer', 'sent', 'incoming']) GLib.unlink(`${airdropDir}/${name}`);
+        ext.settings.set_string('airdrop-folder', recvDir); ext.settings.set_string('airdrop-daemon', here('mock_airdropd')); await Scripting.sleep(200);
+        const airdrop = ext.airdrop;
+        assert(airdrop.available && airdrop.daemon === here('mock_airdropd'), 'AirDrop finds its backend');
+        island.open('media'); await Scripting.sleep(500);
+        assert(island.airdropButton.visible && island.airdropButton.mapped, 'the island header offers AirDrop when its backend is installed');
+        island.airdropButton.emit('clicked', 1);
+        for (let i = 0; i < 30 && airdrop.state !== 'armed'; i++) await Scripting.sleep(100);
+        assert(airdrop.receiving && airdrop.state === 'armed' && island.airdropButton.has_style_class_name('active'), 'switching AirDrop on runs the backend in exclusive mode and arms it');
+        island.close(); await Scripting.sleep(2200);
+        assert(styled(island.leftRow, 'notchy-airdrop-icon').length === 1 && styled(island.rightRow, 'notchy-airdrop-text')[0]?.text === 'Sichtbar', 'the capsule shows AirDrop as a live activity while visible');
+        Main.panel.set_style('background-color: transparent;'); await screenshot('airdrop-armed'); Main.panel.set_style(null);
+        const incoming = (sender, name) => Gio.File.new_for_path(`${airdropDir}/incoming`).replace_contents(`${sender}|${name}\n`, null, false, Gio.FileCreateFlags.NONE, null);
+        const answer = async () => { for (let i = 0; i < 60 && !GLib.file_test(`${airdropDir}/answer`, GLib.FileTest.EXISTS); i++) await Scripting.sleep(100); const [, bytes] = GLib.file_get_contents(`${airdropDir}/answer`); GLib.unlink(`${airdropDir}/answer`); return new TextDecoder().decode(bytes).trim(); };
+        // An incoming photo asks in the notch; „Annehmen“ lets it in, and it joins the Regal.
+        incoming('Matthias’ iPhone', 'IMG_2048.HEIC');
+        for (let i = 0; i < 40 && island.peekKind !== 'airdrop-ask'; i++) await Scripting.sleep(100);
+        assert(island.peekKind === 'airdrop-ask' && airdrop.question?.sender === 'Matthias’ iPhone' && styled(island.body, 'notchy-peek-title')[0]?.text === 'Matthias’ iPhone', 'an incoming AirDrop asks for consent in the notch');
+        await Scripting.sleep(400); await screenshot('airdrop-ask');
+        buttons(island.body, 'Annehmen')[0].emit('clicked', 1);
+        assert(await answer() === 'accepted', 'Annehmen accepts the transfer through the backend\'s hook');
+        for (let i = 0; i < 40 && !ext.shelf.items.some(item => item.name === 'IMG_2048.HEIC'); i++) await Scripting.sleep(100);
+        const arrived = ext.shelf.items.find(item => item.name === 'IMG_2048.HEIC');
+        assert(arrived && arrived.uri === Gio.File.new_for_path(`${recvDir}/IMG_2048.HEIC`).get_uri() && !ext.shelf.items.some(item => item.name.startsWith('._') || item.name.startsWith('NSIRD')), 'the received file lands in the Regal, without iOS\'s wrapper and sidecar files');
+        // Escape is an answer too: no.
+        incoming('Unbekanntes iPhone', 'Rechnung.pdf');
+        for (let i = 0; i < 40 && island.peekKind !== 'airdrop-ask'; i++) await Scripting.sleep(100);
+        await escape();
+        assert(await answer() === 'declined' && !island.peeking && !ext.shelf.items.some(item => item.name === 'Rechnung.pdf'), 'Escape declines an incoming AirDrop');
+        island.open('media'); await Scripting.sleep(400); island.airdropButton.emit('clicked', 1);
+        for (let i = 0; i < 30 && airdrop.receiving; i++) await Scripting.sleep(100);
+        await Scripting.sleep(500); island.close(true); await Scripting.sleep(300);
+        assert(!airdrop.receiving && airdrop.state === 'off' && !styled(island.leftRow, 'notchy-airdrop-icon').length, 'switching AirDrop off gives the Wi-Fi back and leaves the capsule');
+        // Sending: the notch searches, names the phone, and settles with a check.
+        const sendFile = Gio.File.new_for_path(`${path}/airdrop to phone.txt`); sendFile.replace_contents('to the phone', null, false, Gio.FileCreateFlags.NONE, null);
+        assert(airdrop.sendFiles([sendFile.get_path()]), 'a file can be sent over AirDrop');
+        await Scripting.sleep(300);
+        assert(island.peekKind === 'airdrop' && airdrop.send.phase === 'searching', 'sending opens the AirDrop view, searching first');
+        await Scripting.sleep(500); await screenshot('airdrop-searching');
+        const rings = styled(island.body, 'notchy-airdrop-ring');
+        assert(rings.length === 3 && rings.some(ring => ring.get_transition('scale-x') && ring.opacity > 0), 'the radar rings pulse while searching');
+        for (let i = 0; i < 30 && airdrop.send.phase === 'searching'; i++) await Scripting.sleep(100);
+        assert(airdrop.send.peer === 'Test iPhone' && styled(island.body, 'notchy-peek-body')[0]?.text.includes('Test iPhone'), 'the view names the iPhone it found'); await screenshot('airdrop-send');
+        for (let i = 0; i < 40 && airdrop.send.phase !== 'done'; i++) await Scripting.sleep(100);
+        const [, sentBytes] = GLib.file_get_contents(`${airdropDir}/sent`);
+        assert(airdrop.send.phase === 'done' && new TextDecoder().decode(sentBytes).trim() === sendFile.get_path(), 'the backend sent the file and the view shows it done'); await Scripting.sleep(200); await screenshot('airdrop-sent');
+        await Scripting.sleep(2600); assert(!island.peeking, 'the AirDrop view folds away after sending');
+        // No phone found: the view says what to do on the iPhone.
+        Gio.File.new_for_path(`${airdropDir}/no-receiver`).replace_contents('1', null, false, Gio.FileCreateFlags.NONE, null);
+        airdrop.sendFiles([sendFile.get_path()]);
+        for (let i = 0; i < 40 && airdrop.send.phase !== 'failed'; i++) await Scripting.sleep(100);
+        assert(airdrop.send.phase === 'failed' && airdrop.send.error.startsWith('Kein iPhone gefunden'), `a failed send explains itself (${airdrop.send.error})`); await screenshot('airdrop-failed');
+        GLib.unlink(`${airdropDir}/no-receiver`); island.close(true); await Scripting.sleep(300);
+        ext.settings.set_string('airdrop-daemon', ''); ext.settings.set_string('airdrop-folder', '');
         const themePath = GLib.getenv('NOTCHY_TEST_SHELL_THEME');
         if (themePath) {
             const context = St.ThemeContext.get_for_stage(global.stage), original = context.get_theme();
@@ -470,10 +527,13 @@ async function interactionRegressions(ext, path, screenshot) {
 
         // Incoming native drags: Wayland and X11 sources, drop and cancel.
         assert(ext.drops.ready && ext.drops.proc, 'native drop receiver is ready before a drag starts');
-        const incomingCases = GLib.getenv('NOTCHY_TEST_FILES_ONLY') ? [] : [['media', false], ['clipboard', false], ['media', true], ['media', false, 'x11'], ['clipboard', false, 'x11']];
-        for (const [page, cancel, backend = 'wayland'] of incomingCases) {
+        const incomingCases = GLib.getenv('NOTCHY_TEST_FILES_ONLY') ? [] : [['media', false], ['clipboard', false], ['media', true], ['media', false, 'x11'], ['clipboard', false, 'x11'], ['media', false, 'wayland', 'airdrop']];
+        for (const [page, cancel, backend = 'wayland', zone = 'shelf'] of incomingCases) {
+            // With AirDrop installed the zone splits: „Ins Regal legen“ | „AirDrop“.
+            const airdropRun = GLib.getenv('NOTCHY_AIRDROP_RUNDIR');
+            if (zone === 'airdrop') { GLib.unlink(`${airdropRun}/sent`); ext.settings.set_string('airdrop-daemon', here('mock_airdropd')); }
             island.open(page); await Scripting.sleep(350);
-            const name = `${page}-${backend}${cancel ? '-cancel' : ''}`;
+            const name = `${page}-${backend}${cancel ? '-cancel' : ''}${zone === 'airdrop' ? '-airdrop' : ''}`;
             const files = [Gio.File.new_for_path(`${path}/drop ${name} ü.txt`), Gio.File.new_for_path(`${path}/drop ${name} second.txt`)];
             for (const file of files) file.replace_contents('original drag file', null, false, Gio.FileCreateFlags.PRIVATE, null);
             const receipt = `${path}/drop-${name}.json`;
@@ -492,7 +552,7 @@ async function interactionRegressions(ext, path, screenshot) {
                 for (const progress of [.25, .5, .75, 1]) await move(180 + (ax + island.panelButton.width / 2 - 180) * progress, 390 + (ay + 12 - 390) * progress);
                 await Scripting.sleep(450);
                 assert(ext.drops.island === island && !ext.companion.proc, `${name}: the drop zone opens below the clock without a basket`);
-                const p = ext.drops.position; await move(p.x + p.width / 2, p.y + 65); await Scripting.sleep(350);
+                const p = ext.drops.position; await move(zone === 'airdrop' ? p.x + p.width - 12 - 75 : p.x + p.width / 2, p.y + 65); await Scripting.sleep(350);
                 await screenshot(`drop-${name}`);
                 const targetWindow = global.get_window_actors().map(a => a.meta_window).find(w => w.get_title() === (backend === 'x11' ? 'Notchy Drop Target X11' : 'Notchy Drop Target'));
                 const targetRect = targetWindow?.get_frame_rect();
@@ -507,6 +567,15 @@ async function interactionRegressions(ext, path, screenshot) {
                     continue;
                 }
                 await press(Clutter.ButtonState.RELEASED); await Scripting.sleep(550);
+                if (zone === 'airdrop') {
+                    for (let i = 0; i < 40 && island.peekKind !== 'airdrop'; i++) await Scripting.sleep(100);
+                    assert(island.peekKind === 'airdrop' && !ext.drops.island, `${name}: dropping on the AirDrop zone folds the zone away and starts sending`);
+                    for (let i = 0; i < 60 && !GLib.file_test(`${airdropRun}/sent`, GLib.FileTest.EXISTS); i++) await Scripting.sleep(100);
+                    const [, sent] = GLib.file_get_contents(`${airdropRun}/sent`);
+                    assert(files.every(file => new TextDecoder().decode(sent).split('\n').includes(file.get_path()) && !ext.shelf.items.some(item => item.uri === file.get_uri())), `${name}: both dragged files go to the iPhone, not into the Regal`);
+                    await Scripting.sleep(2800); ext.settings.set_string('airdrop-daemon', '');
+                    continue;
+                }
                 assert(files.every(file => ext.shelf.items.some(item => item.uri === file.get_uri()) && file.query_exists(null)), `${name}: actual drop adds all files and preserves originals`);
                 const [ok, bytes] = Gio.File.new_for_path(receipt).load_contents(null), result = ok && JSON.parse(new TextDecoder().decode(bytes));
                 assert(result && !result.cancelled && !result.delete_data, `${name}: source completes COPY successfully`);

@@ -1,5 +1,6 @@
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
@@ -42,6 +43,25 @@ export default class NotchyPreferences extends ExtensionPreferences {
         toggle(live, 'notifications-enabled', 'Benachrichtigungen in Notchy anzeigen', 'Neue Benachrichtigungen erscheinen als Banner aus der Island statt als GNOME-Banner. Nicht stören wird beachtet.');
         const preferred = new Adw.EntryRow({title: 'Bevorzugter MPRIS-Busname (leer = automatisch)', text: settings.get_string('preferred-player')});
         preferred.connect('changed', () => settings.set_string('preferred-player', preferred.text)); live.add(preferred);
+        // AirDrop: Notchy is the front end of airdrop-mt7921, which the user installs.
+        const airdrop = group(general, 'AirDrop (experimentell)', 'Senden an und Empfangen von iPhones über das Projekt airdrop-mt7921. Funktioniert mit MediaTek-WLAN (MT7921/MT7922). Während AirDrop aktiv ist, ist das WLAN pausiert; danach verbindet es sich selbst wieder. Nur „Für alle für 10 Minuten“ auf dem iPhone.');
+        toggle(airdrop, 'airdrop-enabled', 'AirDrop in Notchy anbieten', 'Knopf im Kopf der Island, AirDrop-Fläche beim Ziehen, „Per AirDrop senden“ im Regal.');
+        const home = GLib.get_home_dir();
+        const found = () => {
+            const configured = settings.get_string('airdrop-daemon');
+            const candidates = configured ? [configured] : ['airdrop-mt7921', 'src/airdrop-mt7921', 'Projekte/airdrop-mt7921', 'Schreibtisch/airdrop-mt7921', 'Desktop/airdrop-mt7921', 'git/airdrop-mt7921'].map(dir => `${home}/${dir}/daemon/airdropd`);
+            try { const target = GLib.file_read_link('/usr/local/bin/airdrop-send'); candidates.unshift(`${GLib.path_get_dirname(target)}/airdropd`); } catch { /* Not linked. */ }
+            return candidates.find(path => GLib.file_test(path, GLib.FileTest.IS_EXECUTABLE)) ?? '';
+        };
+        const status = new Adw.ActionRow({title: 'Backend'});
+        const sync = () => { const path = found(); status.subtitle = path ? `Gefunden: ${path}` : 'Nicht gefunden. airdrop-mt7921 installieren (Anleitung rechts) oder den Pfad unten angeben.'; };
+        const guide = new Gtk.LinkButton({uri: 'https://github.com/jedbillyb/airdrop-mt7921#install', label: 'Anleitung', valign: Gtk.Align.CENTER});
+        status.add_suffix(guide); airdrop.add(status);
+        const daemon = new Adw.EntryRow({title: 'Pfad zu airdropd (leer = automatisch suchen)', text: settings.get_string('airdrop-daemon')});
+        daemon.connect('changed', () => { settings.set_string('airdrop-daemon', daemon.text.trim()); sync(); }); airdrop.add(daemon);
+        const folder = new Adw.EntryRow({title: 'Ordner für empfangene Dateien (leer = Downloads/AirDrop)', text: settings.get_string('airdrop-folder')});
+        folder.connect('changed', () => settings.set_string('airdrop-folder', folder.text.trim())); airdrop.add(folder);
+        sync();
         const privacy = page('Ablage', 'edit-paste-symbolic');
         const history = group(privacy, 'Verlauf', 'Lokal gespeichert. Aufzeichnung und dauerhafte Speicherung sind anfangs aus.');
         toggle(history, 'clipboard-enabled', 'Zwischenablage aufzeichnen');

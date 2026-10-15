@@ -11,6 +11,7 @@ The user interface is German; the repository (code, comments, docs, commits) is 
 - GNOME Shell **50** on Wayland. Notchy integrates into the top bar of the primary monitor.
 - GJS, GTK 4.10 or newer, libadwaita, Python 3 and PyGObject.
 - PipeWire 1.x for AirPlay output (uses PipeWire's `raop-discover` module and Avahi).
+- Optional, for AirDrop: a MediaTek MT7921/MT7922 Wi-Fi card, Bluetooth, and the [airdrop-mt7921](https://github.com/jedbillyb/airdrop-mt7921) backend (see [AirDrop](#airdrop)).
 - To build: `glib-compile-schemas`, `gnome-extensions`.
 - Optional: ImageMagick (image conversion), Tesseract (text recognition), Ghostscript, LibreOffice, FFmpeg/FFprobe, `rembg`. Missing tools are never installed; their actions appear only when the program is present.
 
@@ -35,12 +36,36 @@ Or install the built package: `gnome-extensions install --force dist/notchy@matt
 - **Clipboard („Ablage“):** search and filters (all, links, images, ★). ↑↓ select, ↵ copies, ⇧↵ copies as plain text, F toggles favourite, Del deletes; double click copies. Recording is off by default.
 - **Calendar („Kalender“):** a week strip with arrows (dots mark days with events), the selected day's agenda with a line at the current time, and GNOME's notifications grouped per app (click a stack to expand it), with Do Not Disturb and „clear all“.
 - **Thunderstorm (Super + Space):** the island becomes a search field for apps, shelf files and arithmetic. Arrow keys and Enter; Esc closes.
+- **AirDrop:** the AirDrop button in the island's header makes this computer visible to iPhones; an incoming transfer asks in the notch („Annehmen“ / „Ablehnen“, with a countdown) and received files land in the shelf. Send by dropping files on the „AirDrop“ half of the drop zone, or from the shelf (selection or file menu). Details below.
 - **Radial menu (right click on the island or Super + Shift + R):** area, window, screen, recording, text (OCR). Screenshots land in the shelf, recognised text in the clipboard, recordings use GNOME's screen recorder.
 - **Styles:** *Dynamic Glass* (a black notch fading into glass; the black share is adjustable, 100 % is entirely black without glass; its outer top corners widen as the notch grows) and *Liquid Glass* (a floating glass capsule).
 
 Shortcuts: Super + Space (search), Super + Ctrl + Space (island), Super + Shift + Space (clipboard), Super + Shift + B (basket), Super + Shift + R (radial menu). All can be changed or cleared. GNOME uses Super + Space and Shift + Super + Space to switch keyboard layouts: with a single layout configured, Notchy takes these keys over while it runs (no setting is changed); with several layouts GNOME keeps them, so choose other Notchy shortcuts.
 
 **Droplets** (Pomodoro, notes, weather, terminal …) are removed for now and will return later under a new name. The full source before that redesign is kept locally under `archive/` (not part of the repository).
+
+## AirDrop
+
+Notchy is a front end for [airdrop-mt7921](https://github.com/jedbillyb/airdrop-mt7921) (GPL-3.0), which speaks AWDL (Apple's peer-to-peer Wi-Fi) through a patched OWL and AirDrop through a patched OpenDrop on MediaTek MT7921/MT7922 cards. Notchy itself never runs anything as root; the backend's own narrow sudo helper does.
+
+What to expect with an MT7921/MT7922:
+
+- **Wi-Fi pauses while AirDrop is active.** Notchy runs the backend in *exclusive* mode, only on demand: switching AirDrop on (or sending) takes the card, and the backend gives it back by itself about a minute after the last transfer (three minutes if nothing arrives). With a LAN cable the internet stays up.
+- **Slow:** roughly 40–70 kB/s, so a photo takes a minute or two.
+- **„Everyone for 10 Minutes“ only** on the iPhone; „Contacts Only“ is not possible off Apple hardware.
+- **Experimental:** discovery sometimes stalls; closing and reopening the share sheet on the iPhone helps.
+- Sending goes to the first AirDrop receiver found; the phone always has to accept, so a wrong target only ever sees a request.
+
+Setup (once, as yourself; the installer shows and asks before it adds its sudo rule):
+
+```sh
+git clone https://github.com/jedbillyb/airdrop-mt7921.git ~/airdrop-mt7921
+cd ~/airdrop-mt7921 && ./install.sh
+```
+
+Exclusive mode needs your regulatory country in `~/.config/airdrop/config`, e.g. `AIRDROP_REG="${AIRDROP_REG:-CH}"`. With ufw, allow the receiver: `sudo ufw allow in on awdl0 from fe80::/10 to any port 8770:8771 proto tcp`.
+
+Notchy finds the backend in `~/airdrop-mt7921` (and a few other usual places, or via the `/usr/local/bin/airdrop-send` symlink); Settings → „AirDrop (experimentell)“ shows whether it was found and takes another path. Received files go to `Downloads/AirDrop` unless set otherwise there. Notchy answers the backend's consent hook (`AIRDROP_CONFIRM`) itself: anything but an explicit „Annehmen“ — „Ablehnen“, Esc, a click elsewhere, no answer in time — declines.
 
 ## Data
 

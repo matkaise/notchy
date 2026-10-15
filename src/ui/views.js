@@ -1,6 +1,7 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Graphene from 'gi://Graphene';
 import St from 'gi://St';
 import Shell from 'gi://Shell';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
@@ -26,6 +27,8 @@ function outputGicon(output) {
 
 // Long device names end in an ellipsis.
 const shorten = (text, max) => text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+// The AirDrop radar's size.
+const RADAR = 84;
 // A snap layout's miniature screen.
 const SNAP_TILE = [76, 48];
 // Height of the calendar tab's two scrolling lists.
@@ -539,6 +542,102 @@ export class Views {
     }
     appResult(app) { return {title: app.get_name(), gicon: app.get_icon(), kind: 'App', run: () => app.activate()}; }
 
+    // AirDrop, sending: a radar while the phone is searched for, then the
+    // phone it found, a ring while the file goes over, a check at the end.
+    airdropSendView() {
+        const airdrop = this.airdrop, life = new Lifetime();
+        const root = box(false, {style_class: 'notchy-peek notchy-airdrop'});
+        const radar = new St.Widget({style_class: 'notchy-airdrop-radar', layout_manager: new Clutter.BinLayout(), width: RADAR, height: RADAR, y_align: Clutter.ActorAlign.CENTER});
+        // Three rings leave the centre one after another, like AirDrop's own search.
+        const rings = [0, 1, 2].map(i => {
+            const ring = new St.Widget({style_class: 'notchy-airdrop-ring', width: RADAR, height: RADAR, opacity: 0, pivot_point: new Graphene.Point({x: 0.5, y: 0.5})});
+            radar.add_child(ring); return [ring, i];
+        });
+        const core = new St.Bin({style_class: 'notchy-airdrop-core', width: 46, height: 46, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        const coreIcon = new St.Icon({icon_size: 22}); core.set_child(coreIcon); radar.add_child(core);
+        root.add_child(radar);
+        const text = box(true, {x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'notchy-airdrop-text-column'});
+        const meta = label('AirDrop', 'notchy-peek-app');
+        const title = label('', 'notchy-peek-title'), status = label('', 'notchy-peek-body'), hint = label('', 'notchy-airdrop-hint');
+        for (const actor of [status, hint]) { actor.clutter_text.set_line_wrap(true); actor.clutter_text.ellipsize = 0; }
+        for (const actor of [meta, title, status, hint]) text.add_child(actor);
+        root.add_child(text);
+        const cancel = button('window-close-symbolic', 'Senden abbrechen', () => airdrop.cancelSend(), 'notchy-round-button small');
+        cancel.y_align = Clutter.ActorAlign.START; root.add_child(cancel);
+        // Clutter skips animations of actors not yet shown, so the radar starts once mapped.
+        let pulsing = false, wanted = false;
+        // The rings map after their parent, so wait for the rings themselves.
+        const lastRing = rings.at(-1)[0];
+        lastRing.connect('notify::mapped', () => { if (lastRing.mapped && wanted && !pulsing) pulse(true); });
+        const pulse = on => {
+            wanted = on;
+            if (on && !lastRing.mapped) return;
+            if (on === pulsing) return; pulsing = on;
+            for (const [ring, i] of rings) {
+                ring.remove_all_transitions(); ring.scale_x = ring.scale_y = 0.45; ring.opacity = on ? 210 : 0;
+                // Each ring grows and fades, over and over; the delays stagger them once.
+                if (on) ring.ease({opacity: 0, scale_x: 1, scale_y: 1, duration: 1800, delay: i * 600, repeatCount: -1, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            }
+        };
+        const draw = () => {
+            const send = airdrop.send; if (!send) return;
+            const files = send.files.length === 1 ? send.files[0] : `${send.files.length} Dateien`;
+            title.text = files;
+            const phase = send.phase;
+            root.set_style_class_name(`notchy-peek notchy-airdrop ${phase}`);
+            coreIcon.gicon = gicon(phase === 'done' ? 'object-select-symbolic' : phase === 'failed' ? 'dialog-warning-symbolic' : phase === 'searching' || phase === 'cancelled' ? 'notchy-airdrop-symbolic' : 'phone-symbolic');
+            status.text = {searching: 'Sucht iPhones in der Nähe …', waiting: `An ${send.peer} · auf dem iPhone annehmen`, sending: `An ${send.peer} · wird gesendet …`,
+                done: send.peer ? `An ${send.peer} gesendet` : 'Gesendet', failed: send.error || 'Senden fehlgeschlagen', cancelled: 'Abgebrochen'}[phase] ?? '';
+            hint.text = phase === 'searching' ? 'iPhone: AirDrop „Für alle“, Teilen-Menü zu' : ['waiting', 'sending'].includes(phase) ? 'WLAN ist während AirDrop pausiert' : '';
+            hint.visible = Boolean(hint.text);
+            cancel.visible = ['searching', 'waiting', 'sending'].includes(phase);
+            pulse(['searching', 'waiting', 'sending'].includes(phase));
+            // Settled: show the outcome briefly, then fold the notch away.
+            if (!cancel.visible && !life.closeTimer) life.closeTimer = life.later(phase === 'failed' ? 6000 : 2200, () => { if (this.island.peekKind === 'airdrop') this.island.close(); });
+        };
+        life.cleanups.push(airdrop.subscribe(draw)); draw();
+        root.connect('destroy', () => { pulse(false); life.dispose(); });
+        return {actor: root};
+    }
+    // AirDrop, receiving: who sends what, and „Annehmen“ before the time runs out.
+    airdropAskView(question) {
+        const root = box(false, {style_class: 'notchy-peek notchy-airdrop notchy-airdrop-ask'});
+        const badge = new St.Bin({style_class: 'notchy-airdrop-core', width: 46, height: 46, y_align: Clutter.ActorAlign.START, child: icon('notchy-airdrop-symbolic', 22)});
+        root.add_child(badge);
+        const column = box(true, {x_expand: true});
+        const meta = box(false, {style_class: 'notchy-peek-meta'});
+        meta.add_child(label('AirDrop', 'notchy-peek-app', {x_expand: true}));
+        const left = label('', 'notchy-peek-app'); meta.add_child(left);
+        column.add_child(meta);
+        column.add_child(label(question.sender || 'Ein Gerät in der Nähe', 'notchy-peek-title'));
+        const what = question.files ? `möchte „${question.files}“ senden` : 'möchte etwas senden';
+        const body = label(what, 'notchy-peek-body'); body.clutter_text.set_line_wrap(true); body.clutter_text.ellipsize = 0; column.add_child(body);
+        const actions = box(false, {style_class: 'notchy-peek-actions'});
+        actions.add_child(textButton('Ablehnen', () => question.answer(false), 'notchy-pill-button'));
+        const accept = textButton('Annehmen', () => question.answer(true), 'notchy-pill-button notchy-accept');
+        actions.add_child(accept); column.add_child(actions);
+        // The backend declines on its own once this runs out.
+        const track = new St.Widget({style_class: 'notchy-airdrop-timeout', x_expand: true});
+        const fill = new St.Widget({style_class: 'notchy-airdrop-timeout-fill'}); track.add_child(fill); column.add_child(track);
+        root.add_child(column);
+        const tick = () => {
+            if (!track.mapped) return;
+            const remaining = Math.max(0, question.timeout - (GLib.get_monotonic_time() - question.asked) / 1000);
+            left.text = `${Math.ceil(remaining / 1000)} s`;
+            fill.width = Math.round(track.width * remaining / question.timeout);
+        };
+        const id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => { tick(); return GLib.SOURCE_CONTINUE; });
+        root.connect('destroy', () => GLib.source_remove(id));
+        track.connect('notify::width', tick); tick();
+        this.island.actor.grab_key_focus();
+        this.keyPress = event => {
+            const key = event.get_key_symbol();
+            if (key === Clutter.KEY_Return || key === Clutter.KEY_KP_Enter) { question.answer(true); return Clutter.EVENT_STOP; }
+            if (key === Clutter.KEY_Escape) { question.answer(false); return Clutter.EVENT_STOP; }
+            return Clutter.EVENT_PROPAGATE;
+        };
+        return {actor: root, accept};
+    }
     notificationView(notification, done) {
         // One notification as a banner: app icon, app · time, title, body and its actions.
         const root = box(false, {style_class: 'notchy-peek notchy-peek-notification'});

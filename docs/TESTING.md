@@ -29,6 +29,7 @@
 - Super+Space with real key events opens the search every time; GNOME's layout-switch keys are borrowed with one layout and restored on disable.
 - Real right clicks open the radial menu; the outer corners follow the bar's slide-in at login.
 - The shelf's file menu opens inside the pane (no popup window) and removes a file with a real click; tiles deselect on a second click (`tests/tray.py`).
+- AirDrop through `tests/mock_airdropd`, a stand-in for `airdropd` with the same verbs, state JSON and `AIRDROP_CONFIRM` contract but no radio: arming, the capsule activity, consent in the notch (accept, Escape declines), received files in the shelf, sending with peer name and failure text, and a real drag onto the AirDrop zone. The test points `NOTCHY_AIRDROP_RUNDIR` at a private directory so a real backend's state is never touched.
 - Native shelf between the clock row and the tab bar: geometry, glass below it in both styles, drag-out into another Wayland client, switching via the tab bar, process reuse, overview, context-menu hold and Esc.
 - Preferences through GNOME's D-Bus service (one window for repeated clicks) and disable/enable without leftover timers or signals.
 
@@ -43,6 +44,7 @@ The headless test does not replace real use. After installing and logging in aga
 3. Drag files from Nautilus onto the island, shake for the basket, drag out of shelf and basket, Zip/Convert.
 4. Drag windows to the clock and place them with each layout.
 5. Media: switch playback to an AirPlay receiver and back.
-6. Radial menu: area, window, screen, recording, text recognition (Tesseract).
-7. Notifications from real apps, Do Not Disturb, calendar with a configured account.
-8. Fullscreen, overview, scaling; disable/enable several times.
+6. AirDrop (after installing airdrop-mt7921): receive a photo from an iPhone set to „Everyone“, send one back, and check the Wi-Fi reconnects afterwards.
+7. Radial menu: area, window, screen, recording, text recognition (Tesseract).
+8. Notifications from real apps, Do Not Disturb, calendar with a configured account.
+9. Fullscreen, overview, scaling; disable/enable several times.

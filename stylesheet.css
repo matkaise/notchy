@@ -263,3 +263,23 @@
 .notchy-snap-tile.hover { background-color: rgba(255,255,255,0.1); }
 .notchy-snap-zone { border-radius: 6px; background-color: rgba(255,255,255,0.16); transition-duration: 120ms; }
 .notchy-snap-zone.hover { background-color: #E95420; }
+
+/* ── AirDrop ───────────────────────────────────────────────────────── */
+/* AirDrop keeps Apple's blue, so it reads as AirDrop at a glance. */
+.notchy-airdrop { spacing: 16px; }
+.notchy-airdrop-core { border-radius: 23px; background-gradient-direction: vertical; background-color: #3a9bff; background-gradient-end: #0a6ee6; color: #ffffff; }
+.notchy-airdrop.done .notchy-airdrop-core { background-color: #34c759; background-gradient-end: #1f9e42; }
+.notchy-airdrop.failed .notchy-airdrop-core, .notchy-airdrop.cancelled .notchy-airdrop-core { background-color: rgba(255,255,255,0.14); background-gradient-end: rgba(255,255,255,0.14); color: #ffb38a; }
+.notchy-airdrop-ring { border-radius: 42px; border: 1.5px solid rgba(110,180,255,0.75); }
+.notchy-airdrop-text-column { spacing: 1px; }
+.notchy-airdrop-hint { font-size: 11px; color: rgba(255,255,255,0.45); padding-top: 4px; }
+.notchy-airdrop.failed .notchy-peek-body { color: #ffb38a; }
+.notchy-button.notchy-pill-button.notchy-accept { background-color: #0a84ff; color: #ffffff; }
+.notchy-button.notchy-pill-button.notchy-accept:hover, .notchy-button.notchy-pill-button.notchy-accept:focus { background-color: #3a9bff; }
+.notchy-airdrop-timeout { height: 3px; margin-top: 10px; border-radius: 2px; background-color: rgba(255,255,255,0.1); }
+.notchy-airdrop-timeout-fill { height: 3px; border-radius: 2px; background-color: rgba(110,180,255,0.85); }
+/* The live activity in the capsule and the header switch. */
+.notchy-airdrop-icon { color: #6cb4ff; }
+.notchy-airdrop-text { font-size: 12px; font-weight: bold; color: #ffffff; }
+.notchy-hud-fill.notchy-airdrop-fill { background-color: #6cb4ff; }
+.notchy-button.notchy-round-button.notchy-airdrop-button.active { color: #ffffff; background-color: #0a84ff; }

@@ -21,6 +21,11 @@ const XML = `<node><interface name="${BUS_NAME}">
  <method name="SetActivity"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="d" direction="in"/></method>
  <method name="ClearActivity"><arg type="s" direction="in"/></method>
  <method name="GetActivities"><arg type="s" direction="out"/></method>
+ <method name="AirDropAsk"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="u" direction="in"/><arg type="b" direction="out"/></method>
+ <method name="AirDropSend"><arg type="s" direction="in"/><arg type="b" direction="out"/></method>
+ <method name="AirDropDropped"><arg type="s" direction="in"/><arg type="b" direction="out"/></method>
+ <method name="AirDropReceive"><arg type="b" direction="in"/><arg type="b" direction="out"/></method>
+ <signal name="AirDrop"><arg type="s"/></signal>
  <signal name="Changed"/>
  <signal name="DropTarget"><arg type="s"/></signal>
  <signal name="ShelfConfig"><arg type="s"/></signal>
@@ -42,10 +47,21 @@ export class Companion extends Emitter {
             GetShelfConfig: () => JSON.stringify(this.shelfConfig()),
             RemoveUri: uri => shelf.remove(uri), Clear: () => shelf.clear(),
             Action: (action, uri, extra) => operations.run(action, uri, extra),
+            // helper/airdrop-confirm waits on this until the notch is answered.
+            AirDropAskAsync: ([sender, files, timeout], invocation) => {
+                const airdrop = extension.airdrop;
+                if (!airdrop) { invocation.return_value(new GLib.Variant('(b)', [false])); return; }
+                airdrop.ask(sender, files, Math.min(Math.max(timeout, 3000), 60000)).then(accepted => invocation.return_value(new GLib.Variant('(b)', [accepted])));
+            },
+            AirDropSend: text => extension.airdrop?.sendFiles(text.split(/\r?\n/).filter(Boolean).map(uri => Gio.File.new_for_uri(uri).get_path()).filter(Boolean)) ?? false,
+            AirDropDropped: text => extension.drops?.airdropped(text) ?? false,
+            AirDropReceive: on => extension.airdrop?.receive(on) ?? false,
         });
         this.dbus.export(Gio.DBus.session, BUS_PATH);
         this.owner = Gio.bus_own_name_on_connection(Gio.DBus.session, BUS_NAME, Gio.BusNameOwnerFlags.NONE, null, null);
         this.unsub = shelf.subscribe(() => this.dbus.emit_signal('Changed', null));
+        // The native panes show AirDrop's switch and state.
+        this.unsubAirDrop = extension.airdrop?.subscribe(() => this.dbus.emit_signal('AirDrop', new GLib.Variant('(s)', [JSON.stringify(this.airdropConfig())])));
         this.life.connect(global.display, 'window-created', (_d, window) => {
             // Set title before mapping is asynchronous on Wayland.
             this.life.connect(window, 'notify::title', () => this._positionWindow(window));
@@ -110,7 +126,7 @@ export class Companion extends Emitter {
         // continues its black-to-glass shade across it.
         const island = this.shelfIsland ?? this.extension.activeIsland?.();
         return {visible: Boolean(this.shelfIsland?.actor.visible && !this.shelfIsland.dropActive), joined: true,
-            style: this.extension.settings.get_string('style'), shade: island?.shelfShade ?? {black: 0, fade: 70},
+            style: this.extension.settings.get_string('style'), shade: island?.shelfShade ?? {black: 0, fade: 70}, airdrop: this.airdropConfig(),
             ...(this.position ?? {width: this.extension.settings.get_int('width'), height: 250})};
     }
     // The shelf is one long-lived GTK process. Switching to the Regal tab only
@@ -170,6 +186,10 @@ export class Companion extends Emitter {
             });
         } catch (e) { Main.notify('Notchy', `Korb konnte nicht geöffnet werden: ${e.message}`); }
     }
-    dispose() { this.closeShelf(); this.life.dispose(); this.unsub(); this.dbus.unexport(); Gio.bus_unown_name(this.owner);
+    airdropConfig() {
+        const airdrop = this.extension.airdrop;
+        return {available: Boolean(airdrop?.available), receiving: Boolean(airdrop?.receiving), state: airdrop?.state ?? 'off', sending: Boolean(airdrop?.sendProc)};
+    }
+    dispose() { this.closeShelf(); this.life.dispose(); this.unsub(); this.unsubAirDrop?.(); this.dbus.unexport(); Gio.bus_unown_name(this.owner);
         this.proc?.force_exit(); this.proc = null; this.shelfProc?.force_exit(); this.shelfProc = null; }
 }

@@ -18,6 +18,9 @@
     <key name="media-enabled" type="b"><default>true</default><summary>Media controls</summary></key>
     <key name="media-waveform" type="b"><default>true</default><summary>Visualize output-monitor audio while playing</summary></key>
     <key name="airplay-enabled" type="b"><default>true</default><summary>Discover AirPlay receivers on the local network as audio outputs</summary></key>
+    <key name="airdrop-enabled" type="b"><default>true</default><summary>Offer AirDrop when the airdrop-mt7921 backend is installed</summary></key>
+    <key name="airdrop-daemon" type="s"><default>''</default><summary>Path to airdropd (empty = look for an installed airdrop-mt7921)</summary></key>
+    <key name="airdrop-folder" type="s"><default>''</default><summary>Folder for files received over AirDrop (empty = Downloads/AirDrop)</summary></key>
     <key name="hud-enabled" type="b"><default>true</default><summary>Volume and brightness as island live activity</summary></key>
     <key name="notifications-enabled" type="b"><default>true</default><summary>Notification live activities</summary></key>
     <key name="snap-enabled" type="b"><default>true</default><summary>Offer snap layouts when a window is dragged into the notch</summary></key>

@@ -18,6 +18,12 @@ EXT_CLASS = {'pdf': 'pdf', 'md': 'text', 'txt': 'text', 'zip': 'archive', 'gz': 
 # The Shell paints the island's glass below the pane (src/ui/backdrop.js); the
 # pane itself stays clear there and only paints Dynamic Glass's black shade.
 CLEAR = 'rgba(0,0,0,0)'
+# Notchy's own symbols, shared with the Shell (symbolic, so GTK recolours them).
+ICONS = Path(__file__).resolve().parent.parent / 'src' / 'icons'
+
+
+def airdrop_image():
+    return Gtk.Image(gicon=Gio.FileIcon.new(Gio.File.new_for_path(str(ICONS / 'notchy-airdrop-symbolic.svg'))))
 CSS = '''
 * { color: #f4f4f6; }
 .count { font-size: 12.5px; color: rgba(255,255,255,0.6); }
@@ -146,6 +152,11 @@ class Tray(Gtk.Application):
         can_convert = bool(shutil.which('magick') or shutil.which('convert'))
         self.convert_button = self.action('emblem-synchronizing-symbolic', 'Bilder nach WebP konvertieren' if can_convert else 'Bildkonvertierung braucht ImageMagick', self.convert_selected)
         self.convert_button.can_convert = can_convert
+        # AirDrop appears once Notchy reports its backend installed (ShelfConfig / AirDrop signal).
+        self.airdrop_available = False
+        self.airdrop_button = Gtk.Button(child=airdrop_image(), tooltip_text='Per AirDrop senden', css_classes=['round'], visible=False)
+        self.airdrop_button.connect('clicked', lambda *_: self.airdrop_selected())
+        self.actions.append(self.airdrop_button)
         self.action('user-trash-symbolic', 'Aus dem Regal entfernen · Originale bleiben', self.remove_selected)
         header.append(self.actions)
         # Icons instead of words; tooltips name each action.
@@ -245,6 +256,17 @@ class Tray(Gtk.Application):
             self.refresh()
         elif name == 'ShelfConfig' and self.kind == 'shelf':
             self.configure(json.loads(values.unpack()[0]))
+        elif name == 'AirDrop' and self.kind == 'shelf':
+            self.set_airdrop(json.loads(values.unpack()[0]))
+
+    def set_airdrop(self, config):
+        self.airdrop_available = bool((config or {}).get('available'))
+        self.airdrop_button.set_visible(self.airdrop_available)
+
+    def airdrop_selected(self):
+        uris = self.selected_uris()
+        if uris:
+            self.call('AirDropSend', GLib.Variant('(s)', ('\n'.join(uris),)))
 
     def configure(self, config):
         for style in ('dynamic', 'liquid'):
@@ -256,6 +278,7 @@ class Tray(Gtk.Application):
         css = (f'.tray.shelf.dynamic {{ background: linear-gradient(to bottom, #000 0px, #000 {black}px, {CLEAR} {black + fade}px, {CLEAR} 100%); }}'
                if style == 'dynamic' else '')
         self.shade_provider.load_from_data(css.encode())
+        self.set_airdrop(config.get('airdrop'))
         self.window.set_default_size(config['width'], config['height'])
         self.window.set_visible(config['visible'])
 
@@ -511,7 +534,7 @@ class Tray(Gtk.Application):
                            column_spacing=6, row_spacing=6, homogeneous=True)
         def action(icon_name, label, callback, danger=False):
             content = Gtk.Box(spacing=8)
-            content.append(Gtk.Image.new_from_icon_name(icon_name))
+            content.append(Gtk.Image.new_from_icon_name(icon_name) if icon_name else airdrop_image())
             content.append(Gtk.Label(label=label, xalign=0, ellipsize=3))
             button = Gtk.Button(child=content, css_classes=['sheet-action'] + (['danger'] if danger else []), tooltip_text=label)
             button.connect('clicked', lambda *_: run(callback))
@@ -522,6 +545,8 @@ class Tray(Gtk.Application):
         action('folder-open-symbolic', 'Im Ordner zeigen', lambda: self.open(Gio.File.new_for_uri(uri).get_parent().get_uri()))
         action('document-save-as-symbolic', 'Kopie speichern …', lambda: self.save(item))
         action('package-x-generic-symbolic', 'Als ZIP packen', lambda: call('zip'))
+        if self.airdrop_available:
+            action(None, 'Per AirDrop senden', lambda: self.call('AirDropSend', GLib.Variant('(s)', (uri,))))
         if suffix in IMAGES and shutil.which('tesseract'):
             action('edit-select-all-symbolic', 'Text erkennen', lambda: call('ocr'))
         if suffix in IMAGES and shutil.which('rembg'):
