@@ -6,7 +6,9 @@ import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {Extension, InjectionManager} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {getInputSourceManager} from 'resource:///org/gnome/shell/ui/status/keyboard.js';
 import {Lifetime} from './src/lifecycle.js';
+import {normalizeAccelerator} from './src/model.js';
 import {Store} from './src/services/store.js';
 import {Shelf} from './src/services/shelf.js';
 import {Clipboard} from './src/services/clipboard.js';
@@ -69,7 +71,7 @@ export default class Notchy extends Extension {
                 'toggle-basket': () => this.companion.open('basket', this.activeIsland()?.monitor),
             };
             for (const [name, action] of Object.entries(binds)) { Main.wm.addKeybinding(name, this.settings, Meta.KeyBindingFlags.NONE, Shell.ActionMode.NORMAL, action); this.life.cleanups.push(() => Main.wm.removeKeybinding(name)); }
-            this._hookHud(); this._hookDrag(); this._hookNotifications();
+            this._hookHud(); this._hookDrag(); this._hookNotifications(); this._hookInputSourceKeys();
         } catch (e) { this.disable(); throw e; }
     }
     _rebuild() {
@@ -124,6 +126,33 @@ export default class Notchy extends Extension {
             });
         });
         this.life.connect(Main.xdndHandler, 'drag-end', () => { this.dragging = false; this.life.cancel(this.dragPoll); this.dragPoll = 0; });
+    }
+    // GNOME binds Super+Space (and Shift+Super+Space) to switching keyboard
+    // layouts. Two bindings on one key make Mutter pick either at random, so
+    // Notchy's search opened only sometimes. With a single layout GNOME's
+    // switch does nothing at all; then Notchy borrows the keys while it runs
+    // (no setting is changed). With several layouts GNOME keeps them.
+    _hookInputSourceKeys() {
+        const GNOME_KEYS = [['switch-input-source', Meta.KeyBindingFlags.NONE, '_keybindingAction'], ['switch-input-source-backward', Meta.KeyBindingFlags.IS_REVERSED, '_keybindingActionBackward']];
+        const wm = new Gio.Settings({schema_id: 'org.gnome.desktop.wm.keybindings'}), sources = new Gio.Settings({schema_id: 'org.gnome.desktop.input-sources'});
+        this.borrowedKeys = new Set();
+        const restore = name => {
+            const [, flags, field] = GNOME_KEYS.find(([key]) => key === name), manager = getInputSourceManager();
+            manager[field] = Main.wm.addKeybinding(name, wm, flags, Shell.ActionMode.ALL, manager._switchInputSource.bind(manager));
+            this.borrowedKeys.delete(name);
+        };
+        const sync = () => {
+            const ours = new Set(['toggle-search', 'toggle-island', 'toggle-clipboard', 'toggle-basket', 'toggle-ring'].flatMap(key => this.settings.get_strv(key)).map(normalizeAccelerator).filter(Boolean));
+            const single = sources.get_value('sources').n_children() < 2;
+            for (const [name] of GNOME_KEYS) {
+                const clash = single && wm.get_strv(name).some(accel => ours.has(normalizeAccelerator(accel)));
+                if (clash && !this.borrowedKeys.has(name)) { Main.wm.removeKeybinding(name); this.borrowedKeys.add(name); }
+                else if (!clash && this.borrowedKeys.has(name)) restore(name);
+            }
+        };
+        for (const [object, signal] of [[sources, 'changed::sources'], [wm, 'changed::switch-input-source'], [wm, 'changed::switch-input-source-backward'], [this.settings, 'changed']]) this.life.connect(object, signal, sync);
+        this.life.cleanups.push(() => { for (const name of [...this.borrowedKeys]) restore(name); });
+        sync();
     }
     _hookNotifications() {
         this.notificationSources = new Set();

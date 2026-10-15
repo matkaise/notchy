@@ -20,7 +20,10 @@ export class NotchEars {
         const sync = () => this.sync();
         for (const [actor, signals] of [[island.actor, ['notify::x', 'notify::y', 'notify::width', 'notify::visible', 'notify::mapped']],
             [island.surface, ['notify::width', 'notify::height', 'notify::mapped']], [island.panelSurface, ['notify::allocation', 'notify::mapped']],
-            [island.panelButton, ['notify::allocation']], [Main.overview, ['showing', 'hidden']]]) {
+            [island.panelButton, ['notify::allocation']], [Main.overview, ['showing', 'hidden']],
+            // After login GNOME slides the bar in from above; the curves must follow it there.
+            [Main.layoutManager.panelBox, ['notify::translation-y', 'notify::y', 'notify::allocation']], [Main.panel, ['notify::allocation']],
+            [Main.layoutManager, ['startup-complete']]]) {
             if (actor) for (const signal of signals) this.life.connect(actor, signal, sync);
         }
         this.life.connect(island.settings, 'changed', sync);

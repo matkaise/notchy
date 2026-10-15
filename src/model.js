@@ -157,3 +157,12 @@ export function zoneRect(area, [fx, fy, fw, fh]) {
     const x = Math.round(area.x + fx * area.width), y = Math.round(area.y + fy * area.height);
     return {x, y, width: Math.round(area.x + (fx + fw) * area.width) - x, height: Math.round(area.y + (fy + fh) * area.height) - y};
 }
+
+// A GTK accelerator in canonical form, so equal shortcuts compare equal:
+// modifiers sorted and lower-cased (Primary/Ctrl → control), key lower-cased.
+export function normalizeAccelerator(accel) {
+    const alias = {primary: 'control', ctrl: 'control', mod4: 'super', mod1: 'alt'};
+    const mods = [...String(accel).matchAll(/<([^>]+)>/g)].map(m => alias[m[1].toLowerCase()] ?? m[1].toLowerCase());
+    const key = String(accel).replace(/<[^>]+>/g, '').trim().toLowerCase();
+    return key ? `${[...new Set(mods)].sort().map(m => `<${m}>`).join('')}${key}` : '';
+}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseUris, classify, History, calculate, normalizeTags, combineCopies, eventsForDay, relativeTime, mprisActive, isoWeek, weekDays, groupBy, SNAP_LAYOUTS, zoneRect} from '../src/model.js';
+import {parseUris, classify, History, calculate, normalizeTags, combineCopies, eventsForDay, relativeTime, mprisActive, isoWeek, weekDays, groupBy, SNAP_LAYOUTS, zoneRect, normalizeAccelerator} from '../src/model.js';
 
 test('file drops parse URI lists, deduplicate and reject unsafe/nonlocal data', () => {
     assert.deepEqual(parseUris('# Comment\r\nfile:///tmp/a%20b\r\nfile:///tmp/a%20b\nhttps://example.com\nfile:///tmp/%ZZ\nfile:///tmp/%00'), ['file:///tmp/a%20b']);
@@ -90,4 +90,10 @@ test('snap layouts tile the whole work area without gaps or overlaps', () => {
         for (const r of rects) assert.ok(r.x >= area.x && r.y >= area.y && r.x + r.width <= area.x + area.width && r.y + r.height <= area.y + area.height, layout.name);
     }
     assert.deepEqual(zoneRect({x: 10, y: 20, width: 1001, height: 600}, [1 / 3, 0, 1 / 3, 1]), {x: 344, y: 20, width: 333, height: 600});
+});
+test('accelerators compare equal regardless of modifier order and spelling', () => {
+    assert.equal(normalizeAccelerator('<Shift><Super>space'), normalizeAccelerator('<Super><Shift>Space'));
+    assert.equal(normalizeAccelerator('<Primary>v'), normalizeAccelerator('<Control>V'));
+    assert.notEqual(normalizeAccelerator('<Super>space'), normalizeAccelerator('<Super><Shift>space'));
+    assert.equal(normalizeAccelerator('XF86Keyboard'), 'xf86keyboard'); assert.equal(normalizeAccelerator(''), '');
 });

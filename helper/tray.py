@@ -26,6 +26,7 @@ CSS = '''
 button { background: rgba(255,255,255,0.08); border-radius: 15px; padding: 4px 12px; box-shadow: none; border: none; min-height: 22px; font-size: 12px; }
 button:hover { background: rgba(255,255,255,0.16); }
 button:disabled { opacity: 0.35; }
+button:focus-visible { outline: 1px solid rgba(255,255,255,0.35); outline-offset: -1px; }
 button.round { padding: 5px; min-width: 22px; border-radius: 15px; background: transparent; color: rgba(255,255,255,0.8); }
 button.round:hover { background: rgba(255,255,255,0.1); color: #ffffff; }
 button.wide { padding: 7px 12px; border-radius: 16px; background: rgba(255,255,255,0.12); }
@@ -47,6 +48,16 @@ flowboxchild:selected { background: rgba(255,179,138,0.16); box-shadow: inset 0 
 .basket .thumb { min-width: 38px; min-height: 48px; border-radius: 7px; }
 .basket .ext { font-size: 8.5px; margin-bottom: 4px; }
 .basket .zone-hint { font-size: 11.5px; color: rgba(255,255,255,0.65); }
+.sheet { padding: 2px 0 12px; }
+.sheet-title { font-size: 12.5px; font-weight: 700; }
+.sheet-label { font-size: 11.5px; color: rgba(255,255,255,0.5); margin-right: 4px; }
+.sheet flowboxchild { padding: 0; background: transparent; box-shadow: none; }
+button.sheet-action { background: rgba(255,255,255,0.06); border-radius: 14px; padding: 9px 12px; }
+button.sheet-action:hover { background: rgba(255,255,255,0.12); }
+button.sheet-action image { color: rgba(255,255,255,0.8); }
+button.sheet-action.danger, button.sheet-action.danger image { color: #ffb38a; }
+button.chip { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 3px 10px; font-size: 11.5px; min-height: 20px; }
+button.chip:hover { background: rgba(233,84,32,0.55); }
 '''
 WINDOW_CSS = '''
 .tray.shelf { padding: 8px 22px 0; border-radius: 0; border: none; }
@@ -127,7 +138,7 @@ class Tray(Gtk.Application):
 
     def build_shelf(self, root):
         root.set_margin_top(0)
-        header = Gtk.Box(spacing=10, height_request=30)
+        header = self.header = Gtk.Box(spacing=10, height_request=30)
         self.count = Gtk.Label(xalign=0, hexpand=True, ellipsize=3, css_classes=['count'])
         header.append(self.count)
         self.actions = Gtk.Box(spacing=4, visible=False)
@@ -156,8 +167,22 @@ class Tray(Gtk.Application):
         self.empty.append(Gtk.Image.new_from_icon_name('document-save-symbolic'))
         self.empty.append(Gtk.Label(label='Dateien auf die Island ziehen'))
         self.area.append(self.empty)
-        root.append(self.area)
+        # A file's actions open as a page of the pane itself rather than as a
+        # popover: a popup window would sit below the Shell's island and be cut off.
+        self.stack = Gtk.Stack(vexpand=True, transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=160)
+        self.stack.add_named(self.area, 'grid')
+        self.sheet = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, css_classes=['sheet'])
+        sheet_scroll = Gtk.ScrolledWindow(vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
+        sheet_scroll.set_child(self.sheet)
+        self.stack.add_named(sheet_scroll, 'menu')
+        self.menu_item = None
+        root.append(self.stack)
         self.flow.connect('selected-children-changed', lambda *_: self.update_selection())
+        # Tiles handle their own clicks first; any other click in the pane clears the selection.
+        self.tile_clicked = False
+        empty_click = Gtk.GestureClick(button=1)
+        empty_click.connect('released', self.area_released)
+        self.area.add_controller(empty_click)
 
     def action(self, icon_name, tooltip, callback):
         button = Gtk.Button(icon_name=icon_name, tooltip_text=tooltip, css_classes=['round'])
@@ -183,7 +208,13 @@ class Tray(Gtk.Application):
 
     def key(self, _controller, keyval, _code, state):
         if keyval == Gdk.KEY_Escape:
-            self.close()
+            # Esc first leaves a file's actions, then clears a selection, then closes.
+            if self.kind == 'shelf' and self.menu_item:
+                self.close_menu()
+            elif self.kind == 'shelf' and self.selected_children():
+                self.flow.unselect_all()
+            else:
+                self.close()
             return True
         if keyval in (Gdk.KEY_c, Gdk.KEY_C) and state & Gdk.ModifierType.CONTROL_MASK:
             self.copy_selected()
@@ -322,8 +353,8 @@ class Tray(Gtk.Application):
         drag.connect('drag-begin', lambda *_: self.hold_interaction(True))
         drag.connect('drag-end', lambda *_: self.hold_interaction(False))
         click = Gtk.GestureClick(button=0)
-        click.connect('pressed', lambda g, n, _x, _y, it=item, widget=card:
-                      self.menu(widget, it) if g.get_current_button() == 3 and self.kind == 'shelf' else self.open(it['uri']) if n == 2 else None)
+        click.connect('pressed', lambda g, n, _x, _y, it=item, widget=card: self.tile_pressed(g, n, it, widget))
+        click.connect('released', lambda g, n, _x, _y, widget=card: self.tile_released(g, n, widget))
         self.flow.insert(card, -1)
         child = card.get_parent()
         # The entire file tile, including its selection padding, is a
@@ -360,6 +391,29 @@ class Tray(Gtk.Application):
         if not self.basket_items:
             self.flow.insert(Gtk.Label(label='Hier loslassen', css_classes=['zone-hint']), -1)
         self.to_shelf.set_sensitive(bool(self.basket_items))
+
+    def tile_pressed(self, gesture, presses, item, card):
+        # Remembered before the FlowBox applies the click to its selection.
+        card.notchy_was_only = card.get_parent().is_selected() and len(self.selected_children()) == 1
+        if gesture.get_current_button() == 3 and self.kind == 'shelf':
+            self.menu(card, item)
+        elif presses == 2:
+            self.open(item['uri'])
+
+    def tile_released(self, gesture, presses, card):
+        self.tile_clicked = True
+        # A plain click on the only selected tile deselects it again; Ctrl and
+        # Shift keep GTK's usual toggling and ranges.
+        modifiers = gesture.get_current_event_state() & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.SHIFT_MASK)
+        if gesture.get_current_button() != 1 or presses != 1 or modifiers or not getattr(card, 'notchy_was_only', False):
+            return
+        child = card.get_parent()
+        GLib.idle_add(lambda: (self.flow.unselect_child(child) if child.get_parent() is self.flow else None, GLib.SOURCE_REMOVE)[1])
+
+    def area_released(self, _gesture, _presses, _x, _y):
+        if not self.tile_clicked:
+            self.flow.unselect_all()
+        self.tile_clicked = False
 
     def selected_children(self):
         return [child for child in self.flow.get_selected_children() if hasattr(child, 'notchy_uri')]
@@ -432,39 +486,75 @@ class Tray(Gtk.Application):
                 self.hold_interaction(False)
         dialog.save(self.window, None, selected)
 
-    def menu(self, widget, item):
+    def menu(self, _widget, item):
+        if self.menu_item:
+            self.close_menu()
+        self.menu_item = item
         self.hold_interaction(True)
-        popover = Gtk.Popover()
-        popover.set_parent(widget)
-        actions = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        def action(label, callback):
-            button = Gtk.Button(label=label)
-            button.connect('clicked', lambda *_: (popover.popdown(), callback()))
-            actions.append(button)
-        action('Öffnen', lambda: self.open(item['uri']))
-        action('Im Dateimanager anzeigen', lambda: self.open(Gio.File.new_for_uri(item['uri']).get_parent().get_uri()))
-        action('Kopie speichern …', lambda: self.save(item))
-        action('ZIP erstellen', lambda: self.call('Action', GLib.Variant('(sss)', ('zip', item['uri'], ''))))
-        suffix = Path(item['name']).suffix.lower()
-        if suffix in IMAGES and (shutil.which('magick') or shutil.which('convert')):
-            for format_name in ('png', 'jpg', 'webp', 'tiff', 'bmp', 'gif'):
-                action('In ' + format_name.upper() + ' konvertieren', lambda fmt=format_name: self.call('Action', GLib.Variant('(sss)', ('image', item['uri'], fmt))))
-        if suffix in IMAGES and shutil.which('tesseract'):
-            action('Text erkennen und kopieren', lambda: self.call('Action', GLib.Variant('(sss)', ('ocr', item['uri'], ''))))
-        if suffix in IMAGES and shutil.which('rembg'):
-            action('Hintergrund entfernen', lambda: self.call('Action', GLib.Variant('(sss)', ('background', item['uri'], ''))))
-        if suffix == '.pdf' and shutil.which('gs'):
-            action('PDF komprimieren', lambda: self.call('Action', GLib.Variant('(sss)', ('pdf-compress', item['uri'], ''))))
-        if suffix in ('.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt') and shutil.which('libreoffice'):
-            action('In PDF konvertieren', lambda: self.call('Action', GLib.Variant('(sss)', ('document-pdf', item['uri'], ''))))
-        if suffix in ('.mp4', '.mkv', '.mov', '.webm') and shutil.which('ffmpeg') and shutil.which('ffprobe'):
-            for mb in ('10', '25', '50', '100'):
-                action('Video auf ca. ' + mb + ' MB komprimieren', lambda size=mb: self.call('Action', GLib.Variant('(sss)', ('video', item['uri'], size))))
-        action('Aus Regal entfernen', lambda: self.call('RemoveUri', GLib.Variant('(s)', (item['uri'],))))
-        popover.set_child(actions)
-        popover.connect('closed', lambda p: (self.hold_interaction(False), p.unparent()))
-        popover.popup()
+        child = self.sheet.get_first_child()
+        while child:
+            following = child.get_next_sibling()
+            self.sheet.remove(child)
+            child = following
+        head = Gtk.Box(spacing=8, css_classes=['sheet-head'])
+        back = Gtk.Button(icon_name='go-previous-symbolic', tooltip_text='Zurück (Esc)', css_classes=['round'])
+        back.connect('clicked', lambda *_: self.close_menu())
+        head.append(back)
+        head.append(Gtk.Label(label=item['name'], xalign=0, hexpand=True, ellipsize=3, css_classes=['sheet-title']))
+        self.sheet.append(head)
 
+        def run(callback):
+            self.close_menu()
+            callback()
+
+        grid = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, min_children_per_line=2, max_children_per_line=3,
+                           column_spacing=6, row_spacing=6, homogeneous=True)
+        def action(icon_name, label, callback, danger=False):
+            content = Gtk.Box(spacing=8)
+            content.append(Gtk.Image.new_from_icon_name(icon_name))
+            content.append(Gtk.Label(label=label, xalign=0, ellipsize=3))
+            button = Gtk.Button(child=content, css_classes=['sheet-action'] + (['danger'] if danger else []), tooltip_text=label)
+            button.connect('clicked', lambda *_: run(callback))
+            grid.insert(button, -1)
+        uri, suffix = item['uri'], Path(item['name']).suffix.lower()
+        call = lambda kind, extra='': self.call('Action', GLib.Variant('(sss)', (kind, uri, extra)))
+        action('document-open-symbolic', 'Öffnen', lambda: self.open(uri))
+        action('folder-open-symbolic', 'Im Ordner zeigen', lambda: self.open(Gio.File.new_for_uri(uri).get_parent().get_uri()))
+        action('document-save-as-symbolic', 'Kopie speichern …', lambda: self.save(item))
+        action('package-x-generic-symbolic', 'Als ZIP packen', lambda: call('zip'))
+        if suffix in IMAGES and shutil.which('tesseract'):
+            action('edit-select-all-symbolic', 'Text erkennen', lambda: call('ocr'))
+        if suffix in IMAGES and shutil.which('rembg'):
+            action('edit-cut-symbolic', 'Hintergrund entfernen', lambda: call('background'))
+        if suffix == '.pdf' and shutil.which('gs'):
+            action('document-save-symbolic', 'PDF verkleinern', lambda: call('pdf-compress'))
+        if suffix in ('.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt') and shutil.which('libreoffice'):
+            action('x-office-document-symbolic', 'Als PDF speichern', lambda: call('document-pdf'))
+        action('user-trash-symbolic', 'Aus Regal entfernen', lambda: self.call('RemoveUri', GLib.Variant('(s)', (uri,))), danger=True)
+        self.sheet.append(grid)
+
+        def chips(title, options):
+            row = Gtk.Box(spacing=6)
+            row.append(Gtk.Label(label=title, xalign=0, css_classes=['sheet-label']))
+            for text, callback in options:
+                chip = Gtk.Button(label=text, css_classes=['chip'])
+                chip.connect('clicked', lambda *_, cb=callback: run(cb))
+                row.append(chip)
+            self.sheet.append(row)
+        if suffix in IMAGES and (shutil.which('magick') or shutil.which('convert')):
+            chips('Konvertieren in', [(fmt.upper(), lambda fmt=fmt: call('image', fmt)) for fmt in ('png', 'jpg', 'webp', 'tiff', 'bmp', 'gif')])
+        if suffix in ('.mp4', '.mkv', '.mov', '.webm') and shutil.which('ffmpeg') and shutil.which('ffprobe'):
+            chips('Verkleinern auf', [(f'{mb} MB', lambda mb=mb: call('video', mb)) for mb in ('10', '25', '50', '100')])
+        self.header.set_visible(False)
+        self.stack.set_visible_child_name('menu')
+
+    def close_menu(self):
+        if not self.menu_item:
+            return
+        self.menu_item = None
+        self.stack.set_visible_child_name('grid')
+        self.header.set_visible(True)
+        self.hold_interaction(False)
 
 if __name__ == '__main__':
     Tray(sys.argv[1] if len(sys.argv) > 1 else 'shelf', int(sys.argv[2]) if len(sys.argv) > 2 else 700, sys.argv[3] if len(sys.argv) > 3 else 'dynamic',

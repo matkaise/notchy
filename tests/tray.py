@@ -45,6 +45,30 @@ def check():
         app.flow.select_child(children[1])
         expected = set(app.selected_uris())
         assert len(expected) == 2, 'GTK multiple selection'
+        # Deselecting: a plain click on the only selected tile clears it; Ctrl keeps GTK's toggling.
+        def drain():
+            context = GLib.MainContext.default()
+            while context.pending():
+                context.iteration(False)
+        class Click:
+            def __init__(self, state=0): self.state = state
+            def get_current_button(self): return 1
+            def get_current_event_state(self): return self.state
+        app.flow.unselect_all(); app.flow.select_child(children[0])
+        card = children[0].get_child()
+        app.tile_pressed(Click(), 1, {'uri': children[0].notchy_uri}, card); app.tile_released(Click(), 1, card)
+        drain()
+        assert app.selected_uris() == [], 'a second plain click on the selected tile deselects it'
+        app.flow.select_child(children[0]); app.flow.select_child(children[1])
+        app.tile_pressed(Click(), 1, {'uri': children[0].notchy_uri}, card); app.tile_released(Click(), 1, card)
+        drain()
+        assert len(app.selected_uris()) == 2, 'a tile within a group selection is not deselected by its press alone'
+        app.flow.unselect_all(); app.flow.select_child(children[0])
+        app.tile_pressed(Click(Gdk.ModifierType.CONTROL_MASK), 1, {'uri': children[0].notchy_uri}, card); app.tile_released(Click(Gdk.ModifierType.CONTROL_MASK), 1, card)
+        drain()
+        assert app.selected_uris() == [children[0].notchy_uri], 'with Ctrl, GTK itself toggles; Notchy does not interfere'
+        print('PASS: shelf tiles can be deselected with a second click', flush=True)
+        app.flow.select_child(children[0]); app.flow.select_child(children[1])
         provider = app.prepare_drag(children[0].get_child())
         assert provider.ref_formats().contain_gtype(Gdk.FileList), 'native file drag provider'
         assert len(app.selected_uris()) == 2, 'drag preserves selected group'

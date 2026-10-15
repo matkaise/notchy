@@ -1,6 +1,8 @@
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
+import Mtk from 'gi://Mtk';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import {TilePreview} from 'resource:///org/gnome/shell/ui/windowManager.js';
 import {Lifetime} from '../lifecycle.js';
 import {zoneRect} from '../model.js';
 
@@ -8,6 +10,8 @@ import {zoneRect} from '../model.js';
 // island with a row of layouts; releasing over a zone places the window
 // there. During the move Mutter holds the pointer, so Shell actors get no
 // hover events: the pointer is polled and tested against the zones instead.
+// The hovered zone is previewed with GNOME's own tile preview, the same
+// translucent area that edge tiling shows.
 export class Snap {
     constructor(extension) {
         this.extension = extension; this.life = new Lifetime(); this.window = null; this.poll = 0; this.view = null; this.target = null;
@@ -46,8 +50,13 @@ export class Snap {
         this.target?.actor.remove_style_class_name('hover'); this.target?.tile.remove_style_class_name('hover');
         this.target = hit;
         hit?.actor.add_style_class_name('hover'); hit?.tile.add_style_class_name('hover');
+        if (!hit) { this.preview?.close(); return; }
+        this.preview ??= new TilePreview();
+        const monitor = island.monitor.index, rect = zoneRect(Main.layoutManager.getWorkAreaForMonitor(monitor), hit.zone);
+        this.preview.open(this.window, new Mtk.Rectangle(rect), monitor);
     }
     hide() {
+        this.preview?.close();
         if (this.view && this.island?.peekKind === 'snap') this.island.close();
         this.view = null; this.target = null;
     }
@@ -67,5 +76,5 @@ export class Snap {
         window.move_resize_frame(true, rect.x, rect.y, rect.width, rect.height);
         island?.toast('view-grid-symbolic', 'Fenster angeordnet');
     }
-    dispose() { this.life.dispose(); this.window = null; this.view = null; }
+    dispose() { this.life.dispose(); this.preview?.destroy(); this.preview = null; this.window = null; this.view = null; }
 }

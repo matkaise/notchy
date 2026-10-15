@@ -4,6 +4,7 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
+import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as Scripting from 'resource:///org/gnome/shell/ui/scripting.js';
@@ -116,8 +117,18 @@ export async function run() {
     assert(island.page === 'clipboard', 'keys 1–4 switch tabs after an explicit toggle'); await key(Clutter.KEY_Escape);
     assert(!island.expanded, 'Escape closes the island');
 
-    // Thunderstorm: the island becomes a search field.
+    // Super+Space reliably opens the search: with a single keyboard layout Notchy borrows GNOME's layout-switch keys.
+    const chord = async (...keys) => {
+        for (const k of keys) { keyboard.notify_keyval(GLib.get_monotonic_time(), k, Clutter.KeyState.PRESSED); await Scripting.sleep(30); }
+        for (const k of [...keys].reverse()) { keyboard.notify_keyval(GLib.get_monotonic_time(), k, Clutter.KeyState.RELEASED); await Scripting.sleep(30); }
+        await Scripting.sleep(500);
+    };
+    assert(ext.borrowedKeys.has('switch-input-source') && ext.borrowedKeys.has('switch-input-source-backward') && Main.wm._allowedKeybindings['switch-input-source'] === Shell.ActionMode.NONE, 'with one keyboard layout GNOME\'s Super+Space layout switch yields to Notchy');
+    let opened = 0;
+    for (let i = 0; i < 4; i++) { await chord(Clutter.KEY_Super_L, Clutter.KEY_space); if (island.expanded && island.page === 'search') opened++; island.close(true); await Scripting.sleep(250); }
+    assert(opened === 4, `Super+Space opens the search every time (${opened}/4)`);
     await Scripting.sleep(400); island.toggle('search'); await Scripting.sleep(500);
+    // Thunderstorm: the island becomes a search field.
     assert(island.page === 'search' && !island.headerRow.visible && !island.nav.visible && Math.abs(island.surface.width - 620) < 1 && island.views.focusEntry.clutter_text.has_key_focus(), 'search replaces the clock with a focused search field');
     island.views.focusEntry.set_text('2+3*4'); await Scripting.sleep(400);
     assert(styled(island.body, 'notchy-result-title')[0]?.text === '= 14', 'search computes arithmetic first'); await screenshot('search');
@@ -260,12 +271,15 @@ export async function run() {
     keyboard.run_dispose();
     const life = ext.life; ext.disable(); assert(life.closed && life.sources.size === 0, 'disable removes timers and signals');
     assert(!global.stage.get_actor_by_name?.('notchy-island') && Main.panel.statusArea.dateMenu.container.get_parent() === Main.panel._centerBox, 'disable restores GNOME\'s clock to the bar');
+    assert(Main.wm._allowedKeybindings['switch-input-source'] === Shell.ActionMode.ALL && Main.wm._allowedKeybindings['switch-input-source-backward'] === Shell.ActionMode.ALL, 'disable hands the layout-switch keys back to GNOME');
     ext.enable(); await Scripting.sleep(400); assert(ext.islands.length === 1, 'extension re-enables');
     assert(ext.clipboard.history.search('extensions.gnome.org')[0]?.favorite, 'clipboard favourites persist across disable and enable');
     ext.disable(); await Scripting.sleep(200);
     print('NOTCHY_SHELL_TEST_OK');
 }
 
+// Where „Aus Regal entfernen“ sits in a text file's menu (second row, middle column).
+const MENU_REMOVE_Y = 112;
 async function interactionRegressions(ext, path, screenshot) {
     const island = ext.islands[0];
     const pointer = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
@@ -276,6 +290,22 @@ async function interactionRegressions(ext, path, screenshot) {
     const escape = async () => { keyboard.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Escape, Clutter.KeyState.PRESSED); keyboard.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Escape, Clutter.KeyState.RELEASED); await Scripting.sleep(350); };
     ext.settings.set_int('collapse-delay', 150);
     try {
+        // A real right click opens the radial menu, on the clock and beside it.
+        const rightClick = async (x, y) => { await move(x, y); pointer.notify_button(GLib.get_monotonic_time(), 3, Clutter.ButtonState.PRESSED); await Scripting.sleep(80); pointer.notify_button(GLib.get_monotonic_time(), 3, Clutter.ButtonState.RELEASED); await Scripting.sleep(500); };
+        ext.settings.set_boolean('hover-open', false);
+        for (const [where, target] of [['clock', island.clockContainer], ['slot', island.leftSlot]]) {
+            const [tx, ty] = target.get_transformed_position();
+            await rightClick(tx + target.width / 2, ty + target.height / 2);
+            assert(ext.radial.actor && !island.dateMenu.menu.isOpen, `a real right click on the ${where} opens the radial menu`);
+            ext.radial.close(); island.dateMenu.menu.close(); island.close(true); await Scripting.sleep(300);
+        }
+        ext.settings.set_boolean('hover-open', true);
+        // After login GNOME slides the bar in from above: the outward curves follow it.
+        const panelBox = Main.layoutManager.panelBox;
+        panelBox.translation_y = -panelBox.height; await Scripting.sleep(100);
+        panelBox.ease({translation_y: 0, duration: 250, mode: Clutter.AnimationMode.EASE_OUT_QUAD}); await Scripting.sleep(450);
+        const [, capsuleY] = island.panelSurface.get_transformed_position();
+        assert(island.ears.left.visible && island.ears.left.y === Math.round(capsuleY) && island.ears.right.y === Math.round(capsuleY), `the outward corners follow the bar's slide-in at login (${island.ears.left.y} vs ${Math.round(capsuleY)})`);
         // Autofocus in the Ablage must never pin the island.
         island.open('clipboard'); await Scripting.sleep(350);
         assert(!island.pinned && island.views.focusEntry.clutter_text.has_key_focus(), 'clipboard autofocus does not pin the island');
@@ -373,11 +403,16 @@ async function interactionRegressions(ext, path, screenshot) {
             const zone = ext.snap.view.zones[0], [zx, zy] = zone.actor.get_transformed_position();
             await move(zx + zone.actor.width / 2, zy + zone.actor.height / 2); await Scripting.sleep(250);
             assert(zone.actor.has_style_class_name('hover') && zone.tile.has_style_class_name('hover'), 'the zone under the pointer lights up');
+            await Scripting.sleep(300);
+            const preview = ext.snap.preview, previewArea = Main.layoutManager.getWorkAreaForMonitor(island.monitor.index);
+            assert(preview?.visible && preview.has_style_class_name('tile-preview') && preview.x === previewArea.x && preview.y === previewArea.y && Math.abs(preview.width - Math.round(previewArea.width / 2)) <= 1 && preview.height === previewArea.height,
+                `GNOME's own tile preview shows where the window will go (${preview?.x},${preview?.y} ${preview?.width}x${preview?.height})`);
             await screenshot('snap-hover');
             await press(Clutter.ButtonState.RELEASED); await Scripting.sleep(700);
             const area = Main.layoutManager.getWorkAreaForMonitor(island.monitor.index), placed = fixture.get_frame_rect();
             assert(placed.x === area.x && placed.y === area.y && Math.abs(placed.width - Math.round(area.width / 2)) <= 1 && placed.height === area.height && !island.peeking,
                 `releasing over the left half tiles the window there (${placed.x},${placed.y} ${placed.width}x${placed.height})`);
+            await Scripting.sleep(400); assert(!ext.snap.preview.visible, 'the tile preview fades once the window is placed');
         } finally { await press(Clutter.ButtonState.RELEASED); windowFixture.force_exit(); await move(20, 600); await Scripting.sleep(300); }
         const themePath = GLib.getenv('NOTCHY_TEST_SHELL_THEME');
         if (themePath) {
@@ -566,16 +601,32 @@ async function interactionRegressions(ext, path, screenshot) {
             const panePosition = ext.companion.position;
             await move(panePosition.x + 60, panePosition.y + 70); await Scripting.sleep(200);
             pointer.notify_button(GLib.get_monotonic_time(), 3, Clutter.ButtonState.PRESSED); await Scripting.sleep(120);
-            pointer.notify_button(GLib.get_monotonic_time(), 3, Clutter.ButtonState.RELEASED); await Scripting.sleep(250);
+            pointer.notify_button(GLib.get_monotonic_time(), 3, Clutter.ButtonState.RELEASED); await Scripting.sleep(400);
+            await screenshot('regal-menu');
+            assert(!global.get_window_actors().some(a => a.meta_window.get_window_type() === Meta.WindowType.POPUP_MENU || a.meta_window.get_window_type() === Meta.WindowType.DROPDOWN_MENU),
+                'the file menu opens inside the Regal, not as a popup the island would cover');
             await move(20, 650); await Scripting.sleep(300);
             assert(island.expanded && ext.companion.shelfHeld, 'the native file context menu prevents unintended collapse');
             await escape();
             assert(!ext.companion.shelfHeld, 'dismissing the context menu releases the temporary hold');
+            // A real click on „Aus Regal entfernen“ in the menu removes that file.
+            const before = ext.shelf.items.length;
+            await move(panePosition.x + 60, panePosition.y + 70); await Scripting.sleep(200);
+            pointer.notify_button(GLib.get_monotonic_time(), 3, Clutter.ButtonState.PRESSED); await Scripting.sleep(120);
+            pointer.notify_button(GLib.get_monotonic_time(), 3, Clutter.ButtonState.RELEASED); await Scripting.sleep(400);
+            const removeX = panePosition.x + 22 + (panePosition.width - 44) / 2, removeY = panePosition.y + MENU_REMOVE_Y;
+            await move(removeX, removeY); await Scripting.sleep(150); await screenshot('regal-menu-remove');
+            await press(Clutter.ButtonState.PRESSED); await press(Clutter.ButtonState.RELEASED);
+            for (let i = 0; i < 20 && ext.shelf.items.length === before; i++) await Scripting.sleep(100);
+            assert(ext.shelf.items.length === before - 1 && !ext.companion.shelfHeld, `the menu's actions work with a real click (${before} → ${ext.shelf.items.length})`);
             await move(640, 100); island.open('shelf'); await Scripting.sleep(600);
             for (let i = 0; i < 100 && (!currentPane()?.get_compositor_private()?.mapped || !currentPane()?.get_frame_rect().width); i++) await Scripting.sleep(50);
             const escapeFrame = currentPane().get_frame_rect();
             await move(escapeFrame.x + escapeFrame.width / 2, escapeFrame.y + 16);
             await press(Clutter.ButtonState.PRESSED); await press(Clutter.ButtonState.RELEASED);
+            // Files selected earlier stay selected: the first Esc clears them, the next closes.
+            await escape();
+            assert(island.expanded && ext.companion.shelfIsland, 'the first Escape only clears the Regal\'s selection');
             await escape();
             assert(!island.expanded && !ext.companion.shelfIsland && island.actor.reactive, 'Escape closes the native Regal and restores the capsule');
         } finally { await press(Clutter.ButtonState.RELEASED); destination.force_exit(); island.close(); await move(20, 600); }

@@ -25,7 +25,10 @@
 - Clipboard: recording, autofocus, arrow keys, F, ★ and link filters, copy with Enter, file and PNG contents.
 - Basket as a native Wayland window at the pointer; corner rounding, multi-select and copy in the GTK helper (`tests/tray.py`).
 - Real file drags from Wayland and X11 windows onto the island: drop zone right below the clock, COPY confirmation, multiple files, Esc cancel, ordinary hover afterwards.
-- Snap layouts: a real window dragged by its title bar to the clock opens the layouts; the hovered zone lights up; releasing tiles the window onto the left half of the work area.
+- Snap layouts: a real window dragged by its title bar to the clock opens the layouts; the hovered zone lights up and GNOME's tile preview shows the target; releasing tiles the window onto the left half of the work area.
+- Super+Space with real key events opens the search every time; GNOME's layout-switch keys are borrowed with one layout and restored on disable.
+- Real right clicks open the radial menu; the outer corners follow the bar's slide-in at login.
+- The shelf's file menu opens inside the pane (no popup window) and removes a file with a real click; tiles deselect on a second click (`tests/tray.py`).
 - Native shelf between the clock row and the tab bar: geometry, glass below it in both styles, drag-out into another Wayland client, switching via the tab bar, process reuse, overview, context-menu hold and Esc.
 - Preferences through GNOME's D-Bus service (one window for repeated clicks) and disable/enable without leftover timers or signals.
 
