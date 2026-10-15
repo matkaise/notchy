@@ -1,6 +1,7 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {Emitter, Lifetime} from '../lifecycle.js';
+import {BleWake} from './blewake.js';
 
 // AirDrop through the airdrop-mt7921 backend (github.com/jedbillyb/airdrop-mt7921):
 // OWL speaks AWDL on the MediaTek card and a patched OpenDrop speaks AirDrop.
@@ -27,6 +28,8 @@ export const AIRDROP_STATES = {
 export class AirDrop extends Emitter {
     constructor(extension, shelf, settings) {
         super(); this.extension = extension; this.shelf = shelf; this.settings = settings; this.life = new Lifetime();
+        // The backend's own Bluetooth wake (btmgmt) hangs on BlueZ 5.85; Notchy wakes the phone itself.
+        this.ble = new BleWake();
         this.state = 'off'; this.detail = ''; this.runProc = null; this.sendProc = null; this.send = null; this.question = null; this.received = new Set();
         this.life.connect(settings, 'changed::airdrop-daemon', () => this.changed());
         this.life.connect(settings, 'changed::airdrop-enabled', () => { if (!this.enabled) this.stop(); this.changed(); });
@@ -46,7 +49,8 @@ export class AirDrop extends Emitter {
     get enabled() { return this.settings.get_boolean('airdrop-enabled'); }
     get daemon() {
         const configured = this.settings.get_string('airdrop-daemon');
-        if (configured) return configured;
+        // The headless test must never find (and start) a real installation.
+        if (configured || GLib.getenv('NOTCHY_AIRDROP_RUNDIR')) return configured;
         // `airdrop-send` is installed as a symlink into the repository, beside airdropd.
         try {
             const target = GLib.file_read_link('/usr/local/bin/airdrop-send');
@@ -114,6 +118,7 @@ export class AirDrop extends Emitter {
         paths = paths.filter(path => GLib.file_test(path, GLib.FileTest.IS_REGULAR));
         if (!this.available || this.sendProc || !paths.length) return false;
         try {
+            this.ble.start();
             const proc = this.launcher().spawnv([this.daemon, 'send', ...paths]); this.sendProc = proc;
             this.send = {files: paths.map(path => GLib.path_get_basename(path)), sent: 0, peer: '', phase: 'searching', error: '', started: GLib.get_monotonic_time()};
             const output = [];
@@ -127,7 +132,7 @@ export class AirDrop extends Emitter {
             proc.wait_async(null, (p, result) => {
                 try { p.wait_finish(result); } catch { /* Already ended. */ }
                 if (this.sendProc !== p) return;
-                this.sendProc = null;
+                this.sendProc = null; this.ble.stop(); this.reapBrowse();
                 if (this.send.phase === 'cancelled') { /* The user stopped it. */ }
                 else if (p.get_successful()) this.send.phase = 'done';
                 else { this.send.phase = 'failed'; this.send.error = describeFailure(output); }
@@ -135,6 +140,26 @@ export class AirDrop extends Emitter {
             });
             this.changed(); return true;
         } catch (e) { this.send = {files: paths, sent: 0, peer: '', phase: 'failed', error: e.message}; this.changed(); return false; }
+    }
+    // airdropd's browse (`opendrop find`) inherits its lock; when a send is cut
+    // short it can outlive it and keep holding the lock, and then the backend
+    // refuses every later start. End such leftovers once a send is over.
+    reapBrowse() {
+        const lock = GLib.build_filenamev([GLib.getenv('NOTCHY_AIRDROP_RUNDIR') || GLib.build_filenamev([GLib.get_user_runtime_dir(), 'airdropd']), 'lock']);
+        let entries; try { entries = Gio.File.new_for_path('/proc').enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null); } catch { return; }
+        for (let info; (info = entries.next_file(null));) {
+            const pid = Number(info.get_name()); if (!Number.isInteger(pid) || pid <= 1) continue;
+            try {
+                const [, raw] = GLib.file_get_contents(`/proc/${pid}/cmdline`);
+                const cmd = new TextDecoder().decode(raw).split('\0');
+                if (!cmd.some(arg => arg.endsWith('/opendrop')) || !cmd.includes('find')) continue;
+                const fds = Gio.File.new_for_path(`/proc/${pid}/fd`).enumerate_children('standard::name,standard::symlink-target', Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
+                let holds = false;
+                for (let fd; (fd = fds.next_file(null));) if (fd.get_symlink_target() === lock) holds = true;
+                // SIGINT: opendrop writes its report and exits cleanly on it.
+                if (holds) GLib.spawn_command_line_async(`kill -INT ${pid}`);
+            } catch { /* Gone, or not ours. */ }
+        }
     }
     cancelSend() {
         if (!this.sendProc) return;
@@ -197,7 +222,7 @@ export class AirDrop extends Emitter {
     }
     dispose() {
         // Never leave the Wi-Fi card taken when Notchy goes away.
-        this.stop(); this.cancelSend(); this.question?.answer(false);
+        this.stop(); this.cancelSend(); this.ble.stop(); this.question?.answer(false);
         this.folderLife?.dispose(); this.monitor?.cancel(); this.life.dispose(); this.listeners.clear();
     }
 }

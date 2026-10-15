@@ -27,6 +27,8 @@ export async function run() {
     const ext = record.stateObj;
     // Never touch the real network's AirPlay receivers from a test.
     ext.settings.set_boolean('airplay-enabled', false);
+    // Nor a real AirDrop backend: only the stand-in is ever configured.
+    assert(!ext.airdrop.available && ext.airdrop.daemon === '', 'the test never finds a real AirDrop installation');
     const {Lifetime} = await import(`${ext.dir.get_uri()}/src/lifecycle.js`);
     const HandledEvent = GObject.registerClass({Signals: {'handled-event': {return_type: GObject.TYPE_BOOLEAN}}}, class NotchyHandledEventTest extends GObject.Object {});
     const eventFixture = new HandledEvent(), eventLife = new Lifetime(); eventLife.connect(eventFixture, 'handled-event', () => true);
@@ -420,6 +422,8 @@ async function interactionRegressions(ext, path, screenshot) {
         for (const name of ['answer', 'sent', 'incoming']) GLib.unlink(`${airdropDir}/${name}`);
         ext.settings.set_string('airdrop-folder', recvDir); ext.settings.set_string('airdrop-daemon', here('mock_airdropd')); await Scripting.sleep(200);
         const airdrop = ext.airdrop;
+        // The Bluetooth wake is real BlueZ; the test only records it.
+        const realBle = airdrop.ble, bleCalls = []; airdrop.ble = {start: () => bleCalls.push('start'), stop: () => bleCalls.push('stop')};
         assert(airdrop.available && airdrop.daemon === here('mock_airdropd'), 'AirDrop finds its backend');
         island.open('media'); await Scripting.sleep(500);
         assert(island.airdropButton.visible && island.airdropButton.mapped, 'the island header offers AirDrop when its backend is installed');
@@ -462,7 +466,8 @@ async function interactionRegressions(ext, path, screenshot) {
         assert(airdrop.send.peer === 'Test iPhone' && styled(island.body, 'notchy-peek-body')[0]?.text.includes('Test iPhone'), 'the view names the iPhone it found'); await screenshot('airdrop-send');
         for (let i = 0; i < 40 && airdrop.send.phase !== 'done'; i++) await Scripting.sleep(100);
         const [, sentBytes] = GLib.file_get_contents(`${airdropDir}/sent`);
-        assert(airdrop.send.phase === 'done' && new TextDecoder().decode(sentBytes).trim() === sendFile.get_path(), 'the backend sent the file and the view shows it done'); await Scripting.sleep(200); await screenshot('airdrop-sent');
+        assert(airdrop.send.phase === 'done' && new TextDecoder().decode(sentBytes).trim() === sendFile.get_path(), 'the backend sent the file and the view shows it done');
+        assert(bleCalls[0] === 'start' && bleCalls.at(-1) === 'stop', 'a send wakes the iPhone over Bluetooth and stops advertising afterwards'); await Scripting.sleep(200); await screenshot('airdrop-sent');
         await Scripting.sleep(2600); assert(!island.peeking, 'the AirDrop view folds away after sending');
         // No phone found: the view says what to do on the iPhone.
         Gio.File.new_for_path(`${airdropDir}/no-receiver`).replace_contents('1', null, false, Gio.FileCreateFlags.NONE, null);
@@ -470,7 +475,7 @@ async function interactionRegressions(ext, path, screenshot) {
         for (let i = 0; i < 40 && airdrop.send.phase !== 'failed'; i++) await Scripting.sleep(100);
         assert(airdrop.send.phase === 'failed' && airdrop.send.error.startsWith('Kein iPhone gefunden'), `a failed send explains itself (${airdrop.send.error})`); await screenshot('airdrop-failed');
         GLib.unlink(`${airdropDir}/no-receiver`); island.close(true); await Scripting.sleep(300);
-        ext.settings.set_string('airdrop-daemon', ''); ext.settings.set_string('airdrop-folder', '');
+        airdrop.ble = realBle; ext.settings.set_string('airdrop-daemon', ''); ext.settings.set_string('airdrop-folder', '');
         const themePath = GLib.getenv('NOTCHY_TEST_SHELL_THEME');
         if (themePath) {
             const context = St.ThemeContext.get_for_stage(global.stage), original = context.get_theme();
@@ -531,7 +536,8 @@ async function interactionRegressions(ext, path, screenshot) {
         for (const [page, cancel, backend = 'wayland', zone = 'shelf'] of incomingCases) {
             // With AirDrop installed the zone splits: „Ins Regal legen“ | „AirDrop“.
             const airdropRun = GLib.getenv('NOTCHY_AIRDROP_RUNDIR');
-            if (zone === 'airdrop') { GLib.unlink(`${airdropRun}/sent`); ext.settings.set_string('airdrop-daemon', here('mock_airdropd')); }
+            const realWake = ext.airdrop.ble;
+            if (zone === 'airdrop') { GLib.unlink(`${airdropRun}/sent`); ext.settings.set_string('airdrop-daemon', here('mock_airdropd')); ext.airdrop.ble = {start() {}, stop() {}}; }
             island.open(page); await Scripting.sleep(350);
             const name = `${page}-${backend}${cancel ? '-cancel' : ''}${zone === 'airdrop' ? '-airdrop' : ''}`;
             const files = [Gio.File.new_for_path(`${path}/drop ${name} ü.txt`), Gio.File.new_for_path(`${path}/drop ${name} second.txt`)];
@@ -573,7 +579,7 @@ async function interactionRegressions(ext, path, screenshot) {
                     for (let i = 0; i < 60 && !GLib.file_test(`${airdropRun}/sent`, GLib.FileTest.EXISTS); i++) await Scripting.sleep(100);
                     const [, sent] = GLib.file_get_contents(`${airdropRun}/sent`);
                     assert(files.every(file => new TextDecoder().decode(sent).split('\n').includes(file.get_path()) && !ext.shelf.items.some(item => item.uri === file.get_uri())), `${name}: both dragged files go to the iPhone, not into the Regal`);
-                    await Scripting.sleep(2800); ext.settings.set_string('airdrop-daemon', '');
+                    await Scripting.sleep(2800); ext.settings.set_string('airdrop-daemon', ''); ext.airdrop.ble = realWake;
                     continue;
                 }
                 assert(files.every(file => ext.shelf.items.some(item => item.uri === file.get_uri()) && file.query_exists(null)), `${name}: actual drop adds all files and preserves originals`);
