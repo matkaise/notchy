@@ -1,11 +1,11 @@
 {
   "uuid": "notchy@matthias.local",
   "name": "Notchy",
-  "description": "Droppy for GNOME: the top-bar clock grows into an island for media (with AirPlay), files, clipboard and calendar, offers snap layouts for windows dragged into the notch, and fronts AirDrop on MediaTek Wi-Fi.",
+  "description": "Droppy for GNOME: the top-bar clock grows into an island for media (with AirPlay and AirPods), files with a real context menu, clipboard and calendar, a local Raycast-like launcher (Thunderstorm) with file search through GNOME LocalSearch, snap layouts for windows dragged into the notch, and fronts AirDrop on MediaTek Wi-Fi.",
   "shell-version": [
     "50"
   ],
-  "version": 8,
+  "version": 9,
   "settings-schema": "org.gnome.shell.extensions.notchy",
   "url": "https://github.com/matkaise/notchy"
 }

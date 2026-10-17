@@ -1,10 +1,23 @@
-# Validation state, 15 October 2026
+# Validation state, 17 October 2026
 
 Redesign "Droppy for GNOME": Notchy lives in the top bar only, with the styles Dynamic Glass and Liquid Glass, the tabs Media · Shelf · Clipboard · Calendar (all of one height), Thunderstorm search, a radial capture menu, inline volume and scroll volume, and a basket with its own collection. Droplets and the floating player are removed.
 
-This build passes the complete isolated GNOME Shell test with **235 assertions** plus `NOTCHY_SHELL_TEST_OK`, `NOTCHY_PREFS_TEST_OK` and `NOTCHY_TRAY_TEST_OK`; the interaction part alone (`NOTCHY_TEST_DROP_ONLY=1`) passes as well. The log has no GJS/GObject/Clutter criticals, script failures or Python tracebacks. Log and screenshots are written to `tests/output/`.
+This build passes the complete isolated GNOME Shell test with **328 assertions** plus `NOTCHY_SHELL_TEST_OK`, `NOTCHY_PREFS_TEST_OK` and `NOTCHY_TRAY_TEST_OK` (3 min 36 s); the parts alone (`NOTCHY_TEST_REGAL_ONLY`, `NOTCHY_TEST_LAUNCHER_ONLY`, `NOTCHY_TEST_AIRPODS_ONLY`) pass as well. The log has no GJS/GObject/Clutter/GTK criticals, script failures or Python tracebacks. Log and screenshots are written to `tests/output/`.
 
-`scripts/check.sh` passes: syntax, strict schema, **15 domain tests** and **14 Python tests**.
+`scripts/check.sh` passes: syntax, strict schema, **24 Node tests** (domain and launcher logic) and **26 Python tests** (file operations, file search helper, context menu entries, cover, spectrum, MCP). `scripts/pack.sh` builds the package.
+
+## New on 17 October 2026
+
+- **Real context menu in the Regal.** A right click opens a GTK popover at the pointer — a real Wayland popup with vertical entries, icons, separators and submenus („Konvertieren in ▸“, „Video verkleinern ▸“). Measured in the headless Shell: Mutter stacks a GTK popup in `window_group`, below the Shell's chrome, which is why an earlier popover was covered by the island. Notchy now shows the Regal's popups (menu and tooltips) as clones on top of every chrome layer while the real popup keeps the input; while a menu is open the island's tab bar lets clicks through, the menu counts as part of the island for hover, and `ShelfHold` keeps the island open. Verified with real pointer and key events: single and multiple selection (file-manager rules), Esc, click outside and click on the tab bar close only the menu, arrow keys and Enter, real clicks on entries, the work-area bounds (`regal-context-menu*.png`).
+- **A stale hover fixed.** Switching to the Regal while the pointer rested on the island left Clutter's hover flag set (the island stops being reactive there), so the island no longer collapsed when the pointer left. The Regal's hover is now computed from the pointer position; a test reproduces the old behaviour (it fails without the fix). Two older tests had relied on it unknowingly and now pin the island or keep the pointer inside, as a user would.
+- **Thunderstorm as a launcher** with file search through GNOME LocalSearch (helper process, bound SPARQL parameter, 140 ms debounce, overtaken searches dropped, existence/permission checks, bounded fallback), quicklinks, units, system and window commands, clipboard, snippets, emoji, categories, an action panel and recent results (`thunderstorm-*.png`). The real LocalSearch 3.11 on this machine answers the name query in 15–40 ms on a 365 000-file index; ranked (`fts:rank`) and metadata-joined queries took 0.25–3.6 s, so ranking and metadata happen in Notchy instead. GJS cannot create the pipe Tracker's endpoint writes into (`GLibUnix.open_pipe` does not return its descriptors), hence the Python helper.
+- **AirPods** through airpods-helper's `org.costa.AirPods` with a connection banner, battery rings, the media-tab row and settings (`airpods-*.png`), validated against a stand-in daemon with the documented API.
+
+## Not validated without real hardware or a real desktop
+
+- AirPods: everything was tested against `tests/mock_airpodsd.py`, not real AirPods or the real airpods-helper daemon; the BlueZ fallback was not exercised (no Apple headphones on the test bus).
+- The context menu with fractional scaling, a second monitor and real touchpads; GTK and Mutter handle the popup's placement and flipping, the test covers 100 % scaling on one 1280×720 monitor.
+- Thunderstorm with the real index and real files (the test uses a stand-in endpoint with the same protocol; the real endpoint was only queried manually), with removable and network drives, and the real effect of lock, suspend, log out, restart and shut down (the test records these D-Bus calls instead of making them).
 
 Verified since the redesign:
 
@@ -17,7 +30,7 @@ Verified since the redesign:
 - Media output selection including AirPlay receivers (`media-outputs.png`, `media-airplay.png`); in the test the outputs are stubbed so the run never touches the real network. AirPlay discovery itself was verified manually on this machine: PipeWire's RAOP discovery found three receivers on the local network.
 - Snap layouts: a real window dragged by its title bar to the clock opens the layouts; the hovered zone shows GNOME's own tile preview, and the window is tiled onto it on release (`snap*.png`).
 - Super+Space opens the search on every press: with a single keyboard layout Notchy borrows GNOME's layout-switch keys while it runs and hands them back on disable.
-- A real right click on the clock or beside it opens the radial menu. The shelf's file menu is a page inside the pane in Notchy's design; it can no longer be covered by the island, and its actions work with real clicks (`regal-menu*.png`).
+- A real right click on the clock or beside it opens the radial menu. The shelf's file menu, first a page inside the pane, is now a real popup shown on top of the island (see above).
 - Shelf selection works like a file manager, verified with real clicks through GTK: a plain click selects only that tile (GTK's FlowBox default of activate-on-single-click had made every click add to the selection), Ctrl toggles, Shift extends; a second click on the only selected tile, a click on empty space, or Esc deselects; dragging a selected tile still drags it.
 - The outer top corners follow the bar's slide-in at login, so the capsule looks right before it was ever opened.
 - AirDrop against a stand-in backend with the same commands, state file and consent hook as airdrop-mt7921's `airdropd` (`tests/mock_airdropd`, which never touches the radio): switching on arms it in exclusive mode and shows the live activity; an incoming transfer asks in the notch, „Annehmen“ answers the real hook over D-Bus and the flattened file lands in the shelf without iOS's wrapper; Escape declines; sending shows the radar, the phone's name and the result, and explains a failure; a real Wayland file drag onto the AirDrop half of the drop zone sends both files instead of shelving them (`airdrop-*.png`, `drop-media-wayland-airdrop.png`). The radio side itself (OWL, AWDL, the iPhone) is the backend's and is not covered here.
