@@ -1047,8 +1047,9 @@ async function airpodsRegressions(ext, path, screenshot) {
         // No backend installed: nothing in the island, a clear status for the settings.
         await Scripting.sleep(300);
         assert(airpods.state === null && airpods.backend === null && ['missing', 'bluez'].includes(airpods.status), `without airpods-helper there is no AirPods state (${airpods.status})`);
+        assert(!island.airpodsBubble.button.visible, 'without a device there is no AirPods symbol beside the notch');
         island.open('media'); await Scripting.sleep(500);
-        assert(!styled(island.body, 'notchy-airpods-row').length, 'the media tab shows no AirPods without a device');
+        assert(!styled(island.body, 'notchy-airpods-row').length, 'the media tab stays free of AirPods controls');
         island.close(true); await Scripting.sleep(300);
         // The daemon appears: found by its bus name, still without a device.
         daemon = Gio.Subprocess.new(['/usr/bin/python3', here('mock_airpodsd.py'), name, log], Gio.SubprocessFlags.NONE);
@@ -1110,49 +1111,40 @@ async function airpodsRegressions(ext, path, screenshot) {
         island.close(true); await Scripting.sleep(400);
         assert(bubble.button.visible, 'it returns when the island closes');
         await airpods.setAnc('noise'); await waitFor(() => airpods.state.anc === 'noise');
-        // The media tab: batteries and the noise control of this model.
-        island.open('media'); await Scripting.sleep(600);
-        const row = styled(island.body, 'notchy-airpods-row')[0];
-        await fixture('Battery', '(iiib)', [80, 75, 60, true]); await Scripting.sleep(400);
-        const row2 = styled(island.body, 'notchy-airpods-row')[0];
-        assert(row2 && styled(row2, 'notchy-airpods-level').map(a => a.text).join('|') === '80 %|75 %|60 %' && styled(row2, 'notchy-airpods-charging').length === 1, 'the media tab lists left, right and case with charging');
-        const modeNames = () => styled(island.body, 'notchy-anc-button').filter(b => !b.has_style_class_name('notchy-airpods-disconnect')).map(b => b.accessible_name);
-        assert(modeNames().join('|') === 'Geräuschunterdrückung|Transparenz|Adaptiv|Geräuschkontrolle aus|Gesprächserkennung an', `noise control offers this model's modes (${modeNames().join(', ')})`);
-        assert(buttons(island.body, 'Geräuschunterdrückung')[0].has_style_class_name('active'), 'the active mode is marked');
-        await screenshot('airpods-media');
-        buttons(island.body, 'Transparenz')[0].emit('clicked', 1);
-        await waitFor(() => airpods.state.anc === 'transparency');
-        assert(calls().some(c => c.method === 'SetAncMode' && c.args[0] === 'transparency') && airpods.state.anc === 'transparency', 'choosing Transparenz sets it in the daemon');
-        await Scripting.sleep(300);
-        assert(buttons(island.body, 'Transparenz')[0]?.has_style_class_name('active'), 'the island follows the daemon\'s PropertiesChanged');
-        buttons(island.body, 'Gesprächserkennung an')[0].emit('clicked', 1);
-        await waitFor(() => airpods.state.conversation === true);
+        // The controls live beside the notch only; the media tab has none.
+        const menu = bubble.button.menu, menuBox = menu.box;
+        island.open('media'); await Scripting.sleep(500);
+        assert(!styled(island.body, 'notchy-airpods-row').length && !styled(island.body, 'notchy-anc-button').length, 'the media tab carries no AirPods controls');
+        island.close(true); await Scripting.sleep(400);
+        await fixture('Battery', '(iiib)', [80, 75, 60, true]); await Scripting.sleep(300);
+        menu.open(); await Scripting.sleep(300);
+        const menuValues = () => styled(menuBox, 'notchy-airpods-card-value').map(a => a.text), menuCaptions = () => styled(menuBox, 'notchy-airpods-card-caption').map(a => a.text);
+        assert(menuValues().join('|') === '80 %|75 %|⚡ 60 %', `the controls list left, right and case with charging (${menuValues().join(' ')})`);
+        const modeNames = () => styled(menuBox, 'notchy-airpods-mode').map(b => b.accessible_name);
+        assert(modeNames().join('|') === 'Geräuschunterdrückung|Transparenz|Adaptiv|Geräuschkontrolle aus' && styled(menuBox, 'notchy-airpods-mode')[0].has_style_class_name('active'), `noise control offers this model's modes (${modeNames().join(', ')})`);
+        const talk = () => menuBox.get_children().find(item => item.label?.text === 'Gesprächserkennung');
+        assert(talk() && !talk().state, 'conversation awareness appears as a switch');
+        talk().toggle(); await waitFor(() => airpods.state.conversation === true);
         assert(calls().some(c => c.method === 'SetConversationalAwareness' && c.args[0] === true), 'conversation awareness can be switched');
-        // Frequent daemon chatter that Notchy does not show leaves the island alone.
-        const content = island.body.get_first_child();
+        // Frequent daemon chatter that Notchy does not show leaves the controls alone.
+        await Scripting.sleep(200);
+        const firstItem = menuBox.get_first_child();
         await fixture('Talk', '(s)', ['speaking']); await Scripting.sleep(300);
-        assert(island.body.get_first_child() === content, 'unshown property changes do not redraw the tab');
+        assert(menuBox.get_first_child() === firstItem, 'unshown property changes do not rebuild the controls');
         // Ear detection is shown; pausing stays the daemon's job (its setting is switched, no own logic).
         await fixture('Ear', '(bb)', [true, false]); await Scripting.sleep(400);
-        const pills = styled(island.body, 'notchy-airpods-battery');
-        assert(!pills[0].has_style_class_name('out') && pills[1].has_style_class_name('out'), 'a bud out of the ear is shown dimmed');
-        await airpods.setPauseOnRemoval(false); await waitFor(() => airpods.state.pauseOnRemoval === false);
+        assert(menuCaptions().join('|') === 'Links|Rechts · nicht im Ohr|Case', `a bud out of the ear is named (${menuCaptions().join(' ')})`);
+        const pause = () => menuBox.get_children().find(item => item.label?.text === 'Pause beim Herausnehmen');
+        pause().toggle(); await waitFor(() => airpods.state.pauseOnRemoval === false);
         assert(calls().some(c => c.set === 'PauseOnRemoval' && c.value === false), 'automatic media pause is the daemon\'s own PauseOnRemoval setting');
-        island.close(true); await Scripting.sleep(300);
-        // With music playing, the AirPods row sits between the transport and the output, all inside the page.
-        const player = Gio.Subprocess.new(['/usr/bin/python3', here('mock_mpris.py')], Gio.SubprocessFlags.NONE);
-        try {
-            await waitFor(() => ext.media.state); island.open('media'); await Scripting.sleep(700);
-            const pods = styled(island.body, 'notchy-airpods-row')[0], output = styled(island.body, 'notchy-output-button')[0], play = styled(island.body, 'notchy-play')[0];
-            const [, podsY] = pods.get_transformed_position(), [, outputY] = output.get_transformed_position(), [, playY] = play.get_transformed_position(), [, bodyY] = island.body.get_transformed_position();
-            assert(playY + play.height <= podsY && podsY + pods.height <= outputY && outputY + output.height <= bodyY + island.body.height + 1, `with music playing the AirPods row fits between transport and output (${Math.round(playY + play.height)} ≤ ${Math.round(podsY)}, ${Math.round(podsY + pods.height)} ≤ ${Math.round(outputY)})`);
-            await screenshot('airpods-media-playing');
-        } finally { player.force_exit(); island.close(true); await Scripting.sleep(400); }
+        await screenshot('airpods-controls');
+        menu.close(); await Scripting.sleep(300);
         // A model with ANC only: no adaptive mode, no conversation awareness.
         await fixture('Drop'); await Scripting.sleep(300);
         await fixture('Connect', '(sas)', ['AirPods Pro', ['anc']]); await Scripting.sleep(500);
-        island.close(true); island.open('media'); await Scripting.sleep(600);
-        assert(modeNames().join('|') === 'Geräuschunterdrückung|Transparenz|Geräuschkontrolle aus', `unsupported modes are hidden (${modeNames().join(', ')})`);
+        island.close(true); await Scripting.sleep(300); menu.open(); await Scripting.sleep(300);
+        assert(modeNames().join('|') === 'Geräuschunterdrückung|Transparenz|Geräuschkontrolle aus' && !talk(), `unsupported modes are hidden (${modeNames().join(', ')})`);
+        menu.close(); await Scripting.sleep(200);
         // Low battery: one warning, again only after it recovered.
         island.close(true); await Scripting.sleep(200);
         toasts.length = 0;
@@ -1164,17 +1156,17 @@ async function airpodsRegressions(ext, path, screenshot) {
         await fixture('Drop'); await waitFor(() => !airpods.connected);
         await Scripting.sleep(200);
         assert(!airpods.connected && toasts.some(t => t.endsWith('getrennt')) && !island.airpodsBubble.button.visible, 'disconnecting is announced and the symbol leaves');
-        island.open('media'); await Scripting.sleep(500);
-        assert(styled(island.body, 'notchy-airpods-row')[0]?.has_style_class_name('disconnected') && !styled(island.body, 'notchy-airpods-battery').length && buttons(island.body, 'Verbinden').length === 1,
-            'disconnected AirPods leave a compact row with „Verbinden“ and no batteries');
-        // Connect and disconnect from the island go through the daemon.
-        buttons(island.body, 'Verbinden')[0].emit('clicked', 1); await waitFor(() => airpods.connected);
-        assert(calls().some(c => c.method === 'ConnectTo' || c.method === 'Reconnect') && airpods.connected, '„Verbinden“ connects through the daemon');
+        // Connecting from Thunderstorm, disconnecting from the controls: both through the daemon.
+        const offer = ext.launcher.providers.cmd.search('airpods', {}).find(r => r.title === 'AirPods verbinden');
+        assert(offer, 'Thunderstorm offers to connect known AirPods');
+        offer.actions[0].run(); await waitFor(() => airpods.connected);
+        assert(calls().some(c => c.method === 'ConnectTo' || c.method === 'Reconnect') && airpods.connected, 'connecting goes through the daemon');
         const commands = ext.launcher.providers.cmd.search('airpods', {}).map(r => r.title);
         assert(commands.includes('AirPods trennen') && commands.includes('AirPods: Transparenzmodus') && !commands.includes('AirPods verbinden'), `Thunderstorm offers AirPods commands for the connected model (${commands.join(', ')})`);
-        island.close(true); await Scripting.sleep(300); island.open('media'); await Scripting.sleep(500);
-        buttons(island.body, 'AirPods trennen')[0].emit('clicked', 1); await waitFor(() => !airpods.connected);
-        assert(calls().some(c => c.method === 'Disconnect') && !airpods.connected, '„AirPods trennen“ disconnects through it');
+        await Scripting.sleep(300); menu.open(); await Scripting.sleep(300);
+        const drop = menuBox.get_children().find(item => item.label?.text === 'Trennen');
+        drop.activate(Clutter.get_current_event()); await waitFor(() => !airpods.connected);
+        assert(calls().some(c => c.method === 'Disconnect') && !airpods.connected, '„Trennen“ in the controls disconnects through it');
         island.close(true); await Scripting.sleep(300);
         // Turning the integration off hides everything; the daemon vanishing too.
         ext.settings.set_boolean('airpods-enabled', false); await Scripting.sleep(300);

@@ -81,7 +81,9 @@ export class AirPodsBubble {
         const threshold = this.settings.get_int('airpods-battery-threshold');
         for (const part of airpodsParts(state)) {
             const kind = part.key === 'single' ? (state.headphones ? 'headphones' : 'buds') : part.key;
-            const cell = productCell(kind, part.key === 'single' ? 'Akku' : part.name);
+            // A bud out of the ear says so, as the media tab used to show it.
+            const out = state.ear && ['left', 'right'].includes(part.key) && !state.ear[part.key];
+            const cell = productCell(kind, `${part.key === 'single' ? 'Akku' : part.name}${out ? ' · nicht im Ohr' : ''}`);
             const level = state.battery[part.key], charging = part.key !== 'single' && state.charging[part.key];
             cell.instant = true; cell.progress = 1; cell.picture.opacity = 255; cell.picture.scale_x = cell.picture.scale_y = 1; cell.picture.rotation_angle_z = 0;
             cell.set(level, Boolean(charging), level !== null && level < threshold && !charging);

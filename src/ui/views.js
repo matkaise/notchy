@@ -154,7 +154,6 @@ export class Views {
         if (this.outputPicker) return this.outputsView(root);
         if (!state) {
             root.add_child(emptyState('audio-x-generic-symbolic', 'Gerade keine Wiedergabe', 'Starte Musik in einer MPRIS-fähigen App.', null, null));
-            const pods = this.airpodsRow(); if (pods) { root.add_child(new St.Widget({y_expand: true})); root.add_child(pods); }
             return root;
         }
         const top = box(false, {style_class: 'notchy-media-top'});
@@ -196,8 +195,6 @@ export class Views {
         root.add_child(row);
         // Where the music plays: this computer or an AirPlay receiver.
         root.add_child(new St.Widget({y_expand: true}));
-        // Connected AirPods: batteries and noise control, right above the output.
-        const pods = this.airpodsRow(); if (pods) root.add_child(pods);
         const outputIcon = new St.Icon({icon_size: 15}), outputName = label('', 'notchy-output-name', {y_align: Clutter.ActorAlign.CENTER});
         const outputRow = box(false, {style_class: 'notchy-output-row'});
         outputRow.add_child(outputIcon); outputRow.add_child(outputName); outputRow.add_child(icon('pan-down-symbolic', 12));
@@ -214,54 +211,6 @@ export class Views {
         return root;
     }
 
-    // AirPods in the media tab: name, the batteries (left, right, case) and the
-    // noise control modes this model has. Unknown batteries read „–“, never 0 %.
-    airpodsRow() {
-        const airpods = this.airpods, state = airpods?.state;
-        if (!state) return null;
-        const failed = e => this.island.toast('dialog-warning-symbolic', e.message);
-        const row = box(false, {style_class: 'notchy-airpods-row', x_expand: true});
-        row.add_child(new St.Icon({gicon: gicon('notchy-airpods-symbolic'), icon_size: 15, style_class: 'notchy-airpods-glyph', y_align: Clutter.ActorAlign.CENTER}));
-        row.add_child(label(shorten(state.name, 26), 'notchy-airpods-name', {y_align: Clutter.ActorAlign.CENTER}));
-        if (!state.connected) {
-            // Known but not connected: one click connects them through the daemon (or BlueZ).
-            row.add_style_class_name('disconnected');
-            row.add_child(label('Nicht verbunden', 'notchy-airpods-status', {x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
-            const connect = textButton('Verbinden', () => airpods.connect().catch(failed), 'notchy-airpods-connect');
-            connect.y_align = Clutter.ActorAlign.CENTER; row.add_child(connect);
-            return row;
-        }
-        const pills = box(false, {style_class: 'notchy-airpods-batteries', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        const threshold = this.settings.get_int('airpods-battery-threshold');
-        for (const part of airpodsParts(state)) {
-            const level = state.battery[part.key], charging = part.key !== 'single' && state.charging[part.key];
-            const out = state.ear && ['left', 'right'].includes(part.key) && !state.ear[part.key];
-            const pill = box(false, {style_class: `notchy-airpods-battery${level !== null && level < threshold && !charging ? ' low' : ''}${out ? ' out' : ''}`,
-                accessible_name: `${part.name}: ${level === null ? 'unbekannt' : `${level} %`}${charging ? ', lädt' : ''}${out ? ', nicht im Ohr' : ''}`});
-            pill.add_child(part.icon ? new St.Icon({gicon: gicon(part.icon), icon_size: 12, y_align: Clutter.ActorAlign.CENTER}) : label(part.short, 'notchy-airpods-part', {y_align: Clutter.ActorAlign.CENTER}));
-            pill.add_child(label(level === null ? '–' : `${level} %`, 'notchy-airpods-level', {y_align: Clutter.ActorAlign.CENTER}));
-            if (charging) pill.add_child(new St.Icon({icon_name: 'battery-full-charging-symbolic', icon_size: 11, style_class: 'notchy-airpods-charging', y_align: Clutter.ActorAlign.CENTER}));
-            pills.add_child(pill);
-        }
-        row.add_child(pills);
-        const modes = airpods.modes;
-        if (modes.length) {
-            const segment = box(false, {style_class: 'notchy-anc', y_align: Clutter.ActorAlign.CENTER});
-            for (const mode of modes) {
-                const b = button(ANC_ICON[mode], ANC_NAME[mode], () => airpods.setAnc(mode).catch(e => this.island.toast('dialog-warning-symbolic', e.message)), `notchy-anc-button${state.anc === mode ? ' active' : ''}`);
-                b.get_child().icon_size = 15; segment.add_child(b);
-            }
-            row.add_child(segment);
-        }
-        if (state.conversation !== null) {
-            const talk = button('audio-input-microphone-symbolic', state.conversation ? 'Gesprächserkennung aus' : 'Gesprächserkennung an',
-                () => airpods.setConversationAwareness(!state.conversation).catch(e => this.island.toast('dialog-warning-symbolic', e.message)), `notchy-anc-button notchy-conversation${state.conversation ? ' active' : ''}`);
-            talk.get_child().icon_size = 15; row.add_child(talk);
-        }
-        const drop = button('window-close-symbolic', 'AirPods trennen', () => airpods.disconnect().catch(failed), 'notchy-anc-button notchy-airpods-disconnect');
-        drop.get_child().icon_size = 13; row.add_child(drop);
-        return row;
-    }
     // AirPods connected: the capsule grows into a card as on an iPhone — the
     // name, the AirPods and their case springing in, battery rings filling up
     // with the percentages counting, and „Verbunden“ with a check.
