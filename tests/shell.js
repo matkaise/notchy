@@ -696,6 +696,27 @@ async function interactionRegressions(ext, path, screenshot) {
             assert(ext.shelf.items.length === before - 1 && !ext.companion.shelfHeld, `the menu's actions work with a real click (${before} → ${ext.shelf.items.length})`);
             await move(640, 100); island.open('shelf'); await Scripting.sleep(600);
             for (let i = 0; i < 100 && (!currentPane()?.get_compositor_private()?.mapped || !currentPane()?.get_frame_rect().width); i++) await Scripting.sleep(50);
+            // Real clicks select and deselect tiles (GTK's FlowBox keeps a clicked tile selected on its own).
+            // Exactly two files, so the space beside and below them is really empty.
+            ext.shelf.clear(false);
+            for (const name of ['select one.txt', 'select two.txt']) {
+                const file = Gio.File.new_for_path(`${path}/${name}`); file.replace_contents('selection fixture', null, false, Gio.FileCreateFlags.NONE, null); ext.shelf.add(file.get_uri());
+            }
+            await Scripting.sleep(800);
+            const regal = ext.companion.position, tile = [regal.x + 60, regal.y + 70], empty = [regal.x + regal.width - 60, regal.y + regal.height - 24];
+            // A whole click every time, whatever state earlier steps left the helper in.
+            const click = async ([x, y]) => {
+                await move(x, y); await Scripting.sleep(150);
+                pointer.notify_button(GLib.get_monotonic_time(), 1, Clutter.ButtonState.PRESSED); await Scripting.sleep(60);
+                pointer.notify_button(GLib.get_monotonic_time(), 1, Clutter.ButtonState.RELEASED); await Scripting.sleep(700);
+            };
+            await click(empty); ext.companion.shelfSelected = -1;
+            await click(tile); const selectedOnce = ext.companion.shelfSelected;
+            await click(tile); const selectedTwice = ext.companion.shelfSelected;
+            assert(selectedOnce === 1 && selectedTwice === 0, `a second real click on the selected tile deselects it (${selectedOnce} → ${selectedTwice})`);
+            await click(tile); await click(empty);
+            assert(ext.companion.shelfSelected === 0, 'a real click on empty space in the Regal clears the selection');
+            await click(tile);
             const escapeFrame = currentPane().get_frame_rect();
             await move(escapeFrame.x + escapeFrame.width / 2, escapeFrame.y + 16);
             await press(Clutter.ButtonState.PRESSED); await press(Clutter.ButtonState.RELEASED);

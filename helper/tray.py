@@ -8,7 +8,8 @@ import gi
 
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
-from gi.repository import Gdk, Gio, GLib, Gtk
+gi.require_version('Graphene', '1.0')
+from gi.repository import Gdk, Gio, GLib, Graphene, Gtk
 
 BUS = 'org.gnome.Shell.Extensions.Notchy'
 PATH = '/org/gnome/Shell/Extensions/Notchy'
@@ -189,11 +190,24 @@ class Tray(Gtk.Application):
         self.menu_item = None
         root.append(self.stack)
         self.flow.connect('selected-children-changed', lambda *_: self.update_selection())
-        # Tiles handle their own clicks first; any other click in the pane clears the selection.
-        self.tile_clicked = False
-        empty_click = Gtk.GestureClick(button=1)
-        empty_click.connect('released', self.area_released)
-        self.area.add_controller(empty_click)
+        # Selecting like a file manager. With activate-on-single-click (GTK's
+        # default) a plain click only ever ADDS a tile to the selection; off, a
+        # plain click selects just that tile, Ctrl toggles, Shift extends.
+        self.flow.set_activate_on_single_click(False)
+        # Deselecting on top: a plain click on the only selected tile, or on
+        # empty space. The press is read before the FlowBox (capture phase);
+        # the release comes from a legacy controller, because the FlowBox's
+        # gesture claims the click and other gestures never see it end. A
+        # press that turns into a drag never deselects.
+        self.press = None
+        press = Gtk.GestureClick(button=1)
+        press.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        press.connect('pressed', self.area_pressed)
+        self.area.add_controller(press)
+        release = Gtk.EventControllerLegacy()
+        release.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        release.connect('event', self.area_event)
+        self.area.add_controller(release)
 
     def action(self, icon_name, tooltip, callback):
         button = Gtk.Button(icon_name=icon_name, tooltip_text=tooltip, css_classes=['round'])
@@ -211,6 +225,7 @@ class Tray(Gtk.Application):
         self.area = Gtk.Box(css_classes=['zone'], vexpand=True)
         self.flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.MULTIPLE, max_children_per_line=4, min_children_per_line=1,
                                 column_spacing=6, row_spacing=6, homogeneous=True, valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER, hexpand=True)
+        self.flow.set_activate_on_single_click(False)
         self.area.append(self.flow)
         root.append(self.area)
         self.to_shelf = Gtk.Button(label='Alles ins Regal', css_classes=['wide'])
@@ -377,7 +392,6 @@ class Tray(Gtk.Application):
         drag.connect('drag-end', lambda *_: self.hold_interaction(False))
         click = Gtk.GestureClick(button=0)
         click.connect('pressed', lambda g, n, _x, _y, it=item, widget=card: self.tile_pressed(g, n, it, widget))
-        click.connect('released', lambda g, n, _x, _y, widget=card: self.tile_released(g, n, widget))
         self.flow.insert(card, -1)
         child = card.get_parent()
         # The entire file tile, including its selection padding, is a
@@ -416,27 +430,43 @@ class Tray(Gtk.Application):
         self.to_shelf.set_sensitive(bool(self.basket_items))
 
     def tile_pressed(self, gesture, presses, item, card):
-        # Remembered before the FlowBox applies the click to its selection.
-        card.notchy_was_only = card.get_parent().is_selected() and len(self.selected_children()) == 1
         if gesture.get_current_button() == 3 and self.kind == 'shelf':
             self.menu(card, item)
         elif presses == 2:
             self.open(item['uri'])
 
-    def tile_released(self, gesture, presses, card):
-        self.tile_clicked = True
-        # A plain click on the only selected tile deselects it again; Ctrl and
-        # Shift keep GTK's usual toggling and ranges.
+    def area_pressed(self, gesture, presses, x, y):
+        ok, point = self.area.compute_point(self.flow, Graphene.Point().init(x, y))
+        child = self.flow.get_child_at_pos(point.x, point.y) if ok else None
         modifiers = gesture.get_current_event_state() & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.SHIFT_MASK)
-        if gesture.get_current_button() != 1 or presses != 1 or modifiers or not getattr(card, 'notchy_was_only', False):
-            return
-        child = card.get_parent()
-        GLib.idle_add(lambda: (self.flow.unselect_child(child) if child.get_parent() is self.flow else None, GLib.SOURCE_REMOVE)[1])
+        event = gesture.get_current_event()
+        self.press_at(child if child is not None and hasattr(child, 'notchy_uri') else None, presses, bool(modifiers), event.get_position()[1:] if event else (x, y))
 
-    def area_released(self, _gesture, _presses, _x, _y):
-        if not self.tile_clicked:
+    def press_at(self, child, presses, modifiers, position):
+        self.press = None if modifiers else {
+            'child': child, 'position': position,
+            'deselect': child is not None and presses == 1 and child.is_selected() and len(self.selected_children()) == 1}
+
+    def area_event(self, controller, event):
+        # PyGObject hands the signal's event over as None; the controller knows it.
+        event = event or controller.get_current_event()
+        if event and event.get_event_type() == Gdk.EventType.BUTTON_RELEASE and event.get_button() == 1:
+            self.release_at(event.get_position()[1:])
+        return False
+
+    def release_at(self, position):
+        press, self.press = self.press, None
+        if not press:
+            return
+        (x0, y0), (x1, y1) = press['position'], position
+        if abs(x1 - x0) > 6 or abs(y1 - y0) > 6:
+            return
+        if press['child'] is None:
             self.flow.unselect_all()
-        self.tile_clicked = False
+        elif press['deselect']:
+            # After the FlowBox has applied the click (it selects on release).
+            child = press['child']
+            GLib.idle_add(lambda: (self.flow.unselect_child(child) if child.get_parent() is self.flow else None, GLib.SOURCE_REMOVE)[1])
 
     def selected_children(self):
         return [child for child in self.flow.get_selected_children() if hasattr(child, 'notchy_uri')]
@@ -448,6 +478,7 @@ class Tray(Gtk.Application):
         if self.kind != 'shelf':
             return
         selected = self.selected_children()
+        self.call('ShelfSelected', GLib.Variant('(u)', (len(selected),)))
         self.actions.set_visible(bool(selected))
         self.idle.set_visible(not selected)
         total = getattr(self, 'total', 0)

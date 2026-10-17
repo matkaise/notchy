@@ -1,10 +1,12 @@
 #!/usr/bin/python3
 """A native Wayland window for desktop-layer hit-testing, in the private bus."""
+import os
 import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, GLib
 
-app = Gtk.Application(application_id='org.notchy.LayerFixture')
+# NOTCHY_FIXTURE_APP_ID: an ordinary app's id, for tests that must not see a Notchy pane.
+app = Gtk.Application(application_id=os.environ.get('NOTCHY_FIXTURE_APP_ID', 'org.notchy.LayerFixture'))
 
 
 def activate(application):

@@ -13,6 +13,7 @@ const XML = `<node><interface name="${BUS_NAME}">
  <method name="DropReady"><arg type="s" direction="in"/></method>
  <method name="DropHover"><arg type="s" direction="in"/><arg type="b" direction="in"/></method>
  <method name="ShelfHold"><arg type="b" direction="in"/></method>
+ <method name="ShelfSelected"><arg type="u" direction="in"/></method>
  <method name="CloseShelf"/>
  <method name="GetShelfConfig"><arg type="s" direction="out"/></method>
  <method name="RemoveUri"><arg type="s" direction="in"/></method>
@@ -44,6 +45,8 @@ export class Companion extends Emitter {
             DropHover: (backend, active) => { if (extension.drops?.backend === backend) extension.drops.hovering = active; },
             ShelfHold: held => { this.shelfHeld = held; if (held) this.shelfIsland?.cancelCollapse(); else this.shelfIsland?.scheduleCollapse(); },
             CloseShelf: () => this.shelfIsland?.close(),
+            // How many files are selected in the native Regal.
+            ShelfSelected: count => { this.shelfSelected = count; },
             GetShelfConfig: () => JSON.stringify(this.shelfConfig()),
             RemoveUri: uri => shelf.remove(uri), Clear: () => shelf.clear(),
             Action: (action, uri, extra) => operations.run(action, uri, extra),
