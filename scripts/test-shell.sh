@@ -8,7 +8,7 @@ export NOTCHY_TEST_OUTPUT="$PWD/tests/output"
 export LIBGL_ALWAYS_SOFTWARE=1
 # GTK can choose Vulkan independently of LIBGL_ALWAYS_SOFTWARE. Use its
 # software renderer too, so headless helper frames cannot depend on a real GPU.
-export GSK_RENDERER=cairo
+export GSK_RENDERER="${NOTCHY_TEST_GSK_RENDERER:-cairo}"
 export WAYLAND_DISPLAY=gnome-shell-test-display
 export SHELL_BACKGROUND_IMAGE=/usr/share/backgrounds/ubuntu-wallpaper-d.png
 export MUTTER_DEBUG_DUMMY_MODE_SPECS=1280x720

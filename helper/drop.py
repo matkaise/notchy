@@ -52,6 +52,9 @@ class DropReceiver(Gtk.Application):
         # or, with AirDrop installed, send them to an iPhone.
         zones = Gtk.Box(spacing=10)
         self.root = Gtk.Frame(child=zones, css_classes=['notchy-drop'], overflow=Gtk.Overflow.HIDDEN)
+        # Never fully opaque: GTK would report opaque parts to Mutter, which then
+        # skips painting what the Shell's glass below this window copies.
+        self.root.set_opacity(0.996)
         self.window.set_child(self.root)
         self.area = self.zone(zones, 'shelf', Gtk.Image.new_from_icon_name('document-save-symbolic'), 'Ins Regal legen', 'Original bleibt, wo es ist')
         icon = Gio.FileIcon.new(Gio.File.new_for_path(str(Path(__file__).resolve().parent.parent / 'src' / 'icons' / 'notchy-airdrop-symbolic.svg')))
