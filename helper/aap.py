@@ -1,0 +1,185 @@
+#!/usr/bin/python3
+"""AirPods status over Apple's accessory protocol (AAP), for Notchy.
+
+Used only when the airpods-helper daemon is not running. It opens the AAP
+channel (L2CAP PSM 0x1001) of AirPods that BlueZ already connected — as the
+logged-in user, no root, no pairing, no Bluetooth configuration — asks for
+notifications and reports what the AirPods tell: batteries, charging, ear
+state, noise control, conversation awareness and the model name.
+
+Protocol with the Shell: one JSON state object per line on stdout, one JSON
+command per line on stdin ({"anc": "noise"}, {"conversation": true}).
+usage: aap.py MAC
+"""
+import json
+import os
+import select
+import socket
+import sys
+import time
+
+PSM = 0x1001
+HANDSHAKE = bytes.fromhex('00000400010002000000000000000000')
+NOTIFICATIONS = bytes.fromhex('040004000f00ffffffff')
+HEADER = bytes.fromhex('04000400')
+ANC_CODES = {1: 'off', 2: 'noise', 3: 'transparency', 4: 'adaptive'}
+ANC_VALUES = {name: code for code, name in ANC_CODES.items()}
+# Battery components and states as the AirPods report them.
+PARTS = {0x02: 'right', 0x04: 'left', 0x08: 'case', 0x01: 'single'}
+CHARGING, DISCHARGING, DISCONNECTED = 0x01, 0x02, 0x04
+# Ear state per bud: 0 in the ear, 1 out of the ear, 2 in the case.
+IN_EAR = 0
+
+
+def control(setting, value):
+    """A control command: set one setting (0x09) to a value."""
+    return HEADER + bytes([0x09, 0x00, setting, value, 0x00, 0x00, 0x00])
+
+
+def parse(packet, state):
+    """Apply one AAP packet to the state dict; returns True when it changed."""
+    if len(packet) < 6 or packet[:4] != HEADER:
+        return False
+    opcode, body = packet[4], packet[6:]
+    before = json.dumps(state, sort_keys=True)
+    if opcode == 0x04 and body:
+        # Battery: count, then per component: id, 0x01, level, state, 0x01.
+        count, items = body[0], body[1:]
+        # The first bud listed is the primary one; ear states refer to it.
+        buds = [PARTS.get(items[i * 5]) for i in range(count) if len(items) > i * 5 and PARTS.get(items[i * 5]) in ('left', 'right')]
+        if buds:
+            state['primary'] = buds[0]
+        for i in range(count):
+            item = items[i * 5:i * 5 + 5]
+            if len(item) < 4 or item[0] not in PARTS:
+                continue
+            part, level, status = PARTS[item[0]], item[2], item[3]
+            state['battery'][part] = level if status != DISCONNECTED and 0 <= level <= 100 else None
+            state['charging'][part] = status == CHARGING
+    elif opcode == 0x06 and len(body) >= 2:
+        primary = state.get('primary', 'left')
+        secondary = 'right' if primary == 'left' else 'left'
+        state['ear'] = {primary: body[0] == IN_EAR, secondary: body[1] == IN_EAR}
+    elif opcode == 0x09 and len(body) >= 2:
+        setting, value = body[0], body[1]
+        if setting == 0x0d and value in ANC_CODES:
+            state['anc'] = ANC_CODES[value]
+            state['ancSupported'] = True
+        elif setting == 0x28:
+            state['conversation'] = value == 0x01
+    elif opcode == 0x1d and len(body) > 4:
+        # Device information: NUL-separated strings, the name first, then the model number.
+        fields = [field.decode('utf-8', 'replace') for field in body[4:].lstrip(b'\0').split(b'\0')]
+        if fields and fields[0]:
+            state['name'] = fields[0]
+        if len(fields) > 1 and fields[1]:
+            state['model'] = fields[1]
+    return json.dumps(state, sort_keys=True) != before
+
+
+def new_state():
+    return {'connected': False, 'name': '', 'model': '', 'battery': {'left': None, 'right': None, 'case': None, 'single': None},
+            'charging': {'left': False, 'right': False, 'case': False, 'single': False}, 'ear': None, 'anc': None, 'ancSupported': False,
+            'conversation': None, 'primary': 'left'}
+
+
+def command(line):
+    """A command line from the Shell as an AAP packet, or None."""
+    try:
+        request = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    if request.get('anc') in ANC_VALUES:
+        return control(0x0d, ANC_VALUES[request['anc']])
+    if isinstance(request.get('conversation'), bool):
+        return control(0x28, 0x01 if request['conversation'] else 0x02)
+    return None
+
+
+class Replay:
+    """The headless test's stand-in for the L2CAP socket: recorded packets in,
+    sent packets logged."""
+    def __init__(self, path, log):
+        self.packets = [bytes.fromhex(line.strip()) for line in open(path) if line.strip() and not line.startswith('#')]
+        self.log = log
+        self.read, self.write = os.pipe()
+        for _ in self.packets:
+            os.write(self.write, b'.')
+
+    def fileno(self):
+        return self.read
+
+    def send(self, data):
+        with open(self.log, 'a') as out:
+            out.write(data.hex() + '\n')
+        # The AirPods confirm a control command by repeating it.
+        if data[4:5] == b'\x09':
+            self.packets.append(data)
+            os.write(self.write, b'.')
+
+    def recv(self, _size):
+        os.read(self.read, 1)
+        return self.packets.pop(0)
+
+    def close(self):
+        os.close(self.read)
+        os.close(self.write)
+
+
+def run(mac, out=sys.stdout, stdin=sys.stdin):
+    replay = os.environ.get('NOTCHY_AAP_REPLAY')
+    if replay:
+        channel = Replay(replay, os.environ.get('NOTCHY_AAP_LOG', os.devnull))
+    else:
+        channel = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_SEQPACKET, socket.BTPROTO_L2CAP)
+        channel.settimeout(8)
+        channel.connect((mac, PSM))
+        channel.settimeout(None)
+    state = new_state()
+    state['connected'] = True
+
+    def emit():
+        out.write(json.dumps(state) + '\n')
+        out.flush()
+    channel.send(HANDSHAKE)
+    time.sleep(0.1)
+    channel.send(NOTIFICATIONS)
+    emit()
+    inputs = [channel, stdin]
+    try:
+        while True:
+            ready, _, _ = select.select(inputs, [], [], 0.3 if replay else 30)
+            if channel in ready:
+                packet = channel.recv(1024)
+                if not packet:
+                    break
+                if parse(packet, state):
+                    emit()
+            if stdin in ready:
+                line = stdin.readline()
+                if not line:
+                    # The Shell is gone (a replay just has no more commands).
+                    if not replay:
+                        break
+                    inputs.remove(stdin)
+                    continue
+                packet = command(line)
+                if packet:
+                    channel.send(packet)
+            # A replay ends once its packets and its commands are used up.
+            if replay and not ready and stdin not in inputs:
+                break
+    except OSError:
+        pass
+    finally:
+        channel.close()
+
+
+if __name__ == '__main__':
+    if len(sys.argv) != 2 or len(sys.argv[1].split(':')) != 6:
+        sys.exit('usage: aap.py MAC')
+    try:
+        run(sys.argv[1])
+    except OSError as error:
+        print(json.dumps({'connected': False, 'error': str(error)}), flush=True)
+        sys.exit(1)

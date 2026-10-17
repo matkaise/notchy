@@ -1,6 +1,7 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Cairo from 'cairo';
 import Graphene from 'gi://Graphene';
 import Meta from 'gi://Meta';
 import St from 'gi://St';
@@ -42,41 +43,90 @@ function airpodsParts(state) {
     if (state.battery.single !== null || state.headphones || state.backend === 'bluez') return [{key: 'single', short: '', name: 'Akku', icon: 'notchy-airpods-symbolic'}];
     return [{key: 'left', short: 'L', name: 'Links'}, {key: 'right', short: 'R', name: 'Rechts'}, {key: 'case', short: '', name: 'Case', icon: 'notchy-airpods-case-symbolic'}];
 }
-// A battery as a ring that fills up to its level (green, orange when low).
-function batteryCell(part) {
-    const actor = box(true, {style_class: 'notchy-airpods-cell'});
-    const ring = new St.Widget({layout_manager: new Clutter.BinLayout(), width: 36, height: 36, x_align: Clutter.ActorAlign.CENTER});
-    const area = new St.DrawingArea({width: 36, height: 36});
-    ring.add_child(area);
-    ring.add_child(part.icon ? new St.Icon({gicon: gicon(part.icon), icon_size: 13, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER})
-        : label(part.short, 'notchy-airpods-ring-part', {x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER}));
-    const value = label('–', 'notchy-airpods-ring-value', {x_align: Clutter.ActorAlign.CENTER});
-    actor.add_child(ring); actor.add_child(value);
-    const cell = {actor, level: null, low: false, progress: 0, timeline: null, value};
-    area.connect('repaint', () => {
-        const cr = area.get_context(), [w, h] = area.get_surface_size(), r = Math.min(w, h) / 2 - 2.5;
-        cr.setLineWidth(3); cr.setSourceRGBA(1, 1, 1, 0.14); cr.arc(w / 2, h / 2, r, 0, 2 * Math.PI); cr.stroke();
+// AirPods drawn in white, like the product pictures on an iPhone: two buds
+// (stem and head), an over-ear headphone, or the charging case with its lid
+// line and status light. Drawn with Cairo into `size`×`size`.
+function drawProduct(cr, kind, size) {
+    const white = (x0, y0, x1, y1) => {
+        const g = new Cairo.LinearGradient(x0, y0, x1, y1);
+        g.addColorStopRGBA(0, 1, 1, 1, 1); g.addColorStopRGBA(0.55, 0.95, 0.95, 0.97, 1); g.addColorStopRGBA(1, 0.78, 0.78, 0.82, 1);
+        return g;
+    };
+    const rounded = (x, y, w, h, r) => {
+        cr.newSubPath(); cr.arc(x + w - r, y + r, r, -Math.PI / 2, 0); cr.arc(x + w - r, y + h - r, r, 0, Math.PI / 2);
+        cr.arc(x + r, y + h - r, r, Math.PI / 2, Math.PI); cr.arc(x + r, y + r, r, Math.PI, 1.5 * Math.PI); cr.closePath();
+    };
+    const u = size / 100;
+    cr.setLineWidth(Math.max(1, 1.2 * u));
+    if (kind === 'case') {
+        rounded(14 * u, 26 * u, 72 * u, 54 * u, 20 * u);
+        cr.setSource(white(0, 26 * u, 0, 80 * u)); cr.fillPreserve(); cr.setSourceRGBA(0, 0, 0, 0.28); cr.stroke();
+        cr.setSourceRGBA(0, 0, 0, 0.22); cr.moveTo(16 * u, 44 * u); cr.lineTo(84 * u, 44 * u); cr.stroke();
+        cr.setSourceRGBA(0.3, 0.85, 0.4, 0.95); cr.arc(50 * u, 60 * u, 2.6 * u, 0, 2 * Math.PI); cr.fill();
+    } else if (kind === 'headphones') {
+        cr.setLineWidth(7 * u); cr.setSourceRGBA(0.85, 0.85, 0.88, 1); cr.arc(50 * u, 54 * u, 32 * u, Math.PI * 1.05, Math.PI * 1.95); cr.stroke();
+        cr.setLineWidth(Math.max(1, 1.2 * u));
+        for (const x of [14, 66]) { rounded(x * u, 46 * u, 20 * u, 32 * u, 9 * u); cr.setSource(white(x * u, 0, (x + 20) * u, 0)); cr.fillPreserve(); cr.setSourceRGBA(0, 0, 0, 0.28); cr.stroke(); }
+    } else {
+        // Two buds, mirrored; `kind` 'left' or 'right' draws one.
+        const bud = mirror => {
+            cr.save(); if (mirror) { cr.translate(100 * u, 0); cr.scale(-1, 1); }
+            rounded(40 * u, 40 * u, 10 * u, 44 * u, 5 * u);
+            cr.setSource(white(40 * u, 0, 50 * u, 0)); cr.fillPreserve(); cr.setSourceRGBA(0, 0, 0, 0.25); cr.stroke();
+            cr.newSubPath(); cr.arc(36 * u, 34 * u, 15 * u, 0, 2 * Math.PI);
+            cr.setSource(white(22 * u, 20 * u, 50 * u, 48 * u)); cr.fillPreserve(); cr.setSourceRGBA(0, 0, 0, 0.25); cr.stroke();
+            cr.setSourceRGBA(0.15, 0.15, 0.17, 0.85); cr.newSubPath(); cr.arc(30 * u, 30 * u, 3.4 * u, 0, 2 * Math.PI); cr.fill();
+            cr.restore();
+        };
+        if (kind === 'buds') { cr.save(); cr.translate(-12 * u, 0); bud(false); cr.restore(); cr.save(); cr.translate(12 * u, 0); bud(true); cr.restore(); }
+        else bud(kind === 'right');
+    }
+}
+// One product of the connection card: its picture inside a battery ring, the
+// percentage below. The picture springs in, the ring fills and the number counts up.
+function productCell(kind, caption) {
+    const SIZE = 84, actor = box(true, {style_class: 'notchy-airpods-cell'});
+    const stack = new St.Widget({layout_manager: new Clutter.BinLayout(), width: SIZE, height: SIZE, x_align: Clutter.ActorAlign.CENTER});
+    const ring = new St.DrawingArea({width: SIZE, height: SIZE});
+    const picture = new St.DrawingArea({width: 56, height: 56, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, pivot_point: new Graphene.Point({x: 0.5, y: 0.5})});
+    stack.add_child(ring); stack.add_child(picture);
+    const value = label('–', 'notchy-airpods-card-value', {x_align: Clutter.ActorAlign.CENTER});
+    actor.add_child(stack); actor.add_child(value); actor.add_child(label(caption, 'notchy-airpods-card-caption', {x_align: Clutter.ActorAlign.CENTER}));
+    const cell = {actor, kind, level: null, charging: false, low: false, progress: 0, timeline: null};
+    picture.connect('repaint', () => { const cr = picture.get_context(); drawProduct(cr, kind, picture.get_surface_size()[0]); cr.$dispose(); });
+    ring.connect('repaint', () => {
+        const cr = ring.get_context(), [w, h] = ring.get_surface_size(), r = Math.min(w, h) / 2 - 3;
+        cr.setLineWidth(4); cr.setSourceRGBA(1, 1, 1, 0.13); cr.arc(w / 2, h / 2, r, 0, 2 * Math.PI); cr.stroke();
         if (cell.level !== null && cell.progress > 0) {
-            if (cell.low) cr.setSourceRGBA(1, 0.7, 0.54, 1); else cr.setSourceRGBA(0.49, 0.88, 0.54, 1);
-            cr.arc(w / 2, h / 2, r, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * cell.level / 100 * cell.progress); cr.stroke();
+            if (cell.low) cr.setSourceRGBA(1, 0.62, 0.04, 1); else cr.setSourceRGBA(0.2, 0.78, 0.35, 1);
+            cr.setLineCap(Cairo.LineCap.ROUND);
+            cr.arc(w / 2, h / 2, r, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.max(0.01, cell.level / 100 * cell.progress)); cr.stroke();
         }
         cr.$dispose();
     });
+    const text = () => { value.text = cell.level === null ? '–' : `${cell.charging ? '⚡ ' : ''}${Math.round(cell.level * cell.progress)} %`; };
     cell.set = (level, charging, low) => {
-        const first = cell.level === null && level !== null;
-        cell.level = level; cell.low = low;
-        value.text = level === null ? '–' : `${charging ? '⚡' : ''}${level} %`;
-        actor.accessible_name = `${part.name}: ${level === null ? 'unbekannt' : `${level} %`}`;
+        const first = cell.level === null && level !== null && !cell.instant;
+        cell.level = level; cell.charging = charging; cell.low = low;
         if (first) {
-            // The ring fills from empty to its level.
             cell.timeline?.stop(); cell.progress = 0;
-            cell.timeline = new Clutter.Timeline({actor: area, duration: 750, progress_mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
-            cell.timeline.connect('new-frame', () => { cell.progress = cell.timeline.get_progress(); area.queue_repaint(); });
-            cell.timeline.connect('completed', () => { cell.progress = 1; area.queue_repaint(); });
+            cell.timeline = new Clutter.Timeline({actor: ring, duration: 1100, progress_mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            cell.timeline.connect('new-frame', () => { cell.progress = cell.timeline.get_progress(); text(); ring.queue_repaint(); });
+            cell.timeline.connect('completed', () => { cell.progress = 1; text(); ring.queue_repaint(); });
             cell.timeline.start();
-        }
-        area.queue_repaint();
+        } else if (level !== null && !cell.timeline?.is_playing()) cell.progress = 1;
+        actor.accessible_name = `${caption}: ${level === null ? 'unbekannt' : `${level} %`}${charging ? ', lädt' : ''}`;
+        text(); ring.queue_repaint();
     };
+    // The picture springs in once on screen, slightly turned, like on an iPhone.
+    picture.opacity = 0; picture.scale_x = picture.scale_y = 0.35; picture.rotation_angle_z = -14;
+    // Clutter skips transitions of actors not on screen yet; the picture maps after its parents.
+    cell.appear = delay => {
+        const go = () => picture.ease({opacity: 255, scale_x: 1, scale_y: 1, rotation_angle_z: 0, delay, duration: 700, mode: Clutter.AnimationMode.EASE_OUT_BACK});
+        if (picture.mapped) { go(); return; }
+        const id = picture.connect('notify::mapped', () => { if (!picture.mapped) return; picture.disconnect(id); go(); });
+    };
+    cell.picture = picture;
     cell.stop = () => { cell.timeline?.stop(); cell.timeline = null; };
     return cell;
 }
@@ -212,37 +262,62 @@ export class Views {
         drop.get_child().icon_size = 13; row.add_child(drop);
         return row;
     }
-    // AirPods connected: the capsule grows into a banner; the batteries fill up.
+    // AirPods connected: the capsule grows into a card as on an iPhone — the
+    // name, the AirPods and their case springing in, battery rings filling up
+    // with the percentages counting, and „Verbunden“ with a check.
     airpodsPeekView() {
-        const airpods = this.airpods, root = box(false, {style_class: 'notchy-peek notchy-airpods-peek'});
-        const badge = new St.Bin({style_class: 'notchy-airpods-badge', width: 46, height: 46, y_align: Clutter.ActorAlign.CENTER, pivot_point: new Graphene.Point({x: 0.5, y: 0.5}),
-            child: new St.Icon({gicon: gicon('notchy-airpods-symbolic'), icon_size: 24})});
-        root.add_child(badge);
-        const column = box(true, {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        const title = label('', 'notchy-peek-title'), sub = label('', 'notchy-peek-body');
-        column.add_child(label('AirPods', 'notchy-peek-app')); column.add_child(title); column.add_child(sub);
-        root.add_child(column);
-        const rings = box(false, {style_class: 'notchy-airpods-rings', y_align: Clutter.ActorAlign.CENTER});
-        root.add_child(rings);
-        const cells = new Map(), threshold = this.settings.get_int('airpods-battery-threshold');
+        const airpods = this.airpods, root = box(true, {style_class: 'notchy-peek notchy-airpods-card'});
+        const head = box(false, {style_class: 'notchy-airpods-card-head'});
+        const title = label('', 'notchy-airpods-card-title', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const status = box(false, {style_class: 'notchy-airpods-card-status', y_align: Clutter.ActorAlign.CENTER, opacity: 0, pivot_point: new Graphene.Point({x: 0.5, y: 0.5})});
+        status.add_child(new St.Icon({icon_name: 'object-select-symbolic', icon_size: 13, style_class: 'notchy-airpods-card-check', y_align: Clutter.ActorAlign.CENTER}));
+        const statusText = label('Verbunden', 'notchy-airpods-card-status-text', {y_align: Clutter.ActorAlign.CENTER});
+        status.add_child(statusText);
+        head.add_child(title); head.add_child(status); root.add_child(head);
+        const products = box(false, {style_class: 'notchy-airpods-products', x_align: Clutter.ActorAlign.CENTER});
+        root.add_child(products);
+        const threshold = this.settings.get_int('airpods-battery-threshold');
+        let cells = new Map(), layout = '';
+        // Both buds in one ring while they are within 10 %, as the iPhone does; else one each.
+        const parts = state => {
+            const {left, right, single} = state.battery;
+            if (state.headphones || state.backend === 'bluez' || single !== null) return [['single', state.headphones ? 'headphones' : 'buds', state.headphones ? 'Akku' : 'AirPods']];
+            const together = left === null || right === null ? left === right : Math.abs(left - right) <= 10;
+            return [...(together ? [['buds', 'buds', 'AirPods']] : [['left', 'left', 'Links'], ['right', 'right', 'Rechts']]), ['case', 'case', 'Case']];
+        };
+        const animate = () => {
+            let delay = 0;
+            for (const cell of cells.values()) { cell.appear(delay); delay += 130; }
+            status.ease({opacity: 255, scale_x: 1, scale_y: 1, delay: 650, duration: 400, mode: Clutter.AnimationMode.EASE_OUT_BACK});
+        };
         const draw = () => {
             const state = airpods.state; if (!state) return;
             title.text = state.name;
-            sub.text = ['Verbunden', state.anc ? ANC_NAME[state.anc] : ''].filter(Boolean).join(' · ');
-            for (const part of airpodsParts(state)) {
-                let cell = cells.get(part.key);
-                if (!cell) { cell = batteryCell(part); cells.set(part.key, cell); rings.add_child(cell.actor); }
-                const level = state.battery[part.key], charging = part.key !== 'single' && state.charging[part.key];
-                cell.set(level, charging, level !== null && level < threshold && !charging);
+            statusText.text = state.connected ? (state.anc ? `Verbunden · ${ANC_NAME[state.anc]}` : 'Verbunden') : 'Getrennt';
+            const wanted = parts(state), key = wanted.map(([k]) => k).join('|');
+            if (key !== layout) {
+                const shown = layout !== '';
+                layout = key;
+                for (const cell of cells.values()) cell.stop();
+                products.destroy_all_children(); cells = new Map();
+                for (const [partKey, kind, caption] of wanted) { const cell = productCell(kind, caption); cells.set(partKey, cell); products.add_child(cell.actor); }
+                // A later re-layout (batteries arrived) shows the pictures at once.
+                if (shown) for (const cell of cells.values()) { cell.instant = true; cell.progress = 1; cell.picture.opacity = 255; cell.picture.scale_x = cell.picture.scale_y = 1; cell.picture.rotation_angle_z = 0; }
+            }
+            for (const [partKey, cell] of cells) {
+                const b = state.battery, c = state.charging;
+                const level = partKey === 'buds' ? (b.left === null ? b.right : b.right === null ? b.left : Math.min(b.left, b.right)) : b[partKey];
+                const charging = partKey === 'buds' ? c.left || c.right : partKey === 'single' ? c.left : c[partKey];
+                cell.set(level, Boolean(charging), level !== null && level < threshold && !charging);
             }
         };
         const unsubscribe = airpods.subscribe(draw); draw();
-        // The badge springs in once the banner is on screen.
-        badge.opacity = 0; badge.scale_x = badge.scale_y = 0.5;
-        const appear = () => { if (!badge.mapped) return; badge.ease({opacity: 255, scale_x: 1, scale_y: 1, duration: 450, mode: Clutter.AnimationMode.EASE_OUT_BACK}); };
-        const mappedId = badge.connect('notify::mapped', appear); appear();
-        root.connect('destroy', () => { unsubscribe(); badge.disconnect(mappedId); for (const cell of cells.values()) cell.stop(); });
-        return {actor: root, cells};
+        status.scale_x = status.scale_y = 0.6;
+        let started = false;
+        const start = () => { if (started || !products.mapped) return; started = true; animate(); };
+        const mappedId = products.connect('notify::mapped', start); start();
+        root.connect('destroy', () => { unsubscribe(); products.disconnect(mappedId); for (const cell of cells.values()) cell.stop(); });
+        return {actor: root, get cells() { return cells; }};
     }
 
     // Snap layouts: miniature screens whose zones take the dragged window.

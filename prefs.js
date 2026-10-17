@@ -198,7 +198,9 @@ export default class NotchyPreferences extends ExtensionPreferences {
         toggle(main, 'airpods-animation', 'Verbindungsanimation', 'Beim Verbinden wächst die Island kurz und zeigt die Akkustände.');
         toggle(main, 'airpods-battery-warning', 'Warnung bei niedrigem Akkustand');
         number(main, 'airpods-battery-threshold', 'Warnen unter (Prozent)', 5, 50, 5);
-        toggle(main, 'airpods-bluez-fallback', 'Ohne airpods-helper: Grunddaten von BlueZ', 'Verbindung und ein Akkustand für Apple-Kopfhörer, sofern das System sie meldet. Keine Geräuschkontrolle.');
+        toggle(main, 'airpods-builtin', 'Ohne airpods-helper: AirPods direkt auslesen', 'Notchy liest verbundene AirPods selbst über Apples Zubehörprotokoll (AAP): Akkustände von Buds und Case, Ohrerkennung, Geräuschkontrolle. Ohne Root, ohne zusätzliche Software.');
+        toggle(main, 'airpods-ear-pause', 'Medien pausieren, wenn ein AirPod herausgenommen wird', 'Gilt für das direkte Auslesen; mit airpods-helper steuert dessen eigene Einstellung (unten) die Pause.');
+        toggle(main, 'airpods-bluez-fallback', 'Grunddaten von BlueZ', 'Verbindung (und ein Akkustand, falls das System ihn meldet), solange nichts anderes verfügbar ist.');
         const backend = group(pods, 'Dienst', '');
         const status = new Adw.ActionRow({title: 'airpods-helper', subtitle: 'Wird geprüft …'}); backend.add(status);
         const guide = new Gtk.LinkButton({uri: 'https://github.com/superninjv/airpods-helper#readme', label: 'Anleitung', valign: Gtk.Align.CENTER}); status.add_suffix(guide);
@@ -210,7 +212,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
             const running = await hasOwner(AIRPODS);
             const installed = running || await bus('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'ListActivatableNames').then(([names]) => names.includes(AIRPODS)).catch(() => false);
             start.visible = installed && !running; pause.sensitive = running;
-            if (!running) { status.subtitle = installed ? 'Installiert, läuft aber nicht.' : 'Nicht gefunden. Für Geräuschkontrolle und Akkustände von Buds und Case airpods-helper installieren (Anleitung).'; return; }
+            if (!running) { status.subtitle = installed ? 'Installiert, läuft aber nicht. Notchy liest die AirPods solange selbst aus.' : 'Nicht installiert – nicht nötig: Notchy liest verbundene AirPods selbst aus. airpods-helper bietet zusätzlich Equalizer und mehr.'; return; }
             try {
                 const [props] = await bus(AIRPODS, '/org/costa/AirPods', 'org.freedesktop.DBus.Properties', 'GetAll', new GLib.Variant('(s)', ['org.costa.AirPods']));
                 const value = name => props[name]?.deep_unpack?.() ?? props[name];

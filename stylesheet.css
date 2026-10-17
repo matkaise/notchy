@@ -311,7 +311,15 @@
 .notchy-airpods-status { font-size: 11.5px; color: rgba(255,255,255,0.45); }
 .notchy-airpods-connect { font-size: 11.5px; padding: 3px 12px; border-radius: 11px; background-color: rgba(255,255,255,0.12); }
 .notchy-airpods-connect:hover { background-color: rgba(255,255,255,0.2); }
-.notchy-airpods-peek { spacing: 14px; }
+.notchy-airpods-card { spacing: 10px; padding-bottom: 16px; }
+.notchy-airpods-card-head { spacing: 10px; padding: 0 4px; }
+.notchy-airpods-card-title { font-size: 15px; font-weight: bold; color: #ffffff; }
+.notchy-airpods-card-status { spacing: 5px; padding: 3px 9px; border-radius: 11px; background-color: rgba(52,199,89,0.18); }
+.notchy-airpods-card-check { color: #34c759; }
+.notchy-airpods-card-status-text { font-size: 11.5px; color: rgba(255,255,255,0.85); }
+.notchy-airpods-products { spacing: 26px; padding-top: 4px; }
+.notchy-airpods-card-value { font-size: 14px; font-weight: bold; color: #ffffff; font-feature-settings: "tnum"; margin-top: 6px; }
+.notchy-airpods-card-caption { font-size: 11px; color: rgba(255,255,255,0.55); }
 .notchy-airpods-badge { border-radius: 23px; background-color: rgba(255,255,255,0.12); }
 .notchy-airpods-rings { spacing: 12px; }
 .notchy-airpods-cell { spacing: 3px; }

@@ -411,6 +411,19 @@ export class Island {
     close(immediate = false) {
         // Folding an AirDrop question away is an answer: no.
         if (this.peekKind === 'airdrop-ask') this.airdrop?.question?.answer(false);
+        // What waited for the island: the AirPods card, then a held-back notification.
+        const card = this.airpodsPending && GLib.get_monotonic_time() - this.airpodsPending < 10000000 && this.peekKind !== 'airpods';
+        const queued = this.peekKind === 'airpods' ? this.takeQueuedNotifications() : [];
+        if (card || queued.length) {
+            this.airpodsPending = 0;
+            this.life.later(450, () => {
+                if (card && this.airpods?.connected) this.airpodsEvent({type: 'connected', state: this.airpods.state});
+                // Several held back: the newest is shown, as GNOME would show it last.
+                const latest = queued.filter(n => !n.gone).at(-1)?.notification;
+                this.releaseNotifications(queued);
+                if (latest) this.notify(latest);
+            });
+        }
         if (this.life.closed) return; this.endPeek(); this.expanded = false; this.pinned = false; this.cancelCollapse(); this.life.cancel(this.hoverTimeout); this.hoverTimeout = 0;
         if (this.nativeShelf) this.companion.closeShelf();
         const focus = global.stage.get_key_focus(); if (focus && this.actor.contains(focus)) global.stage.set_key_focus(null);
@@ -537,9 +550,11 @@ export class Island {
         if (this.life.closed) return;
         const name = event.state?.name || 'AirPods';
         if (event.type === 'connected') {
-            const shown = this.settings.get_boolean('airpods-animation') && this.peek('airpods', 4200, () => this.views.airpodsPeekView());
-            if (!shown) this.toast('notchy-airpods-symbolic', `${name} verbunden`);
+            if (!this.settings.get_boolean('airpods-animation')) { this.toast('notchy-airpods-symbolic', `${name} verbunden`); return; }
+            // An open tab or a menu gets the card as soon as the island closes (within 10 s).
+            if (!this.peek('airpods', 6500, () => this.views.airpodsPeekView())) this.airpodsPending = GLib.get_monotonic_time();
         } else if (event.type === 'disconnected') {
+            this.airpodsPending = 0;
             if (this.peekKind === 'airpods') this.close();
             this.toast('notchy-airpods-symbolic', `${name} getrennt`);
         } else if (event.type === 'low') {
@@ -613,8 +628,33 @@ export class Island {
         return this.peek('snap', 0, () => (view = this.views.snapView(window))) ? view : null;
     }
     notify(notification) {
+        // A notification arriving with the AirPods card (the system announcing the
+        // same connection, say) waits until the card has been shown.
+        if (this.peekKind === 'airpods') {
+            this.queuedNotifications ??= [];
+            const id = notification.connect('destroy', () => { this.queuedNotifications = this.queuedNotifications.filter(q => q.notification !== notification); });
+            this.queuedNotifications.push({notification, id});
+            return true;
+        }
         // Critical notifications stay until dismissed, as GNOME's banners do.
         return this.peek('notification', notification.urgency === MessageTray.Urgency.CRITICAL ? 0 : 6000, () => this.views.notificationView(notification, () => this.close()));
+    }
+    // Held-back notifications, each marked once it is destroyed meanwhile.
+    takeQueuedNotifications() {
+        const queued = (this.queuedNotifications ?? []).map(({notification, id}) => {
+            const entry = {notification, gone: false};
+            notification.disconnect(id);
+            entry.id = notification.connect('destroy', () => { entry.gone = true; });
+            return entry;
+        });
+        this.queuedNotifications = [];
+        this.waitingNotifications = [...(this.waitingNotifications ?? []), ...queued];
+        return queued;
+    }
+    // Signals of held-back notifications that are still alive.
+    releaseNotifications(entries) {
+        for (const entry of entries) if (!entry.gone) { entry.gone = true; entry.notification.disconnect(entry.id); }
+        this.waitingNotifications = (this.waitingNotifications ?? []).filter(entry => !entries.includes(entry));
     }
     // Short confirmations ("In Zwischenablage kopiert") as a live activity in
     // the capsule itself: the symbol left of the clock, the words right of it.
@@ -652,6 +692,8 @@ export class Island {
         this.ears?.sync();
     }
     dispose() {
+        for (const {notification, id} of this.queuedNotifications ?? []) notification.disconnect(id);
+        this.queuedNotifications = []; this.releaseNotifications(this.waitingNotifications ?? []);
         if (this.nativeShelf) this.companion.closeShelf();
         this.returnPanelHeader(); this.ears?.dispose(); this.paneLife?.dispose(); this.glass.destroy(); this.life.dispose(); this.views.dispose();
         this.dateMenu.menu.close();

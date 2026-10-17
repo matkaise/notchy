@@ -1057,18 +1057,36 @@ async function airpodsRegressions(ext, path, screenshot) {
         // Connecting: the capsule grows into a banner; unknown batteries read „–“, never 0 %.
         await fixture('Connect', '(sas)', ['AirPods Pro 2 (USB-C)', ['anc', 'adaptive', 'ca']]);
         await waitFor(() => island.peekKind === 'airpods');
-        assert(island.peeking && island.peekKind === 'airpods' && styled(island.body, 'notchy-peek-title')[0]?.text === 'AirPods Pro 2 (USB-C)', 'connecting AirPods shows the connection banner with the model name');
-        const values = () => styled(island.body, 'notchy-airpods-ring-value').map(a => a.text);
-        assert(values().length === 3 && values().every(v => v === '–'), `batteries not reported yet read „–“, not 0 % (${values().join(' ')})`);
-        await fixture('Battery', '(iiib)', [80, 75, 60, true]); await Scripting.sleep(900);
-        assert(values().join('|') === '80 %|75 %|⚡60 %' && island.peekView.cells.get('left').progress === 1, `the batteries fill in as they arrive (${values().join(' ')})`);
+        assert(island.peeking && island.peekKind === 'airpods' && styled(island.body, 'notchy-airpods-card-title')[0]?.text === 'AirPods Pro 2 (USB-C)', 'connecting AirPods grows the island into the connection card with the name');
+        const values = () => styled(island.body, 'notchy-airpods-card-value').map(a => a.text), captions = () => styled(island.body, 'notchy-airpods-card-caption').map(a => a.text);
+        assert(values().length === 2 && values().every(v => v === '–') && captions().join('|') === 'AirPods|Case', `batteries not reported yet read „–“, not 0 % (${values().join(' ')})`);
+        await Scripting.sleep(300);
+        const cards = [...island.peekView.cells.values()];
+        assert(cards.every(cell => cell.picture.opacity > 0 && cell.picture.get_transition('scale-x') || cell.picture.scale_x === 1), 'the AirPods and the case spring into the card');
+        // A system notification arriving with the card waits until the card has been seen.
+        const systemSource = MessageTray.getSystemSource();
+        const echo = new MessageTray.Notification({source: systemSource, title: 'AirPods Pro verbunden', body: 'Bluetooth'});
+        systemSource.addNotification(echo); await Scripting.sleep(200);
+        assert(island.peekKind === 'airpods' && echo.acknowledged, 'a notification arriving with the card does not replace it');
+        await fixture('Battery', '(iiib)', [80, 75, 60, true]); await Scripting.sleep(500);
+        const counting = values()[0];
+        assert(/^\d+ %$/.test(counting) && island.peekView.cells.get('buds').progress < 1, `the ring fills and the number counts up (${counting})`);
+        await Scripting.sleep(900);
+        assert(values().join('|') === '75 %|⚡ 60 %' && island.peekView.cells.get('buds').progress === 1, `both buds share one ring within 10 %, the case charges (${values().join(' ')})`);
         await screenshot('airpods-connected');
-        await Scripting.sleep(4000);
-        assert(!island.peeking, 'the banner folds away by itself');
+        await fixture('Battery', '(iiib)', [90, 60, 60, false]); await Scripting.sleep(300);
+        assert(captions().join('|') === 'Links|Rechts|Case' && values().join('|') === '90 %|60 %|60 %', `buds apart by more than 10 % get a ring each (${captions().join(' ')}: ${values().join(' ')})`);
+        await screenshot('airpods-connected-split');
+        await Scripting.sleep(6500);
+        assert(island.peekKind === 'notification' && styled(island.body, 'notchy-peek-title')[0]?.text === 'AirPods Pro verbunden', 'once the card folds away, the held-back notification shows');
+        island.close(); echo.destroy(); await Scripting.sleep(500);
+        assert(!island.peeking, 'the card and the notification fold away');
         // The media tab: batteries and the noise control of this model.
         island.open('media'); await Scripting.sleep(600);
         const row = styled(island.body, 'notchy-airpods-row')[0];
-        assert(row && styled(row, 'notchy-airpods-level').map(a => a.text).join('|') === '80 %|75 %|60 %' && styled(row, 'notchy-airpods-charging').length === 1, 'the media tab lists left, right and case with charging');
+        await fixture('Battery', '(iiib)', [80, 75, 60, true]); await Scripting.sleep(400);
+        const row2 = styled(island.body, 'notchy-airpods-row')[0];
+        assert(row2 && styled(row2, 'notchy-airpods-level').map(a => a.text).join('|') === '80 %|75 %|60 %' && styled(row2, 'notchy-airpods-charging').length === 1, 'the media tab lists left, right and case with charging');
         const modeNames = () => styled(island.body, 'notchy-anc-button').filter(b => !b.has_style_class_name('notchy-airpods-disconnect')).map(b => b.accessible_name);
         assert(modeNames().join('|') === 'Geräuschunterdrückung|Transparenz|Adaptiv|Geräuschkontrolle aus|Gesprächserkennung an', `noise control offers this model's modes (${modeNames().join(', ')})`);
         assert(buttons(island.body, 'Geräuschunterdrückung')[0].has_style_class_name('active'), 'the active mode is marked');
@@ -1135,6 +1153,30 @@ async function airpodsRegressions(ext, path, screenshot) {
         ext.settings.set_boolean('airpods-enabled', true); await waitFor(() => airpods.backend === 'airpods-helper');
         daemon.force_exit(); daemon = null; await waitFor(() => airpods.backend === null);
         assert(airpods.backend === null && airpods.state === null, 'the daemon going away is handled');
+        // Without the daemon Notchy reads connected AirPods itself over AAP (recorded packets of real AirPods Pro 2).
+        const aapLog = GLib.getenv('NOTCHY_AAP_LOG'); GLib.unlink(aapLog);
+        const aapPlayer = Gio.Subprocess.new(['/usr/bin/python3', here('mock_mpris.py')], Gio.SubprocessFlags.NONE);
+        try {
+            await waitFor(() => ext.media.state?.playing);
+            island.open('media'); await Scripting.sleep(300);
+            airpods.testDevice({address: '68:CA:C4:DE:31:F3', name: 'Matthias’ AirPods Pro', product: 0x2024, connected: true});
+            await waitFor(() => airpods.backend === 'aap' && airpods.state.battery.case === 90, 4000);
+            const aap = airpods.state;
+            assert(aap.backend === 'aap' && aap.name === 'Matthias’ AirPods Pro' && aap.model === 'A3048' && aap.battery.left === 96 && aap.battery.right === 98 && aap.charging.case,
+                `without airpods-helper Notchy reads the AirPods over AAP itself (${aap.backend}: ${aap.battery.left}/${aap.battery.right}/${aap.battery.case})`);
+            assert(aap.features.includes('anc') && aap.features.includes('adaptive') && aap.features.includes('ca') && airpods.modes.join('|') === 'noise|transparency|adaptive|off', `the model's features come from its product id (${aap.features.join(', ')})`);
+            assert(!island.peeking && island.airpodsPending, 'with a tab open the connection card waits');
+            island.close(); await waitFor(() => island.peekKind === 'airpods', 2000);
+            assert(island.peekKind === 'airpods', 'closing the tab shows the waiting connection card');
+            await Scripting.sleep(1300); await screenshot('airpods-aap-card');
+            assert(ext.media.state && !ext.media.state.playing && airpods.pausedByEar, 'taking a bud out pauses the music (own ear logic, only without the daemon)');
+            await airpods.setAnc('noise'); await waitFor(() => airpods.state.anc === 'noise');
+            const sent = new TextDecoder().decode(GLib.file_get_contents(aapLog)[1]).split('\n');
+            assert(sent[0] === '00000400010002000000000000000000' && sent.includes('0400040009000d02000000') && airpods.state.anc === 'noise', 'noise control is set over AAP');
+            airpods.testDevice(null); await waitFor(() => !airpods.connected);
+            assert(!airpods.aap && airpods.backend === null, 'disconnecting ends the AAP reader');
+            island.close(true);
+        } finally { aapPlayer.force_exit(); await Scripting.sleep(300); }
         // Repeated disable and enable leave nothing behind.
         for (let i = 0; i < 3; i++) { const life = ext.life; ext.disable(); assert(life.closed && life.sources.size === 0, `disable ${i + 1} removes timers and signals`); ext.enable(); await Scripting.sleep(300); }
         assert(ext.islands.length === 1 && ext.airpods && ext.launcher && ext.files, 'the extension re-enables with its new services');

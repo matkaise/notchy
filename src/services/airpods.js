@@ -8,8 +8,10 @@ import {Emitter, Lifetime} from '../lifecycle.js';
 // Notchy only reads those properties and calls its methods; it installs,
 // starts and configures nothing system-wide. Ear detection pauses media in
 // the daemon itself (PauseOnRemoval); Notchy has no second ear logic.
-// Without the daemon, BlueZ still tells connection and one battery level of
-// Apple headphones (optional, read-only apart from Connect/Disconnect).
+// Without the daemon, Notchy finds connected Apple headphones through BlueZ
+// and reads them itself over AAP (helper/aap.py, as the user, no root):
+// batteries, charging, ear state, noise control. Then, and only then, the
+// optional ear pause is Notchy's own, because no daemon controls media.
 export const HELPER_NAME = GLib.getenv('NOTCHY_AIRPODS_NAME') || 'org.costa.AirPods';
 const PATH = '/org/costa/AirPods', IFACE = 'org.costa.AirPods';
 const XML = `<node><interface name="${IFACE}">
@@ -33,6 +35,13 @@ const INFO = Gio.DBusNodeInfo.new_for_xml(XML).interfaces[0];
 export const ANC_MODES = ['noise', 'transparency', 'adaptive', 'off'];
 // Apple's Bluetooth (0x004C) and USB (0x05AC) vendor ids in BlueZ's Modalias.
 const APPLE = /^(bluetooth:v004C|usb:v05AC)/i;
+// Model features by product id (Modalias pXXXX): noise control, adaptive
+// mode and conversation awareness, over-ear headphones.
+const PRODUCT_ANC = [0x200e, 0x2014, 0x2024, 0x2027, 0x200a, 0x201f, 0x201b];
+const PRODUCT_ADAPTIVE = [0x2014, 0x2024, 0x2027, 0x201b];
+const PRODUCT_HEADPHONES = [0x200a, 0x201f];
+// The headless test never touches the machine's real Bluetooth.
+const NO_SYSTEM_BLUETOOTH = Boolean(GLib.getenv('NOTCHY_NO_SYSTEM_BLUETOOTH'));
 
 // A battery value as Notchy shows it: a whole percentage, or null when the
 // AirPods do not report one (-1, e.g. a bud in the closed case). Never 0 for unknown.
@@ -45,6 +54,8 @@ export class AirPods extends Emitter {
         this.bluez = null; this.events = new Set(); this.wasConnected = false; this.warned = {};
         this.life.connect(settings, 'changed::airpods-enabled', () => this.sync());
         this.life.connect(settings, 'changed::airpods-bluez-fallback', () => this.syncBluez());
+        this.life.connect(settings, 'changed::airpods-builtin', () => this.syncAap());
+        this.aap = null; this.aapRetries = 0;
         this.sync();
     }
     get enabled() { return this.settings.get_boolean('airpods-enabled'); }
@@ -93,7 +104,7 @@ export class AirPods extends Emitter {
         this.proxy = null; this.proxySignals = [];
     }
     prop(name, fallback = null) { return this.proxy?.get_cached_property(name)?.deep_unpack() ?? fallback; }
-    get backend() { return this.proxy ? 'airpods-helper' : this.bluez?.device ? 'bluez' : null; }
+    get backend() { return this.proxy ? 'airpods-helper' : this.aap?.state?.connected ? 'aap' : this.bluez?.device ? 'bluez' : null; }
     // Everything the island shows, normalised. Unknown values are null.
     get state() {
         if (this.proxy) {
@@ -110,7 +121,20 @@ export class AirPods extends Emitter {
         }
         const device = this.bluez?.device;
         if (device) {
-            return {backend: 'bluez', connected: device.connected, name: device.name || 'AirPods', model: '', address: device.address, features: [], headphones: false,
+            const aap = this.aap?.address === device.address && this.aap.state?.connected ? this.aap.state : null;
+            const headphones = PRODUCT_HEADPHONES.includes(device.product);
+            if (aap) {
+                // Read over AAP by Notchy itself.
+                const features = [...(aap.ancSupported || PRODUCT_ANC.includes(device.product) ? ['anc'] : []), ...(PRODUCT_ADAPTIVE.includes(device.product) ? ['adaptive'] : []),
+                    ...(aap.conversation !== null ? ['ca'] : []), ...(headphones ? ['headphones'] : [])];
+                const single = headphones ? battery(aap.battery.single ?? aap.battery.left) : battery(aap.battery.single);
+                return {backend: 'aap', connected: device.connected, name: device.name || aap.name || 'AirPods', model: aap.model, address: device.address, product: device.product, features, headphones,
+                    battery: {left: single === null ? battery(aap.battery.left) : null, right: single === null ? battery(aap.battery.right) : null, case: single === null ? battery(aap.battery.case) : null, single},
+                    charging: {left: Boolean(aap.charging.left || aap.charging.single), right: Boolean(aap.charging.right), case: Boolean(aap.charging.case)},
+                    ear: headphones || !aap.ear ? null : {left: Boolean(aap.ear.left), right: Boolean(aap.ear.right)},
+                    anc: ANC_MODES.includes(aap.anc) ? aap.anc : null, conversation: aap.conversation, pauseOnRemoval: null, version: ''};
+            }
+            return {backend: 'bluez', connected: device.connected, name: device.name || 'AirPods', model: '', address: device.address, product: device.product, features: [], headphones,
                 battery: {left: null, right: null, case: null, single: battery(device.battery)}, charging: {left: false, right: false, case: false},
                 ear: null, anc: null, conversation: null, pauseOnRemoval: null, version: ''};
         }
@@ -119,7 +143,7 @@ export class AirPods extends Emitter {
     get connected() { return Boolean(this.state?.connected); }
     // Which ANC modes this model has (none without the helper).
     get modes() {
-        const state = this.state; if (!state?.connected || state.backend !== 'airpods-helper') return [];
+        const state = this.state; if (!state?.connected || !['airpods-helper', 'aap'].includes(state.backend)) return [];
         const features = state.features;
         return ANC_MODES.filter(mode => mode === 'adaptive' ? features.includes('adaptive') : features.includes('anc') || features.includes('adaptive'));
     }
@@ -127,14 +151,24 @@ export class AirPods extends Emitter {
         if (this.life.closed) return;
         const state = this.state, connected = Boolean(state?.connected);
         if (connected !== this.wasConnected) {
-            this.wasConnected = connected; this.warned = {};
+            this.wasConnected = connected; this.warned = {}; this.bothInEar = undefined; this.pausedByEar = false;
             this.emit({type: connected ? 'connected' : 'disconnected', state});
         }
-        if (connected) this.checkBattery(state);
+        if (connected) { this.checkBattery(state); this.earPause(state); }
         // Only a change Notchy shows wakes the island (the daemon also reports
         // things like who is speaking, many times a minute).
         const signature = JSON.stringify([this.status, state]);
         if (signature !== this.signature) { this.signature = signature; this.changed(); }
+    }
+    // Ear pause with Notchy's own AAP reader only (the daemon pauses by itself):
+    // a bud taken out pauses the music, putting it back resumes what was paused.
+    earPause(state) {
+        const ear = state.backend === 'aap' ? state.ear : null, both = ear ? ear.left && ear.right : null;
+        const previous = this.bothInEar; this.bothInEar = both;
+        if (both === null || previous === undefined || previous === null || both === previous || !this.settings.get_boolean('airpods-ear-pause')) return;
+        const media = this.extension.media;
+        if (!both && media?.state?.playing) { this.pausedByEar = true; media.call('Pause'); }
+        else if (both && this.pausedByEar) { this.pausedByEar = false; media?.call('Play'); }
     }
     // Low battery: once per part when it drops below the threshold without charging.
     checkBattery(state) {
@@ -154,8 +188,11 @@ export class AirPods extends Emitter {
             try { resolve(proxy.call_finish(result)); } catch (e) { reject(e); }
         }));
     }
-    setAnc(mode) { return ANC_MODES.includes(mode) && this.modes.includes(mode) ? this.call('SetAncMode', new GLib.Variant('(s)', [mode])) : Promise.reject(Error('Modus nicht unterstützt')); }
-    setConversationAwareness(on) { return this.call('SetConversationalAwareness', new GLib.Variant('(b)', [on])); }
+    setAnc(mode) {
+        if (!ANC_MODES.includes(mode) || !this.modes.includes(mode)) return Promise.reject(Error('Modus nicht unterstützt'));
+        return this.proxy ? this.call('SetAncMode', new GLib.Variant('(s)', [mode])) : this.aapCommand({anc: mode});
+    }
+    setConversationAwareness(on) { return this.proxy ? this.call('SetConversationalAwareness', new GLib.Variant('(b)', [on])) : this.aapCommand({conversation: Boolean(on)}); }
     // The daemon's own setting; Notchy just switches it.
     setPauseOnRemoval(on) {
         if (!this.proxy) return Promise.reject(Error('airpods-helper läuft nicht'));
@@ -178,12 +215,13 @@ export class AirPods extends Emitter {
 
     // BlueZ fallback: connection and battery of Apple headphones only.
     syncBluez() {
-        const wanted = this.enabled && !this.helperRunning && this.settings.get_boolean('airpods-bluez-fallback') && !this.life.closed;
+        const wanted = this.enabled && !this.helperRunning && (this.settings.get_boolean('airpods-bluez-fallback') || this.settings.get_boolean('airpods-builtin')) && !this.life.closed;
         if (wanted && !this.bluez) this.startBluez();
         else if (!wanted && this.bluez) this.stopBluez();
     }
     startBluez() {
         let bus;
+        if (NO_SYSTEM_BLUETOOTH) return;
         try { bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, null); } catch { return; }
         const bluez = this.bluez = {bus, devices: new Map(), device: null, subscriptions: []};
         const refresh = () => {
@@ -198,11 +236,12 @@ export class AirPods extends Emitter {
                     const modalias = get('org.bluez.Device1', 'Modalias') ?? '', name = get('org.bluez.Device1', 'Alias') ?? get('org.bluez.Device1', 'Name') ?? '', icon = get('org.bluez.Device1', 'Icon') ?? '';
                     // Only Apple headphones; every other device is left alone.
                     if (!APPLE.test(modalias) || !(/audio-head(set|phones)/.test(icon) || /airpods|beats/i.test(name))) continue;
-                    bluez.devices.set(path, {path, name, address: get('org.bluez.Device1', 'Address') ?? '', connected: Boolean(get('org.bluez.Device1', 'Connected')), battery: get('org.bluez.Battery1', 'Percentage') ?? -1});
+                    bluez.devices.set(path, {path, name, address: get('org.bluez.Device1', 'Address') ?? '', connected: Boolean(get('org.bluez.Device1', 'Connected')), battery: get('org.bluez.Battery1', 'Percentage') ?? -1,
+                        product: parseInt(/p([0-9a-f]{4})/i.exec(modalias)?.[1] ?? '0', 16)});
                 }
                 const devices = [...bluez.devices.values()];
                 bluez.device = devices.find(d => d.connected) ?? devices[0] ?? null;
-                this.update();
+                this.syncAap(); this.update();
             });
         };
         for (const [iface, member] of [['org.freedesktop.DBus.ObjectManager', 'InterfacesAdded'], ['org.freedesktop.DBus.ObjectManager', 'InterfacesRemoved'], ['org.freedesktop.DBus.Properties', 'PropertiesChanged']]) {
@@ -213,7 +252,55 @@ export class AirPods extends Emitter {
     stopBluez() {
         const bluez = this.bluez; if (!bluez) return;
         this.bluez = null;
-        for (const id of bluez.subscriptions) bluez.bus.signal_unsubscribe(id);
+        for (const id of bluez.subscriptions) bluez.bus?.signal_unsubscribe(id);
+        this.syncAap();
+    }
+    // The headless test stands in for BlueZ with one device ({address, name, product, connected}).
+    testDevice(device) {
+        this.stopBluez();
+        if (device) { this.bluez = {bus: null, subscriptions: [], devices: new Map([['test', {path: 'test', battery: -1, ...device}]]), device: {path: 'test', battery: -1, ...device}}; }
+        this.syncAap(); this.update();
+    }
+
+    // Notchy's own AAP reader for a connected device, when no daemon owns it.
+    syncAap() {
+        const device = this.bluez?.device;
+        const wanted = device?.connected && !this.helperRunning && this.enabled && this.settings.get_boolean('airpods-builtin') && !this.life.closed ? device.address : null;
+        if (this.aap && this.aap.address !== wanted) this.stopAap();
+        if (wanted && !this.aap) this.startAap(wanted);
+    }
+    startAap(address) {
+        try {
+            const launcher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE});
+            for (const name of ['NOTCHY_AAP_REPLAY', 'NOTCHY_AAP_LOG']) { const value = GLib.getenv(name); if (value) launcher.setenv(name, value, true); }
+            const proc = launcher.spawnv(['/usr/bin/python3', `${this.extension.path}/helper/aap.py`, address]);
+            const aap = this.aap = {address, proc, state: null, stdin: proc.get_stdin_pipe(), stdout: new Gio.DataInputStream({base_stream: proc.get_stdout_pipe(), close_base_stream: true})};
+            const read = () => aap.stdout.read_line_async(GLib.PRIORITY_DEFAULT, this.cancellable, (stream, result) => {
+                let line = null;
+                try { [line] = stream.read_line_finish_utf8(result); } catch { return; }
+                if (line === null || this.aap !== aap) return;
+                try { aap.state = JSON.parse(line); if (aap.state.connected) this.aapRetries = 0; } catch { /* Not a state line. */ }
+                this.update(); read();
+            });
+            read();
+            proc.wait_async(null, () => {
+                if (this.aap !== aap) return;
+                this.aap = null; this.update();
+                // The channel can fail right after connecting; try again a few times.
+                if (this.aapRetries++ < 3) this.life.later(4000, () => this.syncAap());
+            });
+        } catch (e) { console.warn(`Notchy AirPods: ${e.message}`); this.aap = null; }
+    }
+    stopAap() {
+        const aap = this.aap; if (!aap) return;
+        this.aap = null;
+        try { aap.proc.force_exit(); } catch { /* Gone. */ }
+    }
+    aapCommand(command) {
+        const aap = this.aap;
+        if (!aap?.state?.connected) return Promise.reject(Error('AirPods nicht verbunden'));
+        return new Promise((resolve, reject) => aap.stdin.write_bytes_async(new GLib.Bytes(new TextEncoder().encode(`${JSON.stringify(command)}\n`)), GLib.PRIORITY_DEFAULT, this.cancellable,
+            (stream, result) => { try { stream.write_bytes_finish(result); resolve(); } catch (e) { reject(e); } }));
     }
     bluezCall(method) {
         const device = this.bluez?.device; if (!device) return Promise.reject(Error('Keine AirPods gefunden'));
@@ -225,10 +312,10 @@ export class AirPods extends Emitter {
         if (!this.enabled) return 'disabled';
         if (this.helperRunning) return 'helper';
         if (this.helperInstalled) return 'installed';
-        return this.bluez?.device ? 'bluez' : 'missing';
+        return this.aap?.state?.connected ? 'aap' : this.bluez?.device ? 'bluez' : 'missing';
     }
     dispose() {
         if (this.watch) Gio.bus_unwatch_name(this.watch); this.watch = 0;
-        this.cancellable?.cancel(); this.dropProxy(); this.stopBluez(); this.life.dispose(); this.events.clear(); this.listeners.clear();
+        this.cancellable?.cancel(); this.dropProxy(); this.stopAap(); this.stopBluez(); this.stopAap(); this.life.dispose(); this.events.clear(); this.listeners.clear();
     }
 }

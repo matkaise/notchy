@@ -16,7 +16,7 @@ IFACE = 'org.mpris.MediaPlayer2.Player'
 TRACKS = 'org.mpris.MediaPlayer2.TrackList'
 ROOT = 'org.mpris.MediaPlayer2'
 XML = '''<node><interface name="org.mpris.MediaPlayer2.Player">
-<method name="PlayPause"/><method name="Previous"/><method name="Next"/>
+<method name="PlayPause"/><method name="Play"/><method name="Pause"/><method name="Previous"/><method name="Next"/>
 <method name="SetPosition"><arg type="o" direction="in"/><arg type="x" direction="in"/></method>
 <property name="PlaybackStatus" type="s" access="read"/>
 <property name="Metadata" type="a{sv}" access="read"/>
@@ -115,9 +115,10 @@ def method(_conn, _sender, _path, iface, name, parameters, invocation):
             bus.emit_signal(None, PATH, TRACKS, 'TrackAdded', GLib.Variant('(a{sv}o)', (tracks[track], after)))
             if current:
                 go_to(track)
-    elif name == 'PlayPause':
+    elif name in ('PlayPause', 'Play', 'Pause'):
         props['Position'] = GLib.Variant('x', position_now()); position_stamp = time.monotonic()
-        emit('PlaybackStatus', GLib.Variant('s', 'Paused' if props['PlaybackStatus'].unpack() == 'Playing' else 'Playing'))
+        playing = props['PlaybackStatus'].unpack() == 'Playing'
+        emit('PlaybackStatus', GLib.Variant('s', {'Play': 'Playing', 'Pause': 'Paused'}.get(name, 'Paused' if playing else 'Playing')))
     elif name == 'SetPosition':
         _track, position = parameters.unpack(); props['Position'] = GLib.Variant('x', position); position_stamp = time.monotonic()
         bus.emit_signal(None, PATH, IFACE, 'Seeked', GLib.Variant('(x)', (position,)))
