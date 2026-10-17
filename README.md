@@ -87,7 +87,7 @@ bash scripts/test-shell.sh
 
 `check.sh` checks JavaScript syntax, the GSettings schema, Python syntax, and runs the domain, file-operation, cover, spectrum and MCP tests. `test-shell.sh` starts GNOME Shell 50 headless with its own D-Bus and temporary XDG directories; log and screenshots end up in `tests/output`. Details: [docs/TESTING.md](docs/TESTING.md); current state: [docs/VALIDATION_STATE.md](docs/VALIDATION_STATE.md).
 
-The extension runs inside the GNOME Shell process. Shelf, basket and drop zone are native GTK windows (Python helpers) because only those can send and receive Wayland file drags; they sit exactly inside the Shell surface, and the Shell paints the island's glass below them, so the two read as one surface.
+The extension runs inside the GNOME Shell process. Shelf, basket and drop zone are native GTK windows (Python helpers) because only those can send and receive Wayland file drags; they sit exactly inside the Shell surface and are shown on top of the island's glass, so the two read as one surface.
 
 ## Integrations
 

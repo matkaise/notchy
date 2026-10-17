@@ -87,7 +87,7 @@ export class Companion extends Emitter {
                 this.life.connect(window, 'unmanaged', () => { if (this.shelfWindow === window) { this.shelfWindow = null; this.shelfMapped = false; } });
                 this.shelfIsland.syncVisibility();
             }
-            this.extension.backdrop?.sync(); return;
+            this.shelfIsland?.syncShade(); return;
         }
         const drops = this.extension.drops;
         const dropTitle = drops?.backend === 'x11' ? 'Notchy Drop Target X11' : 'Notchy Drop Target';
@@ -97,7 +97,7 @@ export class Companion extends Emitter {
             if (!actor?.mapped) return;
             const {x, y, width, height} = this.extension.drops.position;
             window.make_above(); window.stick(); window.move_resize_frame(false, Math.round(x), Math.round(y), width, height);
-            this.dropWindow = window; this.extension.backdrop?.sync(); return;
+            this.dropWindow = window; this.extension.drops?.island?.syncShade(); return;
         }
         if (this.life.closed || window.get_title() !== 'Notchy File Tray' || (window.get_gtk_application_id() !== 'org.notchy.FileTray' && window.get_wm_class() !== 'org.notchy.FileTray') || !this.trayPosition) return;
         const {x, y, width, height} = this.trayPosition;
@@ -122,7 +122,6 @@ export class Companion extends Emitter {
         const config = this.shelfConfig();
         if (!config.visible) this.shelfMapped = false;
         this.dbus.emit_signal('ShelfConfig', new GLib.Variant('(s)', [JSON.stringify(config)]));
-        this.extension.backdrop?.sync();
     }
     shelfConfig() {
         // The pane sits between the clock header and the tab bar; Dynamic Glass

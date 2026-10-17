@@ -16,11 +16,9 @@ PATH = '/org/gnome/Shell/Extensions/Notchy'
 IMAGES = ('.png', '.jpg', '.jpeg', '.webp', '.heic', '.tiff', '.bmp', '.gif', '.svg')
 # File-type tints (Droppy for GNOME palette), matching the Shell preview.
 EXT_CLASS = {'pdf': 'pdf', 'md': 'text', 'txt': 'text', 'zip': 'archive', 'gz': 'archive', 'tar': 'archive'}
-# The Shell paints the island's glass below the pane (src/ui/backdrop.js); the
+# The Shell shows this pane on top of the island's glass (Island.syncPane); the
 # pane itself stays clear there and only paints Dynamic Glass's black shade.
 CLEAR = 'rgba(0,0,0,0)'
-# Just short of opaque, so Mutter never culls what lies behind the pane (see Tray).
-OPACITY = 0.996
 # Notchy's own symbols, shared with the Shell (symbolic, so GTK recolours them).
 ICONS = Path(__file__).resolve().parent.parent / 'src' / 'icons'
 
@@ -122,13 +120,6 @@ class Tray(Gtk.Application):
         self.window.add_css_class('notchy-files')
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12 if shelf else 10)
         self.root = Gtk.Frame(child=root, css_classes=['tray', self.kind, self.style], overflow=Gtk.Overflow.HIDDEN)
-        if shelf:
-            # GTK 4.18+ reports fully opaque parts of a window (the black shade,
-            # solid thumbnails) to Mutter, which then skips painting what lies
-            # behind them - including what the Shell's glass below this pane
-            # copies, leaving black holes in it. A barely-there translucency
-            # (invisible to the eye) means nothing here is ever opaque.
-            self.root.set_opacity(OPACITY)
         self.window.set_child(self.root)
         (self.build_shelf if shelf else self.build_basket)(root)
         target = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)

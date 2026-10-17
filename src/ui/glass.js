@@ -21,7 +21,6 @@ uniform vec4 tint;
 uniform float refraction;
 uniform float rim;
 uniform float saturation;
-uniform vec4 hole;
 float notchy_glass_sdf(vec2 q, vec2 b, vec4 r) {
     float rad = q.x < 0.0 ? (q.y < 0.0 ? r.x : r.w) : (q.y < 0.0 ? r.y : r.z);
     rad = min(rad, min(b.x, b.y));
@@ -51,16 +50,12 @@ col = mix(col, tint.rgb, tint.a);
 float light = clamp(dot(n, normalize(vec2(-0.45, -1.0))), 0.0, 1.0);
 float glow = smoothstep(-16.0, 0.0, d);
 col += vec3(rim * glow * (0.03 + 0.05 * light));
-if (hole.z > 0.0) {
-    vec2 h = p - vec2(pad) - hole.xy;
-    if (h.x >= 0.0 && h.y >= 0.0 && h.x <= hole.z && h.y <= hole.w) alpha = 0.0;
-}
 cogl_color_out = vec4(col * alpha, alpha);`;
 
 export const LiquidGlassEffect = GObject.registerClass(class NotchyLiquidGlassEffect extends Shell.GLSLEffect {
     _init() {
         super._init();
-        this.locations = Object.fromEntries(['size', 'pad', 'radii', 'tint', 'refraction', 'rim', 'saturation', 'hole'].map(name => [name, this.get_uniform_location(name)]));
+        this.locations = Object.fromEntries(['size', 'pad', 'radii', 'tint', 'refraction', 'rim', 'saturation'].map(name => [name, this.get_uniform_location(name)]));
     }
     vfunc_build_pipeline() { this.add_glsl_snippet(Cogl.SnippetHook.FRAGMENT, DECLARATIONS, CODE, true); }
     set(name, values) { this.set_uniform_float(this.locations[name], values.length, values); }
@@ -74,7 +69,7 @@ export const GLASS = {
 
 export class GlassLayer {
     constructor(pad = 18) {
-        this.pad = pad; this.hole = [0, 0, 0, 0]; this.stage = [0, 0]; this.life = new Lifetime(); this.clones = [];
+        this.pad = pad; this.stage = [0, 0]; this.life = new Lifetime(); this.clones = [];
         // Clipped: the clones extend far beyond the layer, and the effects must
         // render exactly the layer's own area for the shader's geometry.
         this.actor = new Clutter.Actor({name: 'notchy-glass', reactive: false, clip_to_allocation: true});
@@ -95,7 +90,7 @@ export class GlassLayer {
         this.glass = new LiquidGlassEffect(); this.actor.add_effect_with_name('notchy-liquid-glass', this.glass);
         this.blur = new Shell.BlurEffect({mode: Shell.BlurMode.ACTOR, radius: 18, brightness: 1});
         this.content.add_effect_with_name('notchy-glass-blur', this.blur);
-        this.style('dynamic', [0, 0, 30, 30]); this.setHole(null);
+        this.style('dynamic', [0, 0, 30, 30]);
     }
     style(name, radii) {
         const glass = GLASS[name] ?? GLASS.dynamic;
@@ -111,7 +106,7 @@ export class GlassLayer {
         for (const child of global.window_group.get_children()) {
             // Notchy's own native panes (Regal, drop zone, Korb) sit in or next to
             // the island; blurred into the glass they would appear twice.
-            if (child.name === 'notchy-shelf-backdrop' || child.meta_window?.get_gtk_application_id()?.startsWith('org.notchy.')) continue;
+            if (child.meta_window?.get_gtk_application_id()?.startsWith('org.notchy.')) continue;
             const clone = new Clutter.Clone({source: child, visible: child.visible});
             this.content.insert_child_below(clone, this.panel); this.clones.push([clone, child]);
             this.cloneLife.connect(child, 'notify::visible', () => { clone.visible = child.visible; });
@@ -120,8 +115,6 @@ export class GlassLayer {
         }
     }
     positionClone(clone, child) { clone.set_position(Math.round(child.x - this.stage[0]), Math.round(child.y - this.stage[1])); }
-    // A rectangle (shape coordinates) where native panes show through instead.
-    setHole(rect) { this.hole = rect ?? [0, 0, 0, 0]; this.glass.set('hole', this.hole); }
     // Shape rectangle in the parent's coordinates; stage position of the parent.
     place(x, y, width, height, [parentX, parentY]) {
         const pad = this.pad, w = Math.max(1, Math.round(width + 2 * pad)), h = Math.max(1, Math.round(height + 2 * pad));

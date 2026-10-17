@@ -28,7 +28,6 @@ import {Capture} from './src/services/capture.js';
 import {RadialMenu} from './src/ui/radial.js';
 import {Island} from './src/ui/island.js';
 import {Drops} from './src/services/drops.js';
-import {Backdrop} from './src/ui/backdrop.js';
 
 export default class Notchy extends Extension {
     openPreferences() {
@@ -62,7 +61,7 @@ export default class Notchy extends Extension {
             this.capture = new Capture(this); this.radial = new RadialMenu(this);
             this.airdrop = new AirDrop(this, this.shelf, this.settings);
             this.operations = new Operations(this, this.shelf); this.companion = new Companion(this, this.shelf, this.operations, this.productivity);
-            this.drops = new Drops(this); this.backdrop = new Backdrop(this); this.snap = new Snap(this);
+            this.drops = new Drops(this); this.snap = new Snap(this);
             this._rebuild();
             this.life.connect(Main.layoutManager, 'monitors-changed', () => this._rebuild());
             const binds = {
@@ -175,7 +174,7 @@ export default class Notchy extends Extension {
         this.life.connect(Main.messageTray, 'source-added', (_tray, source) => watch(source));
     }
     disable() {
-        this.drops?.dispose(); this.drops = null; this.backdrop?.dispose(); this.backdrop = null;
+        this.drops?.dispose(); this.drops = null;
         this.radial?.dispose(); this.capture?.dispose();
         this.injections?.clear(); this.injections = null; this.life?.dispose();
         for (const island of this.islands ?? []) island.dispose(); this.islands = [];

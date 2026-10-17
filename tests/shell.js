@@ -282,6 +282,15 @@ export async function run() {
 
 // Where „Aus Regal entfernen“ sits in a text file's menu (second row, middle column).
 const MENU_REMOVE_Y = 112;
+// The native pane is shown as a clone on top of the island's whole glass, exactly over its window,
+// and nothing of Notchy sits among the windows (where Mutter clips painting to the damaged area).
+function paneShownOnGlass(island, windowActor) {
+    const clone = island.paneClone, children = island.actor.get_children();
+    const [cx, cy] = clone?.get_transformed_position() ?? [NaN, NaN];
+    return Boolean(clone && windowActor && clone.source === windowActor && clone.mapped && island.glass.actor.visible !== false &&
+        children.indexOf(clone) > children.indexOf(island.glass.actor) && Math.abs(cx - windowActor.x) <= 1 && Math.abs(cy - windowActor.y) <= 1 &&
+        !global.window_group.get_children().some(child => !child.meta_window && child.name?.startsWith?.('notchy')));
+}
 async function interactionRegressions(ext, path, screenshot) {
     const island = ext.islands[0];
     const pointer = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
@@ -564,9 +573,7 @@ async function interactionRegressions(ext, path, screenshot) {
                 const targetRect = targetWindow?.get_frame_rect();
                 assert(targetRect && Math.abs(targetRect.x - p.x) <= 1 && Math.abs(targetRect.y - p.y) <= 1 && p.y === island.dropTop, `${name}: native target sits directly below the clock`);
                 assert(ext.drops.hovering, `${name}: GTK accepts the native file offer`);
-                const under = ext.backdrop.glass, targetActor = targetWindow?.get_compositor_private();
-                assert(under && ext.backdrop.actor.visible && ext.backdrop.actor.get_next_sibling() === targetActor && under.stage[0] === island.glass.stage[0] && under.stage[1] === island.glass.stage[1] && under.actor.width === island.glass.actor.width,
-                    `${name}: the collapsed drop zone shows the island's glass below the native target`);
+                assert(paneShownOnGlass(island, targetWindow?.get_compositor_private()), `${name}: the drop zone shows on top of the island's whole glass`);
                 if (cancel) {
                     await escape();
                     assert(!ext.drops.island && !ext.drops.dragging && !ext.shelf.items.some(item => item.uri === files[0].get_uri()) && files[0].query_exists(null), 'cancelled drag removes target without adding or altering files');
@@ -643,11 +650,8 @@ async function interactionRegressions(ext, path, screenshot) {
             assert(island.surface.has_style_class_name('notchy-native-joined') && island.surface.get_theme_node().get_background_color().alpha === 0, 'the Shell surface does not cover the native files');
             for (const style of ['liquid', 'dynamic']) {
                 ext.settings.set_string('style', style); await Scripting.sleep(450);
-                assert(currentPane()?.get_compositor_private()?.mapped && ext.backdrop.actor?.visible && ext.backdrop.actor.get_next_sibling() === currentPane()?.get_compositor_private(), `${style}: blur backdrop sits directly below the native pane`);
+                assert(currentPane()?.get_compositor_private()?.mapped && paneShownOnGlass(island, currentPane()?.get_compositor_private()), `${style}: the Regal shows on top of the island's whole glass, one glass layer as in every tab`);
                 assert(!island.glass.clones.some(([, child]) => child === currentPane()?.get_compositor_private()), `${style}: the glass never blurs the native pane into itself`);
-                const under = ext.backdrop.glass;
-                assert(under && under.stage[0] === island.glass.stage[0] && under.stage[1] === island.glass.stage[1] && under.actor.width === island.glass.actor.width && under.actor.height === island.glass.actor.height && !under.clones.some(([, child]) => child === currentPane()?.get_compositor_private() || child === ext.backdrop.actor),
-                    `${style}: the pane's backdrop paints the island's own glass geometry, so no seam shows`);
                 await screenshot(`regal-${style}`);
             }
             await move(p.x + 60, p.y + 70); await press(Clutter.ButtonState.PRESSED);

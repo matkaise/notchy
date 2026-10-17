@@ -52,9 +52,6 @@ class DropReceiver(Gtk.Application):
         # or, with AirDrop installed, send them to an iPhone.
         zones = Gtk.Box(spacing=10)
         self.root = Gtk.Frame(child=zones, css_classes=['notchy-drop'], overflow=Gtk.Overflow.HIDDEN)
-        # Never fully opaque: GTK would report opaque parts to Mutter, which then
-        # skips painting what the Shell's glass below this window copies.
-        self.root.set_opacity(0.996)
         self.window.set_child(self.root)
         self.area = self.zone(zones, 'shelf', Gtk.Image.new_from_icon_name('document-save-symbolic'), 'Ins Regal legen', 'Original bleibt, wo es ist')
         icon = Gio.FileIcon.new(Gio.File.new_for_path(str(Path(__file__).resolve().parent.parent / 'src' / 'icons' / 'notchy-airdrop-symbolic.svg')))
@@ -105,7 +102,7 @@ class DropReceiver(Gtk.Application):
         config = json.loads(values.unpack()[0])
         if config.get('visible') and config.get('backend') == BACKEND:
             self.root.add_css_class('liquid') if config.get('style') == 'liquid' else self.root.remove_css_class('liquid')
-            # The Shell paints the island's glass below this window (src/ui/backdrop.js);
+            # The Shell shows this window on top of the island's glass (Island.syncPane);
             # Dynamic Glass continues its black-to-glass shade here, Liquid Glass stays clear.
             shade = config.get('shade') or {}
             black, fade = int(shade.get('black', 0)), int(shade.get('fade', 70))

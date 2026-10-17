@@ -2,13 +2,13 @@
 
 Redesign "Droppy for GNOME": Notchy lives in the top bar only, with the styles Dynamic Glass and Liquid Glass, the tabs Media · Shelf · Clipboard · Calendar (all of one height), Thunderstorm search, a radial capture menu, inline volume and scroll volume, and a basket with its own collection. Droplets and the floating player are removed.
 
-This build passes the complete isolated GNOME Shell test with **237 assertions** plus `NOTCHY_SHELL_TEST_OK`, `NOTCHY_PREFS_TEST_OK` and `NOTCHY_TRAY_TEST_OK`; the interaction part alone (`NOTCHY_TEST_DROP_ONLY=1`) passes as well. The log has no GJS/GObject/Clutter criticals, script failures or Python tracebacks. Log and screenshots are written to `tests/output/`.
+This build passes the complete isolated GNOME Shell test with **235 assertions** plus `NOTCHY_SHELL_TEST_OK`, `NOTCHY_PREFS_TEST_OK` and `NOTCHY_TRAY_TEST_OK`; the interaction part alone (`NOTCHY_TEST_DROP_ONLY=1`) passes as well. The log has no GJS/GObject/Clutter criticals, script failures or Python tracebacks. Log and screenshots are written to `tests/output/`.
 
 `scripts/check.sh` passes: syntax, strict schema, **15 domain tests** and **14 Python tests**.
 
 Verified since the redesign:
 
-- Real liquid glass (cloned backdrop, blur, refraction) instead of plain transparency, visible over a colourful test backdrop (`glass-*.png`). Below the native shelf and the drop zone the Shell paints the very same glass, so there is no seam at the pane's edge (`glass-regal-*.png`, `drop-*.png`). At 100 % black there is no glass at all (`opaque-calendar.png`).
+- Real liquid glass (cloned backdrop, blur, refraction) instead of plain transparency, visible over a colourful test backdrop (`glass-*.png`). The native shelf and drop zone are shown as clones of their windows on top of the island's whole glass, so the Regal has one glass layer like every tab (`glass-regal-*.png`, `drop-*.png`). An earlier second glass layer between the windows turned black outside each frame's damaged area on a real desktop, because Mutter clips every window's painting to that area while it paints the window group; full-screen test screenshots never showed it. At 100 % black there is no glass at all (`opaque-calendar.png`).
 - Flat controls with icons instead of words; the player in Droppy's layout with rounded transport symbols; a real pointer click toggles playback (`media-controls*.png`).
 - The outer top corners of the Dynamic Glass notch widen with its height (10 px collapsed, up to 36 px, never deeper than its black part).
 - All tabs share one height (300 px).

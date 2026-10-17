@@ -197,14 +197,8 @@ export class Island {
         // Liquid glass rounds every corner; Dynamic Glass hangs from the edge.
         this.glassRadii = this.liquid ? [radius, radius, radius, radius] : [0, 0, radius, radius];
         this.glass.style(this.style, this.glassRadii);
-        // Native panes (Regal, drop zone) show through a hole below the clock row.
-        const pane = this.dropActive ? DROP_HEIGHT : this.shelfWindowHeight;
-        // Wider than the surface: the glass's anti-aliased side edge would otherwise show beside the pane.
-        // The backdrop below the pane paints the same glass into this hole.
-        this.glassHole = joined ? [-this.glass.pad, this.headerHeight, width + 2 * this.glass.pad, pane] : null;
-        this.glass.setHole(this.glassHole);
         this.glass.place(0, 0, width, height, [this.actor.x, this.actor.y]);
-        this.extension.backdrop?.sync();
+        this.syncPane(joined);
         this.glass.actor.visible = !this.opaque;
         this.opaque ? this.surface.add_style_class_name('notchy-opaque') : this.surface.remove_style_class_name('notchy-opaque');
         const show = this.style === 'dynamic' && !joined && height > 0;
@@ -218,6 +212,32 @@ export class Island {
         this.shadeFade.set_size(width, fade); this.shadeFade.set_position(0, black);
         black >= height ? this.shadeBlack.add_style_class_name('bottom') : this.shadeBlack.remove_style_class_name('bottom');
         black + fade >= height ? this.shadeFade.add_style_class_name('bottom') : this.shadeFade.remove_style_class_name('bottom');
+    }
+    // Native panes (Regal, drop zone) are windows, which sit below the Shell's
+    // chrome. The glass is drawn whole, as in every tab, and the pane is shown
+    // on top of it as a clone of its window; the window itself stays below and
+    // takes the input, which the island lets through there. (A second glass
+    // layer between the windows, as before, is painted while Mutter clips every
+    // window to the frame's damaged area: wherever nothing moved, it was black.)
+    syncPane(joined) {
+        const window = !joined ? null : this.dropActive ? this.companion.dropWindow : this.nativeShelf ? this.companion.shelfWindow : null;
+        const source = window?.get_compositor_private() ?? null;
+        if ((this.paneClone?.source ?? null) !== source) {
+            this.paneLife?.dispose(); this.paneLife = null;
+            this.paneClone?.destroy(); this.paneClone = null;
+            if (source) {
+                this.paneClone = new Clutter.Clone({name: 'notchy-pane', source, reactive: false});
+                this.actor.insert_child_above(this.paneClone, this.shadeFade);
+                this.paneLife = new Lifetime();
+                for (const signal of ['notify::x', 'notify::y', 'notify::width', 'notify::height']) this.paneLife.connect(source, signal, () => this.placePane());
+            }
+        }
+        this.placePane();
+    }
+    placePane() {
+        const clone = this.paneClone, source = clone?.source; if (!source) return;
+        clone.set_position(Math.round(source.x - this.actor.x), Math.round(source.y - this.actor.y));
+        clone.set_size(source.width, source.height);
     }
     // Gradient offsets for the native shelf below the header (Dynamic Glass).
     get shelfShade() {
@@ -606,7 +626,7 @@ export class Island {
     }
     dispose() {
         if (this.nativeShelf) this.companion.closeShelf();
-        this.returnPanelHeader(); this.ears?.dispose(); this.glass.destroy(); this.life.dispose(); this.views.dispose();
+        this.returnPanelHeader(); this.ears?.dispose(); this.paneLife?.dispose(); this.glass.destroy(); this.life.dispose(); this.views.dispose();
         this.dateMenu.menu.close();
         this.clockContainer.get_parent()?.remove_child(this.clockContainer);
         this.clockParent.insert_child_at_index(this.clockContainer, this.clockIndex);

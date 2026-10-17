@@ -20,7 +20,7 @@
 - Thunderstorm: focus, arithmetic result, copy with Enter, empty results.
 - Radial menu: five actions centred below the clock, Esc; a real screenshot lands in the shelf, confirmed by a toast inside the capsule, collapsed and opened.
 - Volume/brightness inline in the capsule instead of GNOME's OSD; scrolling over the capsule with a controlled mixer (one wheel step counts once); Caps Lock in the capsule, Num Lock silent.
-- Glass layer exactly behind the island, and the same glass geometry below the native shelf and the drop zone; screenshots of both styles over a colourful backdrop.
+- Glass layer exactly behind the island; the native shelf and drop zone shown as clones exactly over their windows on top of the whole glass, with nothing of Notchy among the windows; screenshots of both styles over a colourful backdrop. (Damage-clipped repaints, where the old in-between glass layer failed, do not occur in full-screen test screenshots; check moving windows behind the Regal on a real desktop.)
 - Notification banners instead of GNOME's banners.
 - Clipboard: recording, autofocus, arrow keys, F, ★ and link filters, copy with Enter, file and PNG contents.
 - Basket as a native Wayland window at the pointer; corner rounding, multi-select and copy in the GTK helper (`tests/tray.py`).
