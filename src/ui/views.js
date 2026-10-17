@@ -34,6 +34,52 @@ const RADAR = 84;
 const SNAP_TILE = [76, 48];
 // Height of the calendar tab's two scrolling lists.
 const CAL_LIST_HEIGHT = 196;
+// AirPods noise control: symbol and name per mode.
+const ANC_ICON = {noise: 'notchy-anc-symbolic', transparency: 'notchy-transparency-symbolic', adaptive: 'notchy-adaptive-symbolic', off: 'notchy-anc-off-symbolic'};
+const ANC_NAME = {noise: 'Geräuschunterdrückung', transparency: 'Transparenz', adaptive: 'Adaptiv', off: 'Geräuschkontrolle aus'};
+// The batteries an AirPods model reports: both buds and the case, or one (AirPods Max).
+function airpodsParts(state) {
+    if (state.battery.single !== null || state.headphones || state.backend === 'bluez') return [{key: 'single', short: '', name: 'Akku', icon: 'notchy-airpods-symbolic'}];
+    return [{key: 'left', short: 'L', name: 'Links'}, {key: 'right', short: 'R', name: 'Rechts'}, {key: 'case', short: '', name: 'Case', icon: 'notchy-airpods-case-symbolic'}];
+}
+// A battery as a ring that fills up to its level (green, orange when low).
+function batteryCell(part) {
+    const actor = box(true, {style_class: 'notchy-airpods-cell'});
+    const ring = new St.Widget({layout_manager: new Clutter.BinLayout(), width: 36, height: 36, x_align: Clutter.ActorAlign.CENTER});
+    const area = new St.DrawingArea({width: 36, height: 36});
+    ring.add_child(area);
+    ring.add_child(part.icon ? new St.Icon({gicon: gicon(part.icon), icon_size: 13, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER})
+        : label(part.short, 'notchy-airpods-ring-part', {x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER}));
+    const value = label('–', 'notchy-airpods-ring-value', {x_align: Clutter.ActorAlign.CENTER});
+    actor.add_child(ring); actor.add_child(value);
+    const cell = {actor, level: null, low: false, progress: 0, timeline: null, value};
+    area.connect('repaint', () => {
+        const cr = area.get_context(), [w, h] = area.get_surface_size(), r = Math.min(w, h) / 2 - 2.5;
+        cr.setLineWidth(3); cr.setSourceRGBA(1, 1, 1, 0.14); cr.arc(w / 2, h / 2, r, 0, 2 * Math.PI); cr.stroke();
+        if (cell.level !== null && cell.progress > 0) {
+            if (cell.low) cr.setSourceRGBA(1, 0.7, 0.54, 1); else cr.setSourceRGBA(0.49, 0.88, 0.54, 1);
+            cr.arc(w / 2, h / 2, r, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * cell.level / 100 * cell.progress); cr.stroke();
+        }
+        cr.$dispose();
+    });
+    cell.set = (level, charging, low) => {
+        const first = cell.level === null && level !== null;
+        cell.level = level; cell.low = low;
+        value.text = level === null ? '–' : `${charging ? '⚡' : ''}${level} %`;
+        actor.accessible_name = `${part.name}: ${level === null ? 'unbekannt' : `${level} %`}`;
+        if (first) {
+            // The ring fills from empty to its level.
+            cell.timeline?.stop(); cell.progress = 0;
+            cell.timeline = new Clutter.Timeline({actor: area, duration: 750, progress_mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            cell.timeline.connect('new-frame', () => { cell.progress = cell.timeline.get_progress(); area.queue_repaint(); });
+            cell.timeline.connect('completed', () => { cell.progress = 1; area.queue_repaint(); });
+            cell.timeline.start();
+        }
+        area.queue_repaint();
+    };
+    cell.stop = () => { cell.timeline?.stop(); cell.timeline = null; };
+    return cell;
+}
 // A notification's body as one plain line.
 const plain = n => (n.body || '').replace(n.useBodyMarkup ? /<[^>]*>/g : /$^/, '').replace(/\s+/g, ' ').trim();
 
@@ -58,6 +104,7 @@ export class Views {
         if (this.outputPicker) return this.outputsView(root);
         if (!state) {
             root.add_child(emptyState('audio-x-generic-symbolic', 'Gerade keine Wiedergabe', 'Starte Musik in einer MPRIS-fähigen App.', null, null));
+            const pods = this.airpodsRow(); if (pods) { root.add_child(new St.Widget({y_expand: true})); root.add_child(pods); }
             return root;
         }
         const top = box(false, {style_class: 'notchy-media-top'});
@@ -99,6 +146,8 @@ export class Views {
         root.add_child(row);
         // Where the music plays: this computer or an AirPlay receiver.
         root.add_child(new St.Widget({y_expand: true}));
+        // Connected AirPods: batteries and noise control, right above the output.
+        const pods = this.airpodsRow(); if (pods) root.add_child(pods);
         const outputIcon = new St.Icon({icon_size: 15}), outputName = label('', 'notchy-output-name', {y_align: Clutter.ActorAlign.CENTER});
         const outputRow = box(false, {style_class: 'notchy-output-row'});
         outputRow.add_child(outputIcon); outputRow.add_child(outputName); outputRow.add_child(icon('pan-down-symbolic', 12));
@@ -113,6 +162,87 @@ export class Views {
         this.pageLife.cleanups.push(this.outputs.subscribe(drawOutput)); drawOutput();
         root.add_child(output);
         return root;
+    }
+
+    // AirPods in the media tab: name, the batteries (left, right, case) and the
+    // noise control modes this model has. Unknown batteries read „–“, never 0 %.
+    airpodsRow() {
+        const airpods = this.airpods, state = airpods?.state;
+        if (!state) return null;
+        const failed = e => this.island.toast('dialog-warning-symbolic', e.message);
+        const row = box(false, {style_class: 'notchy-airpods-row', x_expand: true});
+        row.add_child(new St.Icon({gicon: gicon('notchy-airpods-symbolic'), icon_size: 15, style_class: 'notchy-airpods-glyph', y_align: Clutter.ActorAlign.CENTER}));
+        row.add_child(label(shorten(state.name, 26), 'notchy-airpods-name', {y_align: Clutter.ActorAlign.CENTER}));
+        if (!state.connected) {
+            // Known but not connected: one click connects them through the daemon (or BlueZ).
+            row.add_style_class_name('disconnected');
+            row.add_child(label('Nicht verbunden', 'notchy-airpods-status', {x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
+            const connect = textButton('Verbinden', () => airpods.connect().catch(failed), 'notchy-airpods-connect');
+            connect.y_align = Clutter.ActorAlign.CENTER; row.add_child(connect);
+            return row;
+        }
+        const pills = box(false, {style_class: 'notchy-airpods-batteries', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const threshold = this.settings.get_int('airpods-battery-threshold');
+        for (const part of airpodsParts(state)) {
+            const level = state.battery[part.key], charging = part.key !== 'single' && state.charging[part.key];
+            const out = state.ear && ['left', 'right'].includes(part.key) && !state.ear[part.key];
+            const pill = box(false, {style_class: `notchy-airpods-battery${level !== null && level < threshold && !charging ? ' low' : ''}${out ? ' out' : ''}`,
+                accessible_name: `${part.name}: ${level === null ? 'unbekannt' : `${level} %`}${charging ? ', lädt' : ''}${out ? ', nicht im Ohr' : ''}`});
+            pill.add_child(part.icon ? new St.Icon({gicon: gicon(part.icon), icon_size: 12, y_align: Clutter.ActorAlign.CENTER}) : label(part.short, 'notchy-airpods-part', {y_align: Clutter.ActorAlign.CENTER}));
+            pill.add_child(label(level === null ? '–' : `${level} %`, 'notchy-airpods-level', {y_align: Clutter.ActorAlign.CENTER}));
+            if (charging) pill.add_child(new St.Icon({icon_name: 'battery-full-charging-symbolic', icon_size: 11, style_class: 'notchy-airpods-charging', y_align: Clutter.ActorAlign.CENTER}));
+            pills.add_child(pill);
+        }
+        row.add_child(pills);
+        const modes = airpods.modes;
+        if (modes.length) {
+            const segment = box(false, {style_class: 'notchy-anc', y_align: Clutter.ActorAlign.CENTER});
+            for (const mode of modes) {
+                const b = button(ANC_ICON[mode], ANC_NAME[mode], () => airpods.setAnc(mode).catch(e => this.island.toast('dialog-warning-symbolic', e.message)), `notchy-anc-button${state.anc === mode ? ' active' : ''}`);
+                b.get_child().icon_size = 15; segment.add_child(b);
+            }
+            row.add_child(segment);
+        }
+        if (state.conversation !== null) {
+            const talk = button('audio-input-microphone-symbolic', state.conversation ? 'Gesprächserkennung aus' : 'Gesprächserkennung an',
+                () => airpods.setConversationAwareness(!state.conversation).catch(e => this.island.toast('dialog-warning-symbolic', e.message)), `notchy-anc-button notchy-conversation${state.conversation ? ' active' : ''}`);
+            talk.get_child().icon_size = 15; row.add_child(talk);
+        }
+        const drop = button('window-close-symbolic', 'AirPods trennen', () => airpods.disconnect().catch(failed), 'notchy-anc-button notchy-airpods-disconnect');
+        drop.get_child().icon_size = 13; row.add_child(drop);
+        return row;
+    }
+    // AirPods connected: the capsule grows into a banner; the batteries fill up.
+    airpodsPeekView() {
+        const airpods = this.airpods, root = box(false, {style_class: 'notchy-peek notchy-airpods-peek'});
+        const badge = new St.Bin({style_class: 'notchy-airpods-badge', width: 46, height: 46, y_align: Clutter.ActorAlign.CENTER, pivot_point: new Graphene.Point({x: 0.5, y: 0.5}),
+            child: new St.Icon({gicon: gicon('notchy-airpods-symbolic'), icon_size: 24})});
+        root.add_child(badge);
+        const column = box(true, {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const title = label('', 'notchy-peek-title'), sub = label('', 'notchy-peek-body');
+        column.add_child(label('AirPods', 'notchy-peek-app')); column.add_child(title); column.add_child(sub);
+        root.add_child(column);
+        const rings = box(false, {style_class: 'notchy-airpods-rings', y_align: Clutter.ActorAlign.CENTER});
+        root.add_child(rings);
+        const cells = new Map(), threshold = this.settings.get_int('airpods-battery-threshold');
+        const draw = () => {
+            const state = airpods.state; if (!state) return;
+            title.text = state.name;
+            sub.text = ['Verbunden', state.anc ? ANC_NAME[state.anc] : ''].filter(Boolean).join(' · ');
+            for (const part of airpodsParts(state)) {
+                let cell = cells.get(part.key);
+                if (!cell) { cell = batteryCell(part); cells.set(part.key, cell); rings.add_child(cell.actor); }
+                const level = state.battery[part.key], charging = part.key !== 'single' && state.charging[part.key];
+                cell.set(level, charging, level !== null && level < threshold && !charging);
+            }
+        };
+        const unsubscribe = airpods.subscribe(draw); draw();
+        // The badge springs in once the banner is on screen.
+        badge.opacity = 0; badge.scale_x = badge.scale_y = 0.5;
+        const appear = () => { if (!badge.mapped) return; badge.ease({opacity: 255, scale_x: 1, scale_y: 1, duration: 450, mode: Clutter.AnimationMode.EASE_OUT_BACK}); };
+        const mappedId = badge.connect('notify::mapped', appear); appear();
+        root.connect('destroy', () => { unsubscribe(); badge.disconnect(mappedId); for (const cell of cells.values()) cell.stop(); });
+        return {actor: root, cells};
     }
 
     // Snap layouts: miniature screens whose zones take the dragged window.

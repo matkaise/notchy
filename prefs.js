@@ -7,6 +7,7 @@ import {parseList, quicklinkTarget} from './src/launcher/logic.js';
 
 const MINER = 'org.freedesktop.Tracker3.Miner.Files';
 const LOCALSEARCH = GLib.getenv('NOTCHY_LOCALSEARCH_NAME') || 'org.freedesktop.LocalSearch3';
+const AIRPODS = GLib.getenv('NOTCHY_AIRPODS_NAME') || 'org.costa.AirPods';
 // A D-Bus call from the preferences window, as a promise.
 const bus = (name, path, iface, method, params = null) => new Promise((resolve, reject) => Gio.DBus.session.call(name, path, iface, method, params, null,
     Gio.DBusCallFlags.NO_AUTO_START, 3000, null, (c, r) => { try { resolve(c.call_finish(r).deep_unpack()); } catch (e) { reject(e); } }));
@@ -71,6 +72,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
         folder.connect('changed', () => settings.set_string('airdrop-folder', folder.text.trim())); airdrop.add(folder);
         sync();
         this.thunderstormPage(window, settings, page, group, toggle, number);
+        this.airpodsPage(settings, page, group, toggle, number);
         const privacy = page('Ablage', 'edit-paste-symbolic');
         const history = group(privacy, 'Verlauf', 'Lokal gespeichert. Aufzeichnung und dauerhafte Speicherung sind anfangs aus.');
         toggle(history, 'clipboard-enabled', 'Zwischenablage aufzeichnen');
@@ -186,5 +188,44 @@ export default class NotchyPreferences extends ExtensionPreferences {
             group.add(add); rows.push(add);
         };
         draw();
+    }
+
+    // AirPods: through the optional airpods-helper daemon (or BlueZ for basics).
+    airpodsPage(settings, page, group, toggle, number) {
+        const pods = page('AirPods', 'audio-headphones-symbolic');
+        const main = group(pods, 'AirPods', 'Akkustände, Geräuschkontrolle und eine Verbindungsanimation in der Island. Notchy nutzt dafür den optionalen Dienst airpods-helper und installiert oder ändert selbst nichts am System.');
+        toggle(main, 'airpods-enabled', 'AirPods-Integration');
+        toggle(main, 'airpods-animation', 'Verbindungsanimation', 'Beim Verbinden wächst die Island kurz und zeigt die Akkustände.');
+        toggle(main, 'airpods-battery-warning', 'Warnung bei niedrigem Akkustand');
+        number(main, 'airpods-battery-threshold', 'Warnen unter (Prozent)', 5, 50, 5);
+        toggle(main, 'airpods-bluez-fallback', 'Ohne airpods-helper: Grunddaten von BlueZ', 'Verbindung und ein Akkustand für Apple-Kopfhörer, sofern das System sie meldet. Keine Geräuschkontrolle.');
+        const backend = group(pods, 'Dienst', '');
+        const status = new Adw.ActionRow({title: 'airpods-helper', subtitle: 'Wird geprüft …'}); backend.add(status);
+        const guide = new Gtk.LinkButton({uri: 'https://github.com/superninjv/airpods-helper#readme', label: 'Anleitung', valign: Gtk.Align.CENTER}); status.add_suffix(guide);
+        const start = new Gtk.Button({label: 'Starten', valign: Gtk.Align.CENTER, visible: false}); status.add_suffix(start);
+        const pause = new Adw.SwitchRow({title: 'Medien pausieren, wenn ein AirPod herausgenommen wird', subtitle: 'Einstellung des Dienstes (PauseOnRemoval); er steuert die Wiedergabe selbst.', sensitive: false});
+        backend.add(pause);
+        let syncing = false;
+        const refresh = async () => {
+            const running = await hasOwner(AIRPODS);
+            const installed = running || await bus('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'ListActivatableNames').then(([names]) => names.includes(AIRPODS)).catch(() => false);
+            start.visible = installed && !running; pause.sensitive = running;
+            if (!running) { status.subtitle = installed ? 'Installiert, läuft aber nicht.' : 'Nicht gefunden. Für Geräuschkontrolle und Akkustände von Buds und Case airpods-helper installieren (Anleitung).'; return; }
+            try {
+                const [props] = await bus(AIRPODS, '/org/costa/AirPods', 'org.freedesktop.DBus.Properties', 'GetAll', new GLib.Variant('(s)', ['org.costa.AirPods']));
+                const value = name => props[name]?.deep_unpack?.() ?? props[name];
+                status.subtitle = `Läuft${value('Version') ? ` (Version ${value('Version')})` : ''} · ${value('Connected') ? `${value('ModelName') || 'AirPods'} verbunden` : 'keine AirPods verbunden'}`;
+                syncing = true; pause.active = Boolean(value('PauseOnRemoval')); syncing = false;
+            } catch (e) { status.subtitle = `Läuft, antwortet aber nicht: ${e.message}`; }
+        };
+        pause.connect('notify::active', () => {
+            if (syncing) return;
+            Gio.DBus.session.call(AIRPODS, '/org/costa/AirPods', 'org.freedesktop.DBus.Properties', 'Set', new GLib.Variant('(ssv)', ['org.costa.AirPods', 'PauseOnRemoval', new GLib.Variant('b', pause.active)]),
+                null, Gio.DBusCallFlags.NONE, 3000, null, (c, r) => { try { c.call_finish(r); } catch { refresh(); } });
+        });
+        // Only on request: D-Bus starts the user's installed service.
+        start.connect('clicked', () => Gio.DBus.session.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'StartServiceByName', new GLib.Variant('(su)', [AIRPODS, 0]),
+            null, Gio.DBusCallFlags.NONE, 10000, null, (c, r) => { try { c.call_finish(r); } catch (e) { status.subtitle = `Start fehlgeschlagen: ${e.message}`; } refresh(); }));
+        refresh();
     }
 }

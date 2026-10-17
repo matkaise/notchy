@@ -116,6 +116,10 @@ export class Island {
         this.life.cleanups.push(this.operations.subscribe(() => this.updateCompact()));
         this.life.cleanups.push(this.companion.subscribe(() => this.syncVisibility()));
         if (this.airdrop) this.life.cleanups.push(this.airdrop.subscribe(() => this.syncAirDrop()));
+        if (this.airpods) {
+            this.life.cleanups.push(this.airpods.onEvent(event => this.airpodsEvent(event)));
+            this.life.cleanups.push(this.airpods.subscribe(() => { if (this.expanded && !this.peeking && this.page === 'media' && !this.views.outputPicker) this.refresh(); }));
+        }
         this.ears = new NotchEars(this);
         this.applyStyle(); this.updateCompact(); this.position(); this.syncVisibility(); this.syncAirDrop();
     }
@@ -526,6 +530,22 @@ export class Island {
         }
         if (airdrop?.state === 'error' && airdrop.detail && this.airdropErrorShown !== airdrop.detail) { this.airdropErrorShown = airdrop.detail; this.toast('dialog-warning-symbolic', 'AirDrop konnte nicht starten'); }
         this.updateCompact();
+    }
+    // AirPods: connecting grows the capsule into a short banner with the
+    // batteries filling up; low batteries and disconnecting are live activities.
+    airpodsEvent(event) {
+        if (this.life.closed) return;
+        const name = event.state?.name || 'AirPods';
+        if (event.type === 'connected') {
+            const shown = this.settings.get_boolean('airpods-animation') && this.peek('airpods', 4200, () => this.views.airpodsPeekView());
+            if (!shown) this.toast('notchy-airpods-symbolic', `${name} verbunden`);
+        } else if (event.type === 'disconnected') {
+            if (this.peekKind === 'airpods') this.close();
+            this.toast('notchy-airpods-symbolic', `${name} getrennt`);
+        } else if (event.type === 'low') {
+            const part = {left: 'links', right: 'rechts', case: 'Case', single: ''}[event.part] ?? '';
+            this.toast('battery-caution-symbolic', `${name}${part ? ` ${part}` : ''}: ${event.level} %`);
+        }
     }
     // Volume/brightness: inline in the closed capsule; GNOME's OSD otherwise.
     hud(gicon, text, level, maxLevel = 1) {

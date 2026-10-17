@@ -30,6 +30,7 @@ import {Island} from './src/ui/island.js';
 import {Drops} from './src/services/drops.js';
 import {FileSearch} from './src/services/filesearch.js';
 import {Launcher} from './src/launcher/launcher.js';
+import {AirPods} from './src/services/airpods.js';
 
 export default class Notchy extends Extension {
     openPreferences() {
@@ -65,6 +66,7 @@ export default class Notchy extends Extension {
             this.operations = new Operations(this, this.shelf); this.companion = new Companion(this, this.shelf, this.operations, this.productivity);
             this.drops = new Drops(this); this.snap = new Snap(this);
             this.files = new FileSearch(this, this.settings); this.launcher = new Launcher(this, this.files);
+            this.airpods = new AirPods(this, this.settings);
             this._rebuild();
             this.life.connect(Main.layoutManager, 'monitors-changed', () => this._rebuild());
             const binds = {
@@ -84,7 +86,7 @@ export default class Notchy extends Extension {
         for (const island of this.islands) island.dispose(); this.islands = [];
         // Notchy lives in the top bar, which GNOME shows on the primary monitor.
         const services = {cover: this.cover, spectrum: this.spectrum, calendar: this.calendar, notifications: this.notifications, productivity: this.productivity, settings: this.settings, store: this.store, shelf: this.shelf, clipboard: this.clipboard,
-            media: this.media, system: this.system, outputs: this.outputs, airdrop: this.airdrop, operations: this.operations, companion: this.companion, launcher: this.launcher};
+            media: this.media, system: this.system, outputs: this.outputs, airdrop: this.airdrop, operations: this.operations, companion: this.companion, launcher: this.launcher, airpods: this.airpods};
         this.services = services;
         const monitor = Main.layoutManager.primaryMonitor;
         if (monitor) this.islands.push(new Island(this, monitor, services));
@@ -181,7 +183,7 @@ export default class Notchy extends Extension {
         this.radial?.dispose(); this.capture?.dispose();
         this.injections?.clear(); this.injections = null; this.life?.dispose();
         for (const island of this.islands ?? []) island.dispose(); this.islands = [];
-        this.files?.dispose(); this.files = this.launcher = null;
+        this.files?.dispose(); this.files = this.launcher = null; this.airpods?.dispose(); this.airpods = null;
         this.companion?.dispose(); this.operations?.dispose(); this.clipboard?.dispose(); this.cover?.dispose(); this.cover = null; this.spectrum?.dispose(); this.spectrum = null; this.outputs?.dispose(); this.outputs = null; this.snap?.dispose(); this.snap = null; this.airdrop?.dispose(); this.airdrop = null; this.media?.dispose(); this.system?.dispose(); this.productivity?.dispose(); this.calendar?.dispose(); this.calendar = null; this.notifications?.dispose(); this.notifications = null; this.shelf?.dispose(); this.store?.dispose();
         this.companion = this.operations = this.clipboard = this.media = this.system = this.shelf = this.store = this.life = this.settings = null;
         this.notificationSources?.clear(); this.productivity = this.radial = this.capture = this.services = null;

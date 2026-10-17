@@ -176,6 +176,12 @@ export class SystemProvider {
                 icon: 'notifications-disabled-symbolic', run: () => { if (ext.notifications) ext.notifications.doNotDisturb = !ext.notifications.doNotDisturb; }},
             {id: 'notchy-settings', title: 'Notchy-Einstellungen', keywords: 'notchy einstellungen preferences thunderstorm quicklinks snippets airpods', icon: 'emblem-system-symbolic',
                 run: () => ext.openPreferences()},
+            ...(ext.airpods?.state ? [ext.airpods.connected
+                ? {id: 'airpods-disconnect', title: 'AirPods trennen', keywords: 'airpods trennen disconnect kopfhörer', icon: 'notchy-airpods-symbolic', run: () => ext.airpods.disconnect()}
+                : {id: 'airpods-connect', title: 'AirPods verbinden', keywords: 'airpods verbinden connect kopfhörer', icon: 'notchy-airpods-symbolic', run: () => ext.airpods.connect()}] : []),
+            ...(ext.airpods?.modes.length ? ext.airpods.modes.map(mode => ({id: `airpods-${mode}`, title: {noise: 'AirPods: Geräuschunterdrückung', transparency: 'AirPods: Transparenzmodus', adaptive: 'AirPods: Adaptiver Modus', off: 'AirPods: Geräuschkontrolle aus'}[mode],
+                keywords: `airpods anc noise ${mode} geräuschunterdrückung transparenz adaptiv aus`, icon: {noise: 'notchy-anc-symbolic', transparency: 'notchy-transparency-symbolic', adaptive: 'notchy-adaptive-symbolic', off: 'notchy-anc-off-symbolic'}[mode],
+                run: () => ext.airpods.setAnc(mode)})) : []),
             {id: 'indexed', title: 'Indizierte Ordner anzeigen', keywords: 'index indizierte ordner dateisuche localsearch tracker suchordner', icon: 'folder-saved-search-symbolic', drill: 'indexed'},
         ];
     }

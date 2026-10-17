@@ -25,6 +25,8 @@ export NOTCHY_AIRDROP_RUNDIR="$notchy_test_services/airdropd"
 # Thunderstorm talks to a stand-in index and never crawls the real home folder.
 export NOTCHY_LOCALSEARCH_NAME=org.notchy.LocalSearchTest
 export NOTCHY_FALLBACK_ROOTS="$PWD/tests/output/thunderstorm"
+# AirPods come from a stand-in airpods-helper daemon on the private bus.
+export NOTCHY_AIRPODS_NAME=org.notchy.AirPodsTest
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
 dbus-run-session -- gnome-shell-test-tool --headless --extra-filter org.notchy.FileTray --extra-filter org.notchy.DropTarget --extra-filter org.notchy.DropSource --extra-filter tray.py --extra-filter python3 --extra-filter gjs --extra-filter org.gnome.Shell.Extensions --extra-filter org.notchy.PreferencesTest --extra-filter org.notchy.LayerFixture --extension "$PWD/dist/notchy@matthias.local.shell-extension.zip" "$PWD/tests/shell.js" 2>&1 | tee tests/output/shell.log
 if [[ -n "${NOTCHY_TEST_CORNERS_ONLY:-}" ]]; then
@@ -36,6 +38,8 @@ elif [[ -n "${NOTCHY_TEST_REGAL_ONLY:-}" ]]; then
     grep -q NOTCHY_REGAL_TEST_OK tests/output/shell.log
 elif [[ -n "${NOTCHY_TEST_LAUNCHER_ONLY:-}" ]]; then
     grep -q NOTCHY_LAUNCHER_TEST_OK tests/output/shell.log
+elif [[ -n "${NOTCHY_TEST_AIRPODS_ONLY:-}" ]]; then
+    grep -q NOTCHY_AIRPODS_TEST_OK tests/output/shell.log
 else
     grep -q NOTCHY_SHELL_TEST_OK tests/output/shell.log
     grep -q NOTCHY_PREFS_TEST_OK tests/output/shell.log

@@ -33,6 +33,11 @@
     <key name="launcher-snippets" type="s"><default>'[{"name": "Freundliche Grüsse", "keyword": "mfg", "text": "Freundliche Grüsse\\n"}, {"name": "Datum heute", "keyword": "heute", "text": "{date}"}]'</default><summary>Thunderstorm text snippets as JSON: name, keyword, text ({date}, {time}, {datetime})</summary></key>
     <key name="launcher-web-search" type="s"><default>'https://duckduckgo.com/?q={query}'</default><summary>Web search template for Thunderstorm's fallback row</summary></key>
     <key name="launcher-extra-folders" type="as"><default>[]</default><summary>Additional folders for the simple file search when LocalSearch is not running</summary></key>
+    <key name="airpods-enabled" type="b"><default>true</default><summary>AirPods integration (through the airpods-helper daemon, or BlueZ for basic status)</summary></key>
+    <key name="airpods-animation" type="b"><default>true</default><summary>Show a short connection animation with the battery levels when AirPods connect</summary></key>
+    <key name="airpods-battery-warning" type="b"><default>true</default><summary>Warn in the island when an AirPod or the case runs low</summary></key>
+    <key name="airpods-battery-threshold" type="i"><default>15</default><range min="5" max="50"/><summary>Battery level in percent below which the island warns</summary></key>
+    <key name="airpods-bluez-fallback" type="b"><default>true</default><summary>Without airpods-helper, show connection and battery of Apple headphones reported by BlueZ</summary></key>
     <key name="toggle-search" type="as"><default>['&lt;Super&gt;space']</default><summary>Thunderstorm search in the island</summary></key>
     <key name="toggle-island" type="as"><default>['&lt;Super&gt;&lt;Control&gt;space']</default><summary>Toggle island</summary></key>
     <key name="toggle-clipboard" type="as"><default>['&lt;Super&gt;&lt;Shift&gt;space']</default><summary>Open clipboard</summary></key>
