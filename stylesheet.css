@@ -207,12 +207,20 @@
 .notchy-search-entry:focus { border: 0; box-shadow: none; }
 .notchy-keycap { font-family: monospace; font-size: 10.5px; padding: 3px 7px; border-radius: 7px; background-color: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); }
 .notchy-results { spacing: 2px; }
-.notchy-result { height: 44px; padding: 0 12px; spacing: 12px; border-radius: 14px; }
+.notchy-result { height: 40px; padding: 0 12px; spacing: 12px; border-radius: 13px; }
 .notchy-result.selected { background-color: rgba(255,255,255,0.1); }
+.notchy-result.confirm { background-color: rgba(233,84,32,0.32); }
 .notchy-result-icon { width: 28px; height: 28px; border-radius: 8px; background-color: rgba(255,255,255,0.12); }
-.notchy-result-icon.accent { background-color: #E95420; }
+.notchy-result-icon.accent, .notchy-result-icon.danger { background-color: #E95420; }
+.notchy-result-glyph { font-size: 17px; }
+.notchy-result-text { spacing: 8px; }
 .notchy-result-title { font-size: 13.5px; }
+.notchy-result-subtitle { font-size: 11.5px; color: rgba(255,255,255,0.42); }
 .notchy-result-kind { font-size: 11.5px; color: rgba(255,255,255,0.5); }
+.notchy-results-section { font-size: 11px; font-weight: bold; color: rgba(255,255,255,0.45); padding: 6px 12px 2px; height: 16px; }
+.notchy-search-footer { height: 26px; padding: 4px 12px 0; spacing: 12px; }
+.notchy-search-footer-text { font-size: 11px; color: rgba(255,255,255,0.42); }
+.notchy-search-footer-key { font-size: 11px; color: rgba(255,255,255,0.65); }
 
 /* ── Live activity banner (notifications) ───────────────────────────── */
 .notchy-peek { padding: 12px 14px 14px 16px; spacing: 12px; }

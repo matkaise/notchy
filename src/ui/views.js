@@ -2,13 +2,14 @@ import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Graphene from 'gi://Graphene';
+import Meta from 'gi://Meta';
 import St from 'gi://St';
 import Shell from 'gi://Shell';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
-import {getAppFavorites} from 'resource:///org/gnome/shell/ui/appFavorites.js';
 import {formatTimeSpan} from 'resource:///org/gnome/shell/misc/dateUtils.js';
 import {box, label, icon, gicon, button, textButton, emptyState, scroll, time} from './widgets.js';
-import {calculate, relativeTime, isoWeek, weekDays, groupBy, SNAP_LAYOUTS, zoneRect} from '../model.js';
+import {relativeTime, isoWeek, weekDays, groupBy, SNAP_LAYOUTS, zoneRect} from '../model.js';
+import {launchUri} from '../launcher/providers.js';
 import {Waveform} from './waveform.js';
 import {Lifetime} from '../lifecycle.js';
 
@@ -485,63 +486,188 @@ export class Views {
         return root;
     }
 
-    // Thunderstorm: the island becomes a search field for apps, the Regal and
-    // arithmetic. ↑↓ choose, ↵ runs, Esc closes.
+    // Thunderstorm: the island becomes a launcher. Apps, files anywhere (GNOME
+    // LocalSearch), the Regal, arithmetic and units, quicklinks and web search,
+    // system and window commands, the clipboard history, snippets and emoji.
+    // ↑↓ choose, ↵ runs, Strg+↵ the second action, Strg+K all actions, Esc
+    // steps back or closes. Providers live in src/launcher/.
     searchView() {
         const root = box(true, {style_class: 'notchy-search'});
         const bar = box(false, {style_class: 'notchy-search-bar'});
         bar.add_child(new St.Icon({icon_name: 'weather-storm-symbolic', icon_size: 22, style_class: 'notchy-search-bolt', y_align: Clutter.ActorAlign.CENTER}));
-        const entry = new St.Entry({style_class: 'notchy-search-entry', hint_text: 'Apps, Dateien, Rechnen …', can_focus: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const entry = new St.Entry({style_class: 'notchy-search-entry', hint_text: 'Apps, Dateien, Befehle, Rechnen …', can_focus: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         bar.add_child(entry); bar.add_child(label('Esc', 'notchy-keycap', {y_align: Clutter.ActorAlign.CENTER}));
         root.add_child(bar); this.focusEntry = entry;
-        const list = box(true, {style_class: 'notchy-results'}); root.add_child(list);
-        let results = [], selected = 0;
-        const run = result => { if (!result) return; this.island.close(); result.run(); };
-        const compute = query => {
-            const q = query.trim().toLocaleLowerCase(), out = [];
-            if (!q) return getAppFavorites().getFavorites().slice(0, 3).map(app => this.appResult(app));
-            const value = /\d/.test(q) ? calculate(q.replace(/,/g, '.')) : null;
-            if (value !== null) {
-                const text = String(Math.round(value * 1e6) / 1e6).replace('.', ',');
-                out.push({title: `= ${text}`, icon: 'accessories-calculator-symbolic', kind: 'Rechner', accent: true, run: () => {
-                    St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text); this.island.toast('edit-copy-symbolic', `${text} kopiert`);
-                }});
+        const list = box(true, {style_class: 'notchy-results'});
+        const view = new St.ScrollView({style_class: 'notchy-scroll notchy-results-scroll', x_expand: true, overlay_scrollbars: true});
+        view.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC); view.set_child(list); root.add_child(view);
+        const footer = box(false, {style_class: 'notchy-search-footer'});
+        const status = label('', 'notchy-search-footer-text', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const hint = label('', 'notchy-search-footer-key', {y_align: Clutter.ActorAlign.CENTER});
+        footer.add_child(status); footer.add_child(hint); root.add_child(footer);
+        // The window that had focus before the launcher took the keyboard.
+        const focusWindow = global.display.focus_window ?? global.display.get_tab_list(Meta.TabList.NORMAL, null)[0] ?? null;
+        const state = {results: [], selected: 0, panel: null, confirm: null, drill: null, pending: false, empty: true, backend: '', error: ''};
+        const island = this.island, launcher = this.launcher;
+        const ctx = {
+            window: focusWindow,
+            toast: (iconName, text) => island.toast(iconName, text),
+            copy: (text, message) => { St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text); island.toast('edit-copy-symbolic', message ?? 'Kopiert'); },
+            setQuery: text => { entry.set_text(text); entry.clutter_text.set_cursor_position(-1); entry.grab_key_focus(); },
+            drill: name => openDrill(name),
+            fileBackend: (backend, error) => { state.backend = backend ?? ''; state.error = error ?? ''; },
+            openFile: file => Gio.File.new_for_uri(file.uri).query_info_async('standard::type,access::can-read,access::can-execute', Gio.FileQueryInfoFlags.NONE, GLib.PRIORITY_DEFAULT, null, (f, result) => {
+                try {
+                    const info = f.query_info_finish(result);
+                    if (!info.get_attribute_boolean('access::can-read')) { island.toast('dialog-warning-symbolic', 'Keine Berechtigung für diese Datei'); return; }
+                    launchUri(file.uri);
+                } catch (e) {
+                    island.toast('dialog-warning-symbolic', e.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND) ? 'Datei nicht mehr vorhanden' : 'Datei nicht erreichbar');
+                }
+            }),
+        };
+        const session = launcher.session(ctx, this.pageLife, (results, info) => {
+            if (state.drill) return;
+            const keep = state.fresh || !state.moved ? null : state.results[state.selected]?.id;
+            state.results = results; state.pending = info.pending; state.empty = Boolean(info.empty);
+            if (state.fresh) state.moved = false;
+            state.fresh = false;
+            // A new query starts at the top, and so does a late answer (files) —
+            // unless the user already moved to a row: then it stays on that row.
+            const index = keep ? results.findIndex(r => r.id === keep) : -1;
+            state.selected = index >= 0 ? index : 0;
+            draw();
+        });
+        this.searchSession = session; this.searchState = state;
+        const ROW = 42, HEADER = 24, VISIBLE = this.settings.get_int('launcher-max-results');
+        const current = () => state.panel ? state.panel.actions : state.results;
+        const run = (result, action) => {
+            if (!result || !action) return;
+            // Shutting down and the like ask first: a second Enter confirms.
+            if (result.confirm && action === result.actions[0] && state.confirm !== result.id) { state.confirm = result.id; draw(); return; }
+            if (action.keepOpen) { state.panel = null; state.confirm = null; action.run(); return; }
+            launcher.record(result); island.close(); action.run();
+        };
+        const activate = (index = state.selected, second = false) => {
+            if (state.panel) { const action = state.panel.actions[index]; if (action) run(state.panel.result, action); return; }
+            const result = state.results[index]; if (!result) return;
+            run(result, second ? result.actions[1] ?? result.actions[0] : result.actions[0]);
+        };
+        const togglePanel = () => {
+            if (state.panel) { state.selected = state.panel.index; state.panel = null; }
+            else { const result = state.results[state.selected]; if (!result?.actions?.length) return; state.panel = {result, actions: result.actions, index: state.selected}; state.selected = 0; }
+            state.confirm = null; draw();
+        };
+        const openDrill = async name => {
+            if (name !== 'indexed') return;
+            session.cancel(); state.drill = name; state.panel = null; state.confirm = null; state.results = []; state.pending = true; draw();
+            const rows = await session.indexed().catch(() => []);
+            if (state.drill !== name || this.pageLife.closed) return;
+            state.results = rows; state.selected = 0; state.pending = false; draw();
+        };
+        const row = (item, index, selected) => {
+            const isAction = Boolean(state.panel), confirming = !isAction && state.confirm === item.id;
+            const classes = ['notchy-result', selected && 'selected', confirming && 'confirm'].filter(Boolean).join(' ');
+            const actor = box(false, {style_class: classes, x_expand: true, x_align: Clutter.ActorAlign.FILL});
+            const tile = new St.Bin({style_class: `notchy-result-icon${item.accent ? ' accent' : ''}${confirming ? ' danger' : ''}`, y_align: Clutter.ActorAlign.CENTER});
+            if (item.glyph) tile.set_child(label(item.glyph, 'notchy-result-glyph', {x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER}));
+            else { const glyph = new St.Icon({icon_size: item.gicon && !item.file ? 22 : 16}); if (item.gicon) glyph.gicon = item.gicon; else glyph.gicon = gicon(item.icon ?? 'go-next-symbolic'); tile.set_child(glyph); }
+            actor.add_child(tile);
+            const text = box(false, {x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'notchy-result-text'});
+            text.add_child(label(confirming ? `${item.confirm} ↵ zum Bestätigen` : item.title, 'notchy-result-title', {y_align: Clutter.ActorAlign.CENTER}));
+            const sub = isAction ? item.shortcut ?? '' : confirming ? 'Esc bricht ab' : item.subtitle ?? '';
+            if (sub) text.add_child(label(sub, 'notchy-result-subtitle', {x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
+            actor.add_child(text);
+            if (!isAction) actor.add_child(label(item.kind, 'notchy-result-kind', {y_align: Clutter.ActorAlign.CENTER}));
+            const b = new St.Button({child: actor, x_expand: true, x_align: Clutter.ActorAlign.FILL, can_focus: false, track_hover: true, reactive: true,
+                accessible_name: isAction ? item.title : `${item.title} · ${item.kind}`});
+            b.connect('clicked', () => activate(index));
+            b.connect('notify::hover', () => { if (b.hover && state.selected !== index) { state.selected = index; state.moved = true; drawSelection(); } });
+            // A right click on a result opens its actions.
+            b.connect('button-press-event', (_b, event) => {
+                if (event.get_button() !== Clutter.BUTTON_SECONDARY || isAction) return Clutter.EVENT_PROPAGATE;
+                state.selected = index; togglePanel(); return Clutter.EVENT_STOP;
+            });
+            b.notchyIndex = index;
+            return b;
+        };
+        const drawSelection = () => {
+            for (const child of list.get_children()) {
+                if (child.notchyIndex === undefined) continue;
+                const inner = child.get_child();
+                child.notchyIndex === state.selected ? inner.add_style_class_name('selected') : inner.remove_style_class_name('selected');
             }
-            out.push(...this.system.apps(q).map(app => this.appResult(app)));
-            out.push(...this.shelf.items.filter(item => item.name.toLocaleLowerCase().includes(q)).map(item => ({title: item.name, icon: 'text-x-generic-symbolic', kind: 'Regal',
-                run: () => Gio.AppInfo.launch_default_for_uri_async(item.uri, global.create_app_launch_context(0, -1), null, null)})));
-            return out.slice(0, 5);
+            drawFooter(); keepVisible();
+        };
+        const keepVisible = () => this.pageLife.later(0, () => {
+            const target = list.get_children().find(child => child.notchyIndex === state.selected), adjust = view.vadjustment;
+            if (!target || !adjust) return;
+            if (target.y < adjust.value) adjust.value = target.y;
+            else if (target.y + target.height > adjust.value + adjust.page_size) adjust.value = target.y + target.height - adjust.page_size;
+        });
+        const drawFooter = () => {
+            const items = current(), item = items[state.selected];
+            if (state.panel) hint.text = `↵ ausführen · Esc zurück`;
+            else if (item) {
+                const confirming = state.confirm === item.id;
+                hint.text = confirming ? '↵ bestätigen · Esc abbrechen' : `↵ ${item.actions[0]?.title ?? 'Öffnen'}${item.actions.length > 1 ? ' · Strg+K Aktionen' : ''}`;
+            } else hint.text = '';
+            const query = entry.get_text().trim();
+            status.text = state.panel ? state.panel.result.title
+                : state.drill ? 'Indizierte Ordner · Esc zurück'
+                : state.pending ? 'Suche Dateien …'
+                : state.backend === 'fallback' && query ? 'Dateiindex nicht aktiv · einfache Suche in persönlichen Ordnern'
+                : !this.settings.get_boolean('launcher-file-search') && query ? 'Dateisuche ist ausgeschaltet'
+                : state.empty ? 'Thunderstorm' : `${state.results.length} ${state.results.length === 1 ? 'Treffer' : 'Treffer'}`;
         };
         const draw = () => {
-            list.destroy_all_children(); list.visible = results.length > 0;
-            results.forEach((result, index) => {
-                const row = box(false, {style_class: `notchy-result${index === selected ? ' selected' : ''}`, x_expand: true, x_align: Clutter.ActorAlign.FILL});
-                const tile = new St.Bin({style_class: `notchy-result-icon${result.accent ? ' accent' : ''}`, y_align: Clutter.ActorAlign.CENTER});
-                const glyph = new St.Icon({icon_size: result.gicon ? 24 : 17}); if (result.gicon) glyph.gicon = result.gicon; else glyph.icon_name = result.icon;
-                tile.set_child(glyph); row.add_child(tile);
-                row.add_child(label(result.title, 'notchy-result-title', {x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
-                row.add_child(label(result.kind, 'notchy-result-kind', {y_align: Clutter.ActorAlign.CENTER}));
-                const b = new St.Button({child: row, x_expand: true, x_align: Clutter.ActorAlign.FILL, can_focus: false, track_hover: true, accessible_name: `${result.title} · ${result.kind}`});
-                b.connect('clicked', () => run(result));
-                b.connect('notify::hover', () => { if (b.hover && selected !== index) { selected = index; draw(); } });
-                list.add_child(b);
+            list.destroy_all_children();
+            const items = current();
+            state.selected = Math.max(0, Math.min(state.selected, items.length - 1));
+            let rows = 0, headers = 0, section = null;
+            if (state.panel) { list.add_child(label(`Aktionen · ${state.panel.result.title}`, 'notchy-results-section')); headers++; }
+            items.forEach((item, index) => {
+                if (!state.panel && item.section && item.section !== section) { section = item.section; list.add_child(label(section, 'notchy-results-section')); headers++; }
+                list.add_child(row(item, index, index === state.selected)); rows++;
             });
+            // The list's own height, up to VISIBLE rows (and its headers); beyond that it scrolls.
+            view.visible = rows > 0;
+            const natural = list.get_preferred_height(-1)[1];
+            view.height = Math.ceil(Math.min(natural, VISIBLE * ROW + Math.min(headers, 3) * HEADER));
+            footer.visible = rows > 0 || state.pending || Boolean(entry.get_text().trim());
+            drawFooter(); keepVisible();
+            this.pageLife.later(0, () => island.resize());
         };
-        const update = () => { results = compute(entry.get_text()); selected = 0; draw(); this.pageLife.later(0, () => this.island.resize()); };
+        const update = () => { state.panel = null; state.confirm = null; state.drill = null; state.fresh = true; session.query(entry.get_text()); };
         entry.clutter_text.connect('text-changed', update);
         entry.clutter_text.connect('key-press-event', (_t, event) => {
-            const key = event.get_key_symbol();
-            if (key === Clutter.KEY_Down) { selected = Math.min(results.length - 1, selected + 1); draw(); return Clutter.EVENT_STOP; }
-            if (key === Clutter.KEY_Up) { selected = Math.max(0, selected - 1); draw(); return Clutter.EVENT_STOP; }
-            if (key === Clutter.KEY_Return || key === Clutter.KEY_KP_Enter) { run(results[selected]); return Clutter.EVENT_STOP; }
-            if (key === Clutter.KEY_Escape) { this.island.close(); return Clutter.EVENT_STOP; }
+            const key = event.get_key_symbol(), mods = event.get_state(), ctrl = Boolean(mods & Clutter.ModifierType.CONTROL_MASK), shift = Boolean(mods & Clutter.ModifierType.SHIFT_MASK);
+            const items = current();
+            const step = delta => { state.selected = Math.max(0, Math.min(items.length - 1, state.selected + delta)); state.confirm = null; state.moved = true; drawSelection(); };
+            if (key === Clutter.KEY_Down) { step(1); return Clutter.EVENT_STOP; }
+            if (key === Clutter.KEY_Up) { step(-1); return Clutter.EVENT_STOP; }
+            if (key === Clutter.KEY_Page_Down) { step(VISIBLE); return Clutter.EVENT_STOP; }
+            if (key === Clutter.KEY_Page_Up) { step(-VISIBLE); return Clutter.EVENT_STOP; }
+            if (key === Clutter.KEY_Return || key === Clutter.KEY_KP_Enter) { activate(state.selected, ctrl && !state.panel); return Clutter.EVENT_STOP; }
+            if (ctrl && (key === Clutter.KEY_k || key === Clutter.KEY_K)) { togglePanel(); return Clutter.EVENT_STOP; }
+            if (ctrl && shift && (key === Clutter.KEY_c || key === Clutter.KEY_C)) {
+                const result = state.results[state.selected], action = result?.actions.find(a => a.title === 'Pfad kopieren');
+                if (action) run(result, action); return Clutter.EVENT_STOP;
+            }
+            if (key === Clutter.KEY_Escape) {
+                // Esc steps back: confirmation, action panel, drill-down, then closes.
+                if (state.confirm) { state.confirm = null; draw(); }
+                else if (state.panel) togglePanel();
+                else if (state.drill) update();
+                else island.close();
+                return Clutter.EVENT_STOP;
+            }
+            if (state.confirm && ![Clutter.KEY_Shift_L, Clutter.KEY_Shift_R, Clutter.KEY_Control_L, Clutter.KEY_Control_R].includes(key)) { state.confirm = null; draw(); }
             return Clutter.EVENT_PROPAGATE;
         });
-        results = compute(''); draw();
+        state.fresh = true; session.query('');
         return root;
     }
-    appResult(app) { return {title: app.get_name(), gicon: app.get_icon(), kind: 'App', run: () => app.activate()}; }
-
     // AirDrop, sending: a radar while the phone is searched for, then the
     // phone it found, a ring while the file goes over, a check at the end.
     airdropSendView() {

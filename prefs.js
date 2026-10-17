@@ -3,6 +3,14 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import {parseList, quicklinkTarget} from './src/launcher/logic.js';
+
+const MINER = 'org.freedesktop.Tracker3.Miner.Files';
+const LOCALSEARCH = GLib.getenv('NOTCHY_LOCALSEARCH_NAME') || 'org.freedesktop.LocalSearch3';
+// A D-Bus call from the preferences window, as a promise.
+const bus = (name, path, iface, method, params = null) => new Promise((resolve, reject) => Gio.DBus.session.call(name, path, iface, method, params, null,
+    Gio.DBusCallFlags.NO_AUTO_START, 3000, null, (c, r) => { try { resolve(c.call_finish(r).deep_unpack()); } catch (e) { reject(e); } }));
+const hasOwner = name => bus('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'NameHasOwner', new GLib.Variant('(s)', [name])).then(([owned]) => owned).catch(() => false);
 
 export default class NotchyPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
@@ -62,6 +70,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
         const folder = new Adw.EntryRow({title: 'Ordner für empfangene Dateien (leer = Downloads/AirDrop)', text: settings.get_string('airdrop-folder')});
         folder.connect('changed', () => settings.set_string('airdrop-folder', folder.text.trim())); airdrop.add(folder);
         sync();
+        this.thunderstormPage(window, settings, page, group, toggle, number);
         const privacy = page('Ablage', 'edit-paste-symbolic');
         const history = group(privacy, 'Verlauf', 'Lokal gespeichert. Aufzeichnung und dauerhafte Speicherung sind anfangs aus.');
         toggle(history, 'clipboard-enabled', 'Zwischenablage aufzeichnen');
@@ -84,5 +93,98 @@ export default class NotchyPreferences extends ExtensionPreferences {
         info.add(new Adw.ActionRow({title: 'GNOME Shell 50 · Wayland · obere Leiste', subtitle: 'Notchy integriert sich in die Uhr der oberen Leiste auf dem Hauptbildschirm.'}));
         info.add(new Adw.ActionRow({title: 'Dateiverarbeitung', subtitle: 'ZIP eingebaut. Bildkonvertierung: ImageMagick. Texterkennung: Tesseract. Video: FFmpeg. Office: LibreOffice.'}));
         info.add(new Adw.ActionRow({title: 'Droplets', subtitle: 'Die kleinen Werkzeuge sind vorerst entfernt und kehren später unter neuem Namen zurück.'}));
+    }
+
+    // Thunderstorm: file search through GNOME LocalSearch, quicklinks, snippets.
+    thunderstormPage(window, settings, page, group, toggle, number) {
+        const storm = page('Thunderstorm', 'weather-storm-symbolic');
+        const search = group(storm, 'Suche', 'Super + Leertaste öffnet Thunderstorm: Apps, Dateien, Befehle, Rechnen und Einheiten, Quicklinks, Ablage, Snippets und Emoji. Alles läuft lokal, ohne Konto und ohne Cloud.');
+        toggle(search, 'launcher-file-search', 'Dateien und Ordner suchen', 'Über den Dateiindex von GNOME LocalSearch. Ohne ihn: eine begrenzte Suche in den persönlichen Ordnern.');
+        number(search, 'launcher-max-results', 'Sichtbare Treffer', 5, 12);
+        const web = new Adw.EntryRow({title: 'Websuche ({query} steht für den Suchbegriff)', text: settings.get_string('launcher-web-search')});
+        web.connect('changed', () => {
+            const valid = quicklinkTarget({url: web.text.trim()}, 'test')?.kind === 'url';
+            valid ? web.remove_css_class('error') : web.add_css_class('error');
+            if (valid) settings.set_string('launcher-web-search', web.text.trim());
+        });
+        search.add(web);
+
+        // Which folders LocalSearch indexes; changes go to LocalSearch's own user settings.
+        const index = group(storm, 'Dateiindex (GNOME LocalSearch)', 'Notchy durchsucht nur, was LocalSearch bereits indiziert. Ordner hier hinzuzufügen ändert die Einstellungen von LocalSearch für deinen Benutzer, nicht das System.');
+        const status = new Adw.ActionRow({title: 'LocalSearch', subtitle: 'Wird geprüft …'}); index.add(status);
+        Promise.all([hasOwner(LOCALSEARCH), hasOwner('org.freedesktop.Tracker3.Miner.Files')]).then(([a, b]) => {
+            status.subtitle = a || b ? 'Läuft · Dateisuche über den Index' : 'Läuft nicht · Thunderstorm sucht einfach in den persönlichen Ordnern. Installiere bzw. aktiviere das Paket „localsearch“ für die volle Suche.';
+        });
+        const source = Gio.SettingsSchemaSource.get_default(), miner = source?.lookup(MINER, true) ? new Gio.Settings({schema_id: MINER}) : null;
+        const home = GLib.get_home_dir(), folderRows = [];
+        const name = path => path === '$HOME' || path === home ? 'Persönlicher Ordner' : path.startsWith('&') ? `${path.slice(1).charAt(0)}${path.slice(2).toLowerCase()} (XDG)` : path.replace(home, '~');
+        const drawFolders = () => {
+            for (const row of folderRows.splice(0)) index.remove(row);
+            if (!miner) { const row = new Adw.ActionRow({title: 'Einstellungen von LocalSearch nicht gefunden', subtitle: 'Ohne LocalSearch gibt es keine indizierten Ordner.'}); index.add(row); folderRows.push(row); return; }
+            for (const path of miner.get_strv('index-recursive-directories')) {
+                const row = new Adw.ActionRow({title: name(path), subtitle: 'Mit Unterordnern indiziert'});
+                const remove = new Gtk.Button({icon_name: 'list-remove-symbolic', valign: Gtk.Align.CENTER, tooltip_text: 'Nicht mehr indizieren', css_classes: ['flat']});
+                remove.connect('clicked', () => { miner.set_strv('index-recursive-directories', miner.get_strv('index-recursive-directories').filter(p => p !== path)); drawFolders(); });
+                row.add_suffix(remove); index.add(row); folderRows.push(row);
+            }
+            const add = new Adw.ButtonRow({title: 'Ordner zum Index hinzufügen …', start_icon_name: 'list-add-symbolic'});
+            add.connect('activated', () => new Gtk.FileDialog({title: 'Ordner für die Dateisuche'}).select_folder(window, null, (dialog, result) => {
+                try {
+                    const folder = dialog.select_folder_finish(result).get_path();
+                    const list = miner.get_strv('index-recursive-directories');
+                    if (folder && !list.includes(folder)) miner.set_strv('index-recursive-directories', [...list, folder]);
+                    drawFolders();
+                } catch { /* Cancelled. */ }
+            }));
+            index.add(add); folderRows.push(add);
+        };
+        drawFolders();
+        const extra = new Adw.EntryRow({title: 'Weitere Ordner für die einfache Suche (ohne LocalSearch, mit Komma trennen)', text: settings.get_strv('launcher-extra-folders').join(', ')});
+        extra.connect('changed', () => settings.set_strv('launcher-extra-folders', extra.text.split(',').map(x => x.trim()).filter(x => x.startsWith('/'))));
+        index.add(extra);
+
+        // Quicklinks: keyword, name, target.
+        const links = group(storm, 'Quicklinks', 'Kürzel, Leerzeichen, Suchbegriff: „yt lofi“, „gh notchy“, „wiki Zürich“. Ziel: eine http(s)-Adresse mit {query} oder {path}, xdg:DOWNLOAD, ein Ordner (~/…) oder app:ID.desktop.');
+        this.listEditor(links, settings, 'launcher-quicklinks', ['keyword', 'name', 'url'], [['name', 'Name'], ['keyword', 'Kürzel'], ['url', 'Ziel']],
+            item => item.name || item.keyword || 'Neuer Quicklink', item => quicklinkTarget(item, 'test') !== null && /^\S+$/.test(item.keyword), {keyword: '', name: '', url: 'https://'});
+        // Snippets: name, keyword, text.
+        const snippets = group(storm, 'Snippets', 'Textbausteine: Name oder Kürzel eingeben, Enter kopiert. {date}, {time} und {datetime} werden ersetzt. Automatisches Einfügen in andere Apps ist unter Wayland nicht zuverlässig und sicher möglich und wird daher nicht angeboten.');
+        this.listEditor(snippets, settings, 'launcher-snippets', ['name', 'text'], [['name', 'Name'], ['keyword', 'Kürzel (optional)'], ['text', 'Text']],
+            item => item.name || 'Neues Snippet', item => Boolean(item.name && item.text), {name: '', keyword: '', text: ''});
+    }
+    // An editable list stored as JSON in one setting: one expander per entry.
+    listEditor(group, settings, key, required, fields, title, valid, blank) {
+        const rows = [];
+        const read = () => parseList(settings.get_string(key), required);
+        const save = items => settings.set_string(key, JSON.stringify(items));
+        const draw = () => {
+            for (const row of rows.splice(0)) group.remove(row);
+            const items = read();
+            items.forEach((item, i) => {
+                const expander = new Adw.ExpanderRow({title: title(item), subtitle: item.keyword ?? ''});
+                for (const [field, label] of fields) {
+                    const entry = new Adw.EntryRow({title: label, text: String(item[field] ?? '').replace(/\n/g, '\\n')});
+                    entry.connect('changed', () => {
+                        const next = read(); if (!next[i]) return;
+                        next[i] = {...next[i], [field]: field === 'text' ? entry.text.replace(/\\n/g, '\n') : entry.text.trim()};
+                        const ok = valid(next[i]);
+                        ok ? expander.remove_css_class('error') : expander.add_css_class('error');
+                        expander.title = title(next[i]); expander.subtitle = next[i].keyword ?? '';
+                        save(next);
+                    });
+                    expander.add_row(entry);
+                }
+                const remove = new Gtk.Button({icon_name: 'user-trash-symbolic', valign: Gtk.Align.CENTER, tooltip_text: 'Entfernen', css_classes: ['flat']});
+                remove.connect('clicked', () => { save(read().filter((_x, j) => j !== i)); draw(); });
+                expander.add_suffix(remove);
+                if (!valid(item)) expander.add_css_class('error');
+                group.add(expander); rows.push(expander);
+            });
+            const add = new Adw.ButtonRow({title: 'Hinzufügen', start_icon_name: 'list-add-symbolic'});
+            // A new entry is stored only once it has its required fields.
+            add.connect('activated', () => { const items = read(); items.push({...blank, name: blank.name || 'Neu', ...(required.includes('text') ? {text: ' '} : {})}); save(items); draw(); });
+            group.add(add); rows.push(add);
+        };
+        draw();
     }
 }

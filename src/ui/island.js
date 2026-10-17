@@ -555,7 +555,7 @@ export class Island {
     }
     radialClick(event) {
         if (event.type() !== Clutter.EventType.BUTTON_PRESS || event.get_button() !== Clutter.BUTTON_SECONDARY) return Clutter.EVENT_PROPAGATE;
-        if (this.page === 'clipboard' && this.expanded && this.body.contains(global.stage.get_event_actor(event))) return Clutter.EVENT_PROPAGATE;
+        if (['clipboard', 'search'].includes(this.page) && this.expanded && this.body.contains(global.stage.get_event_actor(event))) return Clutter.EVENT_PROPAGATE;
         this.extension.radial?.open();
         return Clutter.EVENT_STOP;
     }

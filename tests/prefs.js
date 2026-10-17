@@ -13,6 +13,16 @@ const app = new Adw.Application({application_id: 'org.notchy.PreferencesTest'});
 app.connect('activate', () => {
     const window = new Adw.PreferencesWindow({application: app, title: 'Notchy Test Preferences'});
     prefs.fillPreferencesWindow(window); window.present();
-    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => { print('NOTCHY_PREFS_TEST_OK'); window.close(); app.quit(); return GLib.SOURCE_REMOVE; });
+    // Every widget below the window, for checks on the new pages.
+    const all = widget => { const out = [widget]; for (let c = widget.get_first_child(); c; c = c.get_next_sibling()) out.push(...all(c)); return out; };
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+        const widgets = all(window), titles = widgets.filter(w => w instanceof Adw.PreferencesPage).map(w => w.title);
+        const missing = ['Darstellung', 'Thunderstorm', 'Ablage', 'Tastenkürzel', 'Info'].filter(t => !titles.includes(t));
+        const quicklinks = widgets.filter(w => w instanceof Adw.ExpanderRow).map(w => w.title);
+        if (missing.length) print(`NOTCHY_PREFS_TEST_FAILED: missing pages ${missing.join(', ')}`);
+        else if (!['YouTube', 'GitHub', 'Wikipedia', 'Freundliche Grüsse'].every(t => quicklinks.includes(t))) print(`NOTCHY_PREFS_TEST_FAILED: quicklink and snippet editors (${quicklinks.join(', ')})`);
+        else { print('PASS: preferences offer a Thunderstorm page (quicklinks, snippets, file index)'); print('NOTCHY_PREFS_TEST_OK'); }
+        window.close(); app.quit(); return GLib.SOURCE_REMOVE;
+    });
 });
 app.run([]);

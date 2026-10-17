@@ -58,6 +58,10 @@ export async function run() {
         await regalMenuRegressions(ext, path, screenshot); ext.disable();
         print('NOTCHY_REGAL_TEST_OK'); return;
     }
+    if (GLib.getenv('NOTCHY_TEST_LAUNCHER_ONLY')) {
+        await launcherRegressions(ext, path, screenshot); ext.disable();
+        print('NOTCHY_LAUNCHER_TEST_OK'); return;
+    }
     if (GLib.getenv('NOTCHY_TEST_DROP_ONLY')) {
         ext.settings.set_boolean('clipboard-enabled', true);
         await interactionRegressions(ext, path, screenshot); ext.disable();
@@ -144,7 +148,7 @@ export async function run() {
     island.toggle('search'); await Scripting.sleep(400);
     island.views.focusEntry.set_text('einstellungen'); await Scripting.sleep(400);
     island.views.focusEntry.set_text('xyz-no-match'); await Scripting.sleep(400);
-    assert(!styled(island.body, 'notchy-result').length, 'search without matches shows only the field'); await key(Clutter.KEY_Escape);
+    assert(styled(island.body, 'notchy-result').length === 1 && island.views.searchState.results[0]?.kind === 'Web', 'search without matches offers only the web search'); await key(Clutter.KEY_Escape);
 
     // Radial capture menu; a full-screen shot lands in the Regal.
     await Scripting.sleep(400); ext.radial.open(); await Scripting.sleep(600);
@@ -274,6 +278,7 @@ export async function run() {
 
     await interactionRegressions(ext, path, screenshot);
     await regalMenuRegressions(ext, path, screenshot);
+    await launcherRegressions(ext, path, screenshot);
     mock.force_exit(); await Scripting.sleep(300); assert(ext.media.state === null && !island.panelSurface.has_style_class_name('notchy-wide'), 'MPRIS player removal empties the capsule');
     keyboard.run_dispose();
     const life = ext.life; ext.disable(); assert(life.closed && life.sources.size === 0, 'disable removes timers and signals');
@@ -849,4 +854,170 @@ async function regalMenuRegressions(ext, path, screenshot) {
         await move(20, 650); await Scripting.sleep(700);
         assert(!island.expanded, `leaving the Regal collapses the island even after hovering it before (hovered ${island.hovered})`);
     } finally { pointer.run_dispose(); keyboard.run_dispose(); ext.settings.set_boolean('hover-open', true); ext.settings.set_int('collapse-delay', 700); island.close(true); }
+}
+
+// Thunderstorm as a launcher: files through a stand-in LocalSearch, debouncing and
+// stale answers, ranking, the action panel, quicklinks, units, commands with
+// confirmation, windows, clipboard, snippets, emoji and the fallback search.
+async function launcherRegressions(ext, path, screenshot) {
+    const island = ext.islands[0];
+    const keyboard = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+    const press = async (keyval, wait = 200) => { keyboard.notify_keyval(GLib.get_monotonic_time(), keyval, Clutter.KeyState.PRESSED); keyboard.notify_keyval(GLib.get_monotonic_time(), keyval, Clutter.KeyState.RELEASED); await Scripting.sleep(wait); };
+    const chord = async (modifiers, keyval, wait = 250) => {
+        for (const m of modifiers) keyboard.notify_keyval(GLib.get_monotonic_time(), m, Clutter.KeyState.PRESSED);
+        await press(keyval, 60); for (const m of [...modifiers].reverse()) keyboard.notify_keyval(GLib.get_monotonic_time(), m, Clutter.KeyState.RELEASED); await Scripting.sleep(wait);
+    };
+    const waitFor = async (condition, ms = 4000) => { for (let i = 0; i < ms / 50 && !condition(); i++) await Scripting.sleep(50); return condition(); };
+    const state = () => island.views.searchState, titles = () => state().results.map(r => r.title);
+    const type = async (text, wait = 120) => { island.views.focusEntry.set_text(text); await Scripting.sleep(wait); };
+    const open = async () => { island.close(true); await Scripting.sleep(150); island.toggle('search'); await Scripting.sleep(400); };
+    const {system} = await import(`${ext.dir.get_uri()}/src/launcher/providers.js`);
+    const realSystem = {open: system.open, call: system.call}, opened = [], calls = [];
+    system.open = uri => opened.push(uri);
+    system.call = (bus, name, objectPath, iface, method, params) => { calls.push({bus, name, iface, method, params: params?.deep_unpack() ?? null}); return Promise.resolve(null); };
+    const root = `${path}/thunderstorm`; GLib.mkdir_with_parents(`${root}/Berichte`, 0o700); GLib.mkdir_with_parents(`${root}/.geheim`, 0o700);
+    const files = ['Bericht Quartal.pdf', 'Notizen zum bericht.txt', '.geheim/bericht privat.txt'].map(name => `${root}/${name}`);
+    for (const file of files) GLib.file_set_contents(file, 'fixture');
+    const indexed = [...files, `${root}/Berichte`, `${root}/verschwunden/bericht alt.txt`];
+    const log = `${path}/localsearch-queries.log`; GLib.unlink(log);
+    const queries = () => { try { return new TextDecoder().decode(GLib.file_get_contents(log)[1]).trim().split('\n').filter(Boolean).map(JSON.parse); } catch { return []; } };
+    const mock = Gio.Subprocess.new(['/usr/bin/python3', here('mock_localsearch.py'), log, 'ber', ...indexed], Gio.SubprocessFlags.NONE);
+    ext.settings.set_boolean('hover-open', false);
+    try {
+        await Scripting.sleep(600);
+        // Files from the index: names, kinds, ranking, no hidden or vanished files.
+        await open();
+        assert(island.page === 'search' && state().empty, 'Thunderstorm opens with its start list');
+        await type('quartal');
+        await waitFor(() => titles().includes('Bericht Quartal.pdf'));
+        const report = state().results.find(r => r.title === 'Bericht Quartal.pdf');
+        assert(report && report.kind === 'Datei' && report.subtitle.endsWith('tests/output/thunderstorm') && state().backend === 'localsearch', `files come from the LocalSearch index with name, kind and folder (${titles().join(', ')})`);
+        assert(state().selected === 0 && titles()[0] === 'Bericht Quartal.pdf', 'file results arriving late take the top and the selection, above the web search');
+        await Scripting.sleep(400); await screenshot('thunderstorm-files');
+        await type('berichte'); await waitFor(() => titles().includes('Berichte') && !state().pending, 3000);
+        assert(state().results.find(r => r.title === 'Berichte')?.kind === 'Ordner', 'folders are listed as folders');
+        await type('bericht'); await waitFor(() => !state().pending && titles().includes('Notizen zum bericht.txt'), 4000);
+        const order = titles();
+        assert(!order.includes('bericht privat.txt') && !order.includes('bericht alt.txt'), 'hidden files and files no longer on disk are left out');
+        assert(order.indexOf('Bericht Quartal.pdf') < order.indexOf('Notizen zum bericht.txt') && order.indexOf('Berichte') < order.indexOf('Notizen zum bericht.txt'), `a name starting with the query ranks above one containing it (${order.join(', ')})`);
+        // Fast typing: one index query for a burst of keystrokes.
+        GLib.unlink(log);
+        for (const text of ['q', 'qu', 'qua', 'quar', 'quart', 'quarta', 'quartal']) await type(text, 25);
+        await waitFor(() => !state().pending && titles().includes('Bericht Quartal.pdf'));
+        const burst = queries();
+        assert(burst.length === 1 && burst[0].terms === 'quartal*', `a burst of keystrokes asks the index once (${burst.map(q => q.terms).join(' ')})`);
+        // A slow answer to an older query never replaces the newer one.
+        await type('berich', 400); await type('quartal', 50);
+        await waitFor(() => queries().some(q => q.terms === 'quartal*') && !state().pending, 4000); await Scripting.sleep(1200);
+        assert(titles().includes('Bericht Quartal.pdf') && !titles().includes('Notizen zum bericht.txt') && !titles().includes('Berichte'), `a late answer to an overtaken query is dropped (${titles().join(', ')})`);
+        // The action panel and safe file actions.
+        await type('quartal'); await waitFor(() => titles()[0] === 'Bericht Quartal.pdf' || titles().includes('Bericht Quartal.pdf'));
+        state().selected = state().results.findIndex(r => r.title === 'Bericht Quartal.pdf');
+        await chord([Clutter.KEY_Control_L], Clutter.KEY_k);
+        assert(state().panel && state().panel.actions.map(a => a.title).join('|') === 'Öffnen|Im Dateimanager zeigen|Pfad kopieren|Ins Regal legen', `Ctrl+K opens the result's actions (${state().panel?.actions.map(a => a.title)})`);
+        await screenshot('thunderstorm-actions');
+        await press(Clutter.KEY_Down); await press(Clutter.KEY_Down); await press(Clutter.KEY_Return, 400);
+        assert(!island.expanded && await clipboardText() === files[0], 'the panel copies the file path');
+        await open(); await type('quartal'); await waitFor(() => titles().includes('Bericht Quartal.pdf'));
+        state().selected = state().results.findIndex(r => r.title === 'Bericht Quartal.pdf');
+        await chord([Clutter.KEY_Control_L], Clutter.KEY_Return, 400);
+        assert(calls.some(c => c.method === 'ShowItems' && c.params[0][0] === Gio.File.new_for_path(files[0]).get_uri()), 'Ctrl+Enter shows the file in the file manager');
+        await open(); await type('quartal'); await waitFor(() => titles().includes('Bericht Quartal.pdf'));
+        state().selected = state().results.findIndex(r => r.title === 'Bericht Quartal.pdf');
+        await press(Clutter.KEY_Return, 600);
+        assert(opened.at(-1) === Gio.File.new_for_path(files[0]).get_uri(), 'Enter opens the file after checking it still exists');
+        // Arithmetic (kept) and units.
+        await open(); await type('2+3*4');
+        assert(titles()[0] === '= 14', 'the calculator still answers first');
+        await type('10 km in mi');
+        assert(titles()[0] === '= 6,2137119 mi' && state().results[0].kind === 'Umrechnung', `units convert (${titles()[0]})`);
+        await press(Clutter.KEY_Return, 300);
+        assert(await clipboardText() === '6,2137119', 'Enter copies the converted value');
+        await open(); await type('72 °F');
+        assert(titles()[0] === '= 22,222222 °C', `temperatures convert without a target (${titles()[0]})`);
+        // Quicklinks with a URL-encoded argument; the web search row comes last.
+        await type('yt lofi & chill');
+        assert(titles()[0] === 'YouTube: lofi & chill' && state().results.at(-1).kind === 'Web', `a quicklink takes its argument (${titles().join(', ')})`);
+        await press(Clutter.KEY_Return, 300);
+        assert(opened.at(-1) === 'https://www.youtube.com/results?search_query=lofi%20%26%20chill', `the quicklink opens with the argument encoded (${opened.at(-1)})`);
+        await open(); await type('gh');
+        await press(Clutter.KEY_Return, 300);
+        assert(island.expanded && island.views.focusEntry.get_text() === 'gh ', 'Enter on a quicklink without argument completes its keyword');
+        await type('gh matkaise/notchy'); await press(Clutter.KEY_Return, 300);
+        assert(opened.at(-1) === 'https://github.com/matkaise/notchy', 'gh owner/repo opens the repository directly');
+        // System commands through GNOME's D-Bus interfaces; shutting down asks first.
+        await open(); await type('sperren');
+        assert(titles()[0] === 'Bildschirm sperren', 'commands are found by German words');
+        await press(Clutter.KEY_Return, 300);
+        assert(calls.at(-1)?.name === 'org.gnome.ScreenSaver' && calls.at(-1).method === 'Lock', 'locking goes through GNOME\'s ScreenSaver interface');
+        await open(); await type('audio');
+        assert(titles().includes('Audioeinstellungen'), 'the sound settings are a command');
+        await open(); await type('ausschalten');
+        const before = calls.length;
+        await press(Clutter.KEY_Return, 300);
+        assert(calls.length === before && island.expanded && state().confirm === 'cmd:shutdown', 'shutting down asks for confirmation first');
+        await screenshot('thunderstorm-confirm');
+        await press(Clutter.KEY_Escape, 250);
+        assert(island.expanded && !state().confirm && calls.length === before, 'Escape cancels the confirmation');
+        await press(Clutter.KEY_Return, 200); await press(Clutter.KEY_Return, 300);
+        assert(calls.at(-1)?.method === 'RequestShutdown' && calls.at(-1).name === 'org.gnome.SessionManager', 'a second Enter shuts down through the session manager');
+        await open(); await type('neu starten'); await press(Clutter.KEY_Return, 200);
+        assert(state().confirm === 'cmd:restart', 'restarting asks too'); await press(Clutter.KEY_Escape);
+        // The empty field lists recently used results.
+        await type('');
+        assert(state().results.some(r => r.section === 'Zuletzt verwendet' && r.title === 'Bildschirm sperren'), 'recently used results return on the empty field');
+        await Scripting.sleep(400); await screenshot('thunderstorm-empty');
+        const scroller = styled(island.body, 'notchy-results-scroll')[0], content = scroller.get_child();
+        assert(Math.abs(island.surface.height - island.body.height) <= 2 && scroller.height >= Math.min(content.height, scroller.height) && scroller.vadjustment.upper - scroller.vadjustment.page_size <= 1, `the island fits the start list without scrolling (${scroller.height} of ${content.height})`);
+        // Emoji and special characters.
+        await type(':herz');
+        const emoji = state().results.filter(r => r.kind !== 'Web');
+        assert(emoji.length >= 5 && emoji.every(r => ['Emoji', 'Zeichen'].includes(r.kind)) && emoji[0].glyph === '❤️', `emoji are found by German names (${emoji.slice(0, 4).map(r => r.glyph).join(' ')})`);
+        await screenshot('thunderstorm-emoji');
+        await type('emoji daumen hoch'); await press(Clutter.KEY_Return, 300);
+        assert(await clipboardText() === '👍', 'Enter copies an emoji');
+        // Snippets and the clipboard history.
+        await open(); await type('mfg'); await press(Clutter.KEY_Return, 300);
+        assert(await clipboardText() === 'Freundliche Grüsse\n', 'a snippet is copied by its keyword');
+        ext.settings.set_boolean('clipboard-enabled', true);
+        St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, 'Bestellnummer 4711-ABC'); await Scripting.sleep(400);
+        St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, 'anderes'); await Scripting.sleep(400);
+        await open(); await type('ablage 4711');
+        assert(titles()[0] === 'Bestellnummer 4711-ABC' && state().results[0].kind === 'Ablage', 'the clipboard history is searchable');
+        await press(Clutter.KEY_Return, 300);
+        assert(await clipboardText() === 'Bestellnummer 4711-ABC', 'Enter copies the history entry back');
+        ext.settings.set_boolean('clipboard-enabled', false);
+        await open(); await type('ablage 4711');
+        assert(!state().results.some(r => r.kind === 'Ablage'), 'without recording, the history stays out of the launcher');
+        // Window commands for the window focused before the launcher opened.
+        const windowFixture = Gio.Subprocess.new(['/usr/bin/python3', here('mock_window.py')], Gio.SubprocessFlags.NONE);
+        let fixture = null;
+        for (let i = 0; i < 50 && !fixture; i++) { await Scripting.sleep(100); fixture = global.get_window_actors().map(a => a.meta_window).find(w => w.get_title() === 'Notchy Layer Fixture'); }
+        try {
+            island.close(true); fixture.activate(global.get_current_time()); await Scripting.sleep(400);
+            await open(); await type('links anordnen');
+            assert(titles()[0] === 'Fenster links anordnen' && state().results[0].subtitle === 'Notchy Layer Fixture', 'window commands act on the window focused before');
+            await press(Clutter.KEY_Return, 600);
+            const area = Main.layoutManager.getWorkAreaForMonitor(island.monitor.index), rect = fixture.get_frame_rect();
+            assert(rect.x === area.x && Math.abs(rect.width - Math.round(area.width / 2)) <= 1 && rect.height === area.height, `the window takes the left half (${rect.x},${rect.y} ${rect.width}x${rect.height})`);
+            await open(); await type('maximieren'); await press(Clutter.KEY_Return, 600);
+            assert(fixture.is_maximized(), 'the window can be maximised from the launcher');
+        } finally { windowFixture.force_exit(); await Scripting.sleep(300); }
+        // Indexed folders on request.
+        await open(); await type('indizierte ordner'); await press(Clutter.KEY_Return, 800);
+        assert(island.expanded && state().drill === 'indexed' && state().results.some(r => r.section?.startsWith('Von GNOME LocalSearch')), `the indexed folders are listed transparently (${island.expanded} ${state().drill} ${state().results.map(r => `${r.section}: ${r.title}`).join(', ')})`);
+        await press(Clutter.KEY_Escape, 300);
+        assert(island.expanded && !state().drill, 'Escape leaves the folder list');
+        // Without the indexer: a clear message and the bounded simple search.
+        mock.force_exit(); await Scripting.sleep(400);
+        await type('quartal'); await waitFor(() => !state().pending, 6000);
+        assert(state().backend === 'fallback' && titles().includes('Bericht Quartal.pdf') && styled(island.body, 'notchy-search-footer-text')[0]?.text.includes('einfache Suche'), `without LocalSearch the simple search finds files and says so (${titles().join(', ')})`);
+        await screenshot('thunderstorm-fallback');
+        await press(Clutter.KEY_Escape);
+        assert(!island.expanded, 'Escape closes Thunderstorm');
+    } finally {
+        system.open = realSystem.open; system.call = realSystem.call;
+        try { mock.force_exit(); } catch { /* Already ended. */ }
+        keyboard.run_dispose(); ext.settings.set_boolean('hover-open', true); island.close(true);
+    }
 }

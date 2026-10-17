@@ -1,1 +1,1 @@
-{"name":"notchy","version":"0.1.0","private":true,"type":"module","scripts":{"test":"node --test tests/model.test.js","check":"bash scripts/check.sh","pack":"bash scripts/pack.sh","test:shell":"bash scripts/test-shell.sh"}}
+{"name":"notchy","version":"0.1.0","private":true,"type":"module","scripts":{"test":"node --test tests/model.test.js tests/launcher.test.js","check":"bash scripts/check.sh","pack":"bash scripts/pack.sh","test:shell":"bash scripts/test-shell.sh"}}
