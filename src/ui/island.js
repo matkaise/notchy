@@ -334,10 +334,13 @@ export class Island {
     }
     get nativeShelf() { return this.companion.shelfIsland === this; }
     get hovered() {
-        if (this.actor.hover || this.panelButton?.hover) return true;
-        if (!this.nativeShelf) return false;
-        const [x, y] = global.get_pointer(), [nx, ny] = this.nav.get_transformed_position();
-        return this.companion.containsShelfPoint(x, y) || (this.nav.mapped && x >= nx && x <= nx + this.nav.width && y >= ny && y <= ny + this.nav.height);
+        if (this.panelButton?.hover) return true;
+        if (!this.nativeShelf) return this.actor.hover;
+        // With the native Regal the island is not reactive, so Clutter's hover
+        // flag would keep whatever it was when that switched (and never clear):
+        // the pointer is tested against the surface, the pane and its menu.
+        const [x, y] = global.get_pointer(), [ax, ay] = this.actor.get_transformed_position();
+        return this.companion.containsShelfPoint(x, y) || (x >= ax && x <= ax + this.actor.width && y >= ay && y <= ay + this.actor.height);
     }
     hoverChanged() {
         if (this.dropActive || this.extension.drops?.dragging) return;
@@ -621,6 +624,10 @@ export class Island {
             }});
         }
         this.actor.reactive = !this.nativeShelf && !this.dropActive;
+        // While the Regal's context menu is open, it may reach over the tab
+        // bar; its clicks belong to the menu (or dismiss it), never to a tab.
+        const menuOpen = this.nativeShelf && this.companion.menuOpen;
+        for (const [, tab] of this.navButtons) tab.reactive = !menuOpen;
         if (this.nativeShelf) this.companion.syncShelfVisibility();
         this.ears?.sync();
     }

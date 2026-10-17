@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """Native Wayland drag source/target for the Regal and the floating Korb, positioned by the extension."""
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -55,16 +56,6 @@ flowboxchild:selected { background: rgba(255,179,138,0.16); box-shadow: inset 0 
 .basket .thumb { min-width: 38px; min-height: 48px; border-radius: 7px; }
 .basket .ext { font-size: 8.5px; margin-bottom: 4px; }
 .basket .zone-hint { font-size: 11.5px; color: rgba(255,255,255,0.65); }
-.sheet { padding: 2px 0 12px; }
-.sheet-title { font-size: 12.5px; font-weight: 700; }
-.sheet-label { font-size: 11.5px; color: rgba(255,255,255,0.5); margin-right: 4px; }
-.sheet flowboxchild { padding: 0; background: transparent; box-shadow: none; }
-button.sheet-action { background: rgba(255,255,255,0.06); border-radius: 14px; padding: 9px 12px; }
-button.sheet-action:hover { background: rgba(255,255,255,0.12); }
-button.sheet-action image { color: rgba(255,255,255,0.8); }
-button.sheet-action.danger, button.sheet-action.danger image { color: #ffb38a; }
-button.chip { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 3px 10px; font-size: 11.5px; min-height: 20px; }
-button.chip:hover { background: rgba(233,84,32,0.55); }
 '''
 WINDOW_CSS = '''
 .tray.shelf { padding: 8px 22px 0; border-radius: 0; border: none; }
@@ -78,6 +69,21 @@ window.notchy-files, window.notchy-files > contents {
     background: transparent; background-image: none; color: #f4f4f6;
     border: none; box-shadow: none; padding: 0; margin: 0;
 }
+/* The file context menu: a real popup (its own Wayland surface) in Notchy's
+   dark glass style, above a user theme's popover styling. */
+popover.notchy-menu { background: transparent; box-shadow: none; padding: 0; margin: 0; }
+popover.notchy-menu > contents {
+    background: rgba(28,26,31,0.98); background-image: none; color: #f4f4f6; border-radius: 14px; padding: 5px;
+    border: 1px solid rgba(255,255,255,0.09); box-shadow: 0 10px 28px rgba(0,0,0,0.45); min-width: 220px;
+}
+popover.notchy-menu > arrow { background: transparent; border: none; }
+popover.notchy-menu button.ctx-item { background: transparent; border-radius: 9px; padding: 4px 10px; min-height: 24px; font-size: 12.5px; box-shadow: none; border: none; outline: none; }
+popover.notchy-menu button.ctx-item:hover, popover.notchy-menu button.ctx-item:focus-visible, popover.notchy-menu button.ctx-item:focus { background: rgba(255,255,255,0.1); }
+popover.notchy-menu button.ctx-item image { color: rgba(255,255,255,0.78); }
+popover.notchy-menu button.ctx-item.danger, popover.notchy-menu button.ctx-item.danger image { color: #ffb38a; }
+popover.notchy-menu separator { margin: 4px 8px; background: rgba(255,255,255,0.1); min-height: 1px; }
+popover.notchy-menu .ctx-title { font-size: 11.5px; font-weight: 700; color: rgba(255,255,255,0.55); padding: 3px 10px 3px; }
+popover.notchy-menu .ctx-accel { color: rgba(255,255,255,0.38); font-size: 11px; }
 '''
 
 
@@ -179,16 +185,22 @@ class Tray(Gtk.Application):
         self.empty.append(Gtk.Image.new_from_icon_name('document-save-symbolic'))
         self.empty.append(Gtk.Label(label='Dateien auf die Island ziehen'))
         self.area.append(self.empty)
-        # A file's actions open as a page of the pane itself rather than as a
-        # popover: a popup window would sit below the Shell's island and be cut off.
-        self.stack = Gtk.Stack(vexpand=True, transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=160)
-        self.stack.add_named(self.area, 'grid')
-        self.sheet = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, css_classes=['sheet'])
-        sheet_scroll = Gtk.ScrolledWindow(vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
-        sheet_scroll.set_child(self.sheet)
-        self.stack.add_named(sheet_scroll, 'menu')
-        self.menu_item = None
-        root.append(self.stack)
+        root.append(self.area)
+        # A file's actions open as a real context menu: a GTK popover, which is
+        # its own Wayland popup surface at the pointer. The Shell shows shelf
+        # popups on top of the island and lets their input through
+        # (Companion.trackPopup), so the island never covers them.
+        self.popover = Gtk.Popover(has_arrow=False, autohide=True, position=Gtk.PositionType.BOTTOM, css_classes=['notchy-menu'])
+        self.popover.set_parent(self.area)
+        self.popover.connect('closed', lambda *_: self.menu_closed())
+        menu_keys = Gtk.EventControllerKey()
+        menu_keys.connect('key-pressed', self.menu_key)
+        self.popover.add_controller(menu_keys)
+        self.menu_stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.SLIDE_LEFT_RIGHT, transition_duration=140,
+                                    vhomogeneous=False, hhomogeneous=False, interpolate_size=True)
+        self.popover.set_child(self.menu_stack)
+        self.menu_open = False
+        self.menu_items = []
         self.flow.connect('selected-children-changed', lambda *_: self.update_selection())
         # Selecting like a file manager. With activate-on-single-click (GTK's
         # default) a plain click only ever ADDS a tile to the selection; off, a
@@ -234,10 +246,9 @@ class Tray(Gtk.Application):
 
     def key(self, _controller, keyval, _code, state):
         if keyval == Gdk.KEY_Escape:
-            # Esc first leaves a file's actions, then clears a selection, then closes.
-            if self.kind == 'shelf' and self.menu_item:
-                self.close_menu()
-            elif self.kind == 'shelf' and self.selected_children():
+            # Esc first clears a selection, then closes. (An open context
+            # menu is its own popup surface and takes its Esc itself.)
+            if self.kind == 'shelf' and self.selected_children():
                 self.flow.unselect_all()
             else:
                 self.close()
@@ -247,6 +258,14 @@ class Tray(Gtk.Application):
             return True
         if keyval == Gdk.KEY_Delete and self.kind == 'shelf':
             self.remove_selected()
+            return True
+        # The keyboard way to the context menu: Menu or Shift+F10 on the selection.
+        if self.kind == 'shelf' and (keyval == Gdk.KEY_Menu or (keyval == Gdk.KEY_F10 and state & Gdk.ModifierType.SHIFT_MASK)):
+            selected = self.selected_children()
+            if selected:
+                ok, bounds = selected[0].compute_bounds(self.area)
+                if ok:
+                    self.context_menu(bounds.get_x() + bounds.get_width() / 2, bounds.get_y() + bounds.get_height() / 2)
             return True
         return False
 
@@ -295,6 +314,8 @@ class Tray(Gtk.Application):
         self.shade_provider.load_from_data(css.encode())
         self.set_airdrop(config.get('airdrop'))
         self.window.set_default_size(config['width'], config['height'])
+        if not config['visible'] and self.menu_open:
+            self.popover.popdown()
         self.window.set_visible(config['visible'])
 
     def call(self, method, values=None, done=None):
@@ -391,7 +412,7 @@ class Tray(Gtk.Application):
         drag.connect('drag-begin', lambda *_: self.hold_interaction(True))
         drag.connect('drag-end', lambda *_: self.hold_interaction(False))
         click = Gtk.GestureClick(button=0)
-        click.connect('pressed', lambda g, n, _x, _y, it=item, widget=card: self.tile_pressed(g, n, it, widget))
+        click.connect('pressed', lambda g, n, x, y, it=item, widget=card: self.tile_pressed(g, n, x, y, it, widget))
         self.flow.insert(card, -1)
         child = card.get_parent()
         # The entire file tile, including its selection padding, is a
@@ -429,10 +450,19 @@ class Tray(Gtk.Application):
             self.flow.insert(Gtk.Label(label='Hier loslassen', css_classes=['zone-hint']), -1)
         self.to_shelf.set_sensitive(bool(self.basket_items))
 
-    def tile_pressed(self, gesture, presses, item, card):
+    def tile_pressed(self, gesture, presses, x, y, item, card):
+        child = card.get_parent()
         if gesture.get_current_button() == 3 and self.kind == 'shelf':
-            self.menu(card, item)
-        elif presses == 2:
+            # Like a file manager: a right click on a tile outside the
+            # selection selects just that tile; inside it, the whole
+            # selection stays and the menu acts on all of it.
+            if not child.is_selected():
+                self.flow.unselect_all()
+                self.flow.select_child(child)
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+            ok, point = child.compute_point(self.area, Graphene.Point().init(x, y))
+            self.context_menu(point.x if ok else x, point.y if ok else y)
+        elif presses == 2 and gesture.get_current_button() == 1:
             self.open(item['uri'])
 
     def area_pressed(self, gesture, presses, x, y):
@@ -540,77 +570,218 @@ class Tray(Gtk.Application):
                 self.hold_interaction(False)
         dialog.save(self.window, None, selected)
 
-    def menu(self, _widget, item):
-        if self.menu_item:
-            self.close_menu()
-        self.menu_item = item
+    def save_many(self, items):
+        # Several files: one folder, a copy of each.
         self.hold_interaction(True)
-        child = self.sheet.get_first_child()
+        dialog = Gtk.FileDialog(title=f'{len(items)} Kopien speichern in')
+        def selected(d, result):
+            try:
+                folder = d.select_folder_finish(result)
+            except GLib.Error as error:
+                print(str(error), file=sys.stderr)
+                self.hold_interaction(False)
+                return
+            pending = [len(items)]
+            def copied(file, response):
+                try:
+                    file.copy_finish(response)
+                except GLib.Error as error:
+                    print(str(error), file=sys.stderr)
+                pending[0] -= 1
+                if not pending[0]:
+                    self.hold_interaction(False)
+            for item in items:
+                Gio.File.new_for_uri(item['uri']).copy_async(folder.get_child(item['name']), Gio.FileCopyFlags.NONE, GLib.PRIORITY_DEFAULT, None, None, copied)
+        dialog.select_folder(self.window, None, selected)
+
+    def show_in_folder(self, uris):
+        # The file manager opens the folder with the files selected; without
+        # one on the bus, the first file's folder opens.
+        def done(proxy, result):
+            try:
+                proxy.call_finish(result)
+            except GLib.Error:
+                self.open(Gio.File.new_for_uri(uris[0]).get_parent().get_uri())
+        Gio.DBus.session.call('org.freedesktop.FileManager1', '/org/freedesktop/FileManager1', 'org.freedesktop.FileManager1', 'ShowItems',
+                              GLib.Variant('(ass)', (uris, '')), None, Gio.DBusCallFlags.NONE, 3000, None, done)
+
+    def menu_entries(self, items):
+        """The context menu for these shelf items, as data: entries are
+        (icon, label, callback) tuples, None for a separator, or a dict for a
+        submenu. Only actions their files and installed tools support appear."""
+        uris = [item['uri'] for item in items]
+        single = len(items) == 1
+        def kind(suffixes):
+            return [item for item in items if Path(item['name']).suffix.lower() in suffixes]
+        images, pdfs = kind(IMAGES), kind(('.pdf',))
+        documents = kind(('.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp', '.rtf'))
+        videos = kind(('.mp4', '.mkv', '.mov', '.webm'))
+        def count(subset, noun):
+            # A partial selection names how many files the action reaches.
+            return '' if len(subset) == len(items) else f' ({len(subset)} {noun})'
+        def each(subset, action, extra=''):
+            return lambda: [self.call('Action', GLib.Variant('(sss)', (action, item['uri'], extra))) for item in subset]
+        entries = [
+            ('document-open-symbolic', 'Öffnen' if single else f'{len(items)} Dateien öffnen', lambda: [self.open(uri) for uri in uris]),
+            ('folder-open-symbolic', 'Im Ordner zeigen', lambda: self.show_in_folder(uris)),
+            ('edit-copy-symbolic', 'Kopieren', lambda: Gdk.Display.get_default().get_clipboard().set_content(self.content(uris))),
+            ('document-save-as-symbolic', 'Kopie speichern …' if single else 'Kopien speichern …', (lambda: self.save(items[0])) if single else (lambda: self.save_many(items))),
+            None,
+            ('package-x-generic-symbolic', 'Als ZIP packen', lambda: self.call('Action', GLib.Variant('(sss)', ('zip', uris[0], ''))) if single
+             else self.call('Action', GLib.Variant('(sss)', ('zip-many', uris[0], json.dumps(uris))))),
+        ]
+        if self.airdrop_available:
+            entries.append(('notchy-airdrop', 'Per AirDrop senden', lambda: self.call('AirDropSend', GLib.Variant('(s)', ('\n'.join(uris),)))))
+        tools = []
+        if images and shutil.which('tesseract'):
+            tools.append(('edit-select-all-symbolic', 'Text erkennen' + count(images, 'Bilder'), each(images, 'ocr')))
+        if images and (shutil.which('magick') or shutil.which('convert')):
+            tools.append({'icon': 'emblem-synchronizing-symbolic', 'label': 'Konvertieren in' + count(images, 'Bilder'),
+                          'entries': [('image-x-generic-symbolic', fmt.upper(), each(images, 'image', fmt)) for fmt in ('png', 'jpg', 'webp', 'tiff', 'bmp', 'gif')]})
+        if images and shutil.which('rembg'):
+            tools.append(('edit-cut-symbolic', 'Hintergrund entfernen' + count(images, 'Bilder'), each(images, 'background')))
+        if pdfs and shutil.which('gs'):
+            tools.append(('document-save-symbolic', 'PDF verkleinern' + count(pdfs, 'PDFs'), each(pdfs, 'pdf-compress')))
+        if documents and (shutil.which('libreoffice') or shutil.which('soffice')):
+            tools.append(('x-office-document-symbolic', 'Als PDF speichern' + count(documents, 'Dokumente'), each(documents, 'document-pdf')))
+        if videos and shutil.which('ffmpeg') and shutil.which('ffprobe'):
+            tools.append({'icon': 'video-x-generic-symbolic', 'label': 'Video verkleinern' + count(videos, 'Videos'),
+                          'entries': [('video-x-generic-symbolic', f'Auf {mb} MB', each(videos, 'video', mb)) for mb in ('10', '25', '50', '100')]})
+        if tools:
+            entries += [None, *tools]
+        entries += [None, ('user-trash-symbolic', 'Aus Regal entfernen', lambda: [self.call('RemoveUri', GLib.Variant('(s)', (uri,))) for uri in uris], 'danger')]
+        return entries
+
+    def menu_page(self, title, entries, back=False):
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        if back:
+            page.append(self.menu_row('go-previous-symbolic', title, lambda: self.menu_stack.set_visible_child_name('main'), keep=True))
+            page.append(Gtk.Separator())
+        else:
+            page.append(Gtk.Label(label=title, xalign=0, ellipsize=3, max_width_chars=30, css_classes=['ctx-title']))
+        for entry in entries:
+            if entry is None:
+                if page.get_last_child() and not isinstance(page.get_last_child(), Gtk.Separator):
+                    page.append(Gtk.Separator())
+            elif isinstance(entry, dict):
+                name = f'sub{len(self.menu_items)}'
+                self.menu_stack.add_named(self.menu_page(entry['label'], entry['entries'], back=True), name)
+                page.append(self.menu_row(entry['icon'], entry['label'], lambda name=name: self.open_submenu(name), keep=True, submenu=True))
+            else:
+                icon, label, callback, *style = entry
+                page.append(self.menu_row(icon, label, callback, danger='danger' in style))
+        return page
+
+    def menu_row(self, icon, label, callback, keep=False, submenu=False, danger=False):
+        content = Gtk.Box(spacing=10)
+        image = airdrop_image() if icon == 'notchy-airdrop' else Gtk.Image.new_from_icon_name(icon)
+        image.set_pixel_size(16)
+        content.append(image)
+        content.append(Gtk.Label(label=label, xalign=0, hexpand=True, ellipsize=3, max_width_chars=34))
+        if submenu:
+            content.append(Gtk.Image.new_from_icon_name('go-next-symbolic'))
+        button = Gtk.Button(child=content, css_classes=['ctx-item'] + (['danger'] if danger else []))
+        button.update_property([Gtk.AccessibleProperty.LABEL], [label])
+        button.notchy_label, button.notchy_submenu = label, submenu
+        self.menu_items.append(button)
+        def activate(*_):
+            if keep:
+                callback()
+                return
+            # The action runs once the popup has gone, so a dialog it opens
+            # or a refresh it causes never meets a closing popover.
+            self.popover.popdown()
+            GLib.idle_add(lambda: (callback(), GLib.SOURCE_REMOVE)[1])
+        button.connect('clicked', activate)
+        return button
+
+    def open_submenu(self, name):
+        self.menu_stack.set_visible_child_name(name)
+        # Focus the first entry after the back row.
+        items = self.page_items()
+        if len(items) > 1:
+            items[1].grab_focus()
+
+    def page_items(self):
+        page = self.menu_stack.get_visible_child()
+        return [button for button in self.menu_items if button.get_parent() is page]
+
+    def menu_key(self, _controller, keyval, _code, _state):
+        if keyval in (Gdk.KEY_Left, Gdk.KEY_BackSpace) and self.menu_stack.get_visible_child_name() != 'main':
+            self.menu_stack.set_visible_child_name('main')
+            items = self.page_items()
+            if items:
+                items[0].grab_focus()
+            return True
+        # Arrow keys walk the entries, wrapping around, as in any menu.
+        if keyval in (Gdk.KEY_Up, Gdk.KEY_Down, Gdk.KEY_Home, Gdk.KEY_End):
+            items = self.page_items()
+            if not items:
+                return False
+            focus = next((i for i, button in enumerate(items) if button.has_focus()), -1)
+            index = {Gdk.KEY_Home: 0, Gdk.KEY_End: len(items) - 1}.get(keyval, (focus + (1 if keyval == Gdk.KEY_Down else -1)) % len(items) if focus >= 0 else 0)
+            items[index].grab_focus()
+            return True
+        if keyval == Gdk.KEY_Right:
+            focused = next((button for button in self.page_items() if button.has_focus()), None)
+            if focused and getattr(focused, 'notchy_submenu', False):
+                focused.emit('clicked')
+                return True
+        return False
+
+    def context_menu(self, x, y):
+        """Open the real context menu at (x, y) in the pane's file area."""
+        children = self.selected_children()
+        if not children:
+            return
+        items = [{'uri': child.notchy_uri, 'name': child.notchy_name} for child in children]
+        child = self.menu_stack.get_first_child()
         while child:
             following = child.get_next_sibling()
-            self.sheet.remove(child)
+            self.menu_stack.remove(child)
             child = following
-        head = Gtk.Box(spacing=8, css_classes=['sheet-head'])
-        back = Gtk.Button(icon_name='go-previous-symbolic', tooltip_text='Zurück (Esc)', css_classes=['round'])
-        back.connect('clicked', lambda *_: self.close_menu())
-        head.append(back)
-        head.append(Gtk.Label(label=item['name'], xalign=0, hexpand=True, ellipsize=3, css_classes=['sheet-title']))
-        self.sheet.append(head)
+        self.menu_items = []
+        title = items[0]['name'] if len(items) == 1 else f'{len(items)} Dateien ausgewählt'
+        self.menu_stack.add_named(self.menu_page(title, self.menu_entries(items)), 'main')
+        self.menu_stack.set_visible_child_name('main')
+        rect = Gdk.Rectangle()
+        rect.x, rect.y, rect.width, rect.height = int(x), int(y), 1, 1
+        self.popover.set_pointing_to(rect)
+        if not self.menu_open:
+            # The island stays open while the menu is: ShelfHold.
+            self.menu_open = True
+            self.hold_interaction(True)
+        self.popover.popup()
+        # Keyboard users start on the first entry.
+        first = next(iter(self.page_items()), None)
+        if first:
+            first.grab_focus()
+        self.report_menu()
 
-        def run(callback):
-            self.close_menu()
-            callback()
+    def menu_closed(self):
+        if self.menu_open:
+            self.menu_open = False
+            self.hold_interaction(False)
 
-        grid = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, min_children_per_line=2, max_children_per_line=3,
-                           column_spacing=6, row_spacing=6, homogeneous=True)
-        def action(icon_name, label, callback, danger=False):
-            content = Gtk.Box(spacing=8)
-            content.append(Gtk.Image.new_from_icon_name(icon_name) if icon_name else airdrop_image())
-            content.append(Gtk.Label(label=label, xalign=0, ellipsize=3))
-            button = Gtk.Button(child=content, css_classes=['sheet-action'] + (['danger'] if danger else []), tooltip_text=label)
-            button.connect('clicked', lambda *_: run(callback))
-            grid.insert(button, -1)
-        uri, suffix = item['uri'], Path(item['name']).suffix.lower()
-        call = lambda kind, extra='': self.call('Action', GLib.Variant('(sss)', (kind, uri, extra)))
-        action('document-open-symbolic', 'Öffnen', lambda: self.open(uri))
-        action('folder-open-symbolic', 'Im Ordner zeigen', lambda: self.open(Gio.File.new_for_uri(uri).get_parent().get_uri()))
-        action('document-save-as-symbolic', 'Kopie speichern …', lambda: self.save(item))
-        action('package-x-generic-symbolic', 'Als ZIP packen', lambda: call('zip'))
-        if self.airdrop_available:
-            action(None, 'Per AirDrop senden', lambda: self.call('AirDropSend', GLib.Variant('(s)', (uri,))))
-        if suffix in IMAGES and shutil.which('tesseract'):
-            action('edit-select-all-symbolic', 'Text erkennen', lambda: call('ocr'))
-        if suffix in IMAGES and shutil.which('rembg'):
-            action('edit-cut-symbolic', 'Hintergrund entfernen', lambda: call('background'))
-        if suffix == '.pdf' and shutil.which('gs'):
-            action('document-save-symbolic', 'PDF verkleinern', lambda: call('pdf-compress'))
-        if suffix in ('.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt') and shutil.which('libreoffice'):
-            action('x-office-document-symbolic', 'Als PDF speichern', lambda: call('document-pdf'))
-        action('user-trash-symbolic', 'Aus Regal entfernen', lambda: self.call('RemoveUri', GLib.Variant('(s)', (uri,))), danger=True)
-        self.sheet.append(grid)
-
-        def chips(title, options):
-            row = Gtk.Box(spacing=6)
-            row.append(Gtk.Label(label=title, xalign=0, css_classes=['sheet-label']))
-            for text, callback in options:
-                chip = Gtk.Button(label=text, css_classes=['chip'])
-                chip.connect('clicked', lambda *_, cb=callback: run(cb))
-                row.append(chip)
-            self.sheet.append(row)
-        if suffix in IMAGES and (shutil.which('magick') or shutil.which('convert')):
-            chips('Konvertieren in', [(fmt.upper(), lambda fmt=fmt: call('image', fmt)) for fmt in ('png', 'jpg', 'webp', 'tiff', 'bmp', 'gif')])
-        if suffix in ('.mp4', '.mkv', '.mov', '.webm') and shutil.which('ffmpeg') and shutil.which('ffprobe'):
-            chips('Verkleinern auf', [(f'{mb} MB', lambda mb=mb: call('video', mb)) for mb in ('10', '25', '50', '100')])
-        self.header.set_visible(False)
-        self.stack.set_visible_child_name('menu')
-
-    def close_menu(self):
-        if not self.menu_item:
+    def report_menu(self):
+        # The headless Shell test clicks entries by position; it reads them here.
+        out = os.environ.get('NOTCHY_TEST_OUTPUT')
+        if not out:
             return
-        self.menu_item = None
-        self.stack.set_visible_child_name('grid')
-        self.header.set_visible(True)
-        self.hold_interaction(False)
+        def write():
+            if not self.menu_open:
+                return GLib.SOURCE_REMOVE
+            native = self.popover.get_native()
+            surface_x, surface_y = native.get_surface_transform() if native else (0, 0)
+            rows = []
+            for button in self.menu_items:
+                ok, bounds = button.compute_bounds(self.popover)
+                if ok and button.get_mapped():
+                    rows.append({'label': button.notchy_label, 'x': surface_x + bounds.get_x(), 'y': surface_y + bounds.get_y(),
+                                 'width': bounds.get_width(), 'height': bounds.get_height()})
+            Path(out, 'regal-menu.json').write_text(json.dumps(rows))
+            return GLib.SOURCE_REMOVE
+        GLib.timeout_add(250, write)
 
 if __name__ == '__main__':
     Tray(sys.argv[1] if len(sys.argv) > 1 else 'shelf', int(sys.argv[2]) if len(sys.argv) > 2 else 700, sys.argv[3] if len(sys.argv) > 3 else 'dynamic',

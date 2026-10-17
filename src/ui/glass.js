@@ -107,6 +107,8 @@ export class GlassLayer {
             // Notchy's own native panes (Regal, drop zone, Korb) sit in or next to
             // the island; blurred into the glass they would appear twice.
             if (child.meta_window?.get_gtk_application_id()?.startsWith('org.notchy.')) continue;
+            // So do their popups (the Regal's context menu), shown on top of the island.
+            if (child.meta_window?.get_transient_for()?.get_gtk_application_id()?.startsWith('org.notchy.')) continue;
             const clone = new Clutter.Clone({source: child, visible: child.visible});
             this.content.insert_child_below(clone, this.panel); this.clones.push([clone, child]);
             this.cloneLife.connect(child, 'notify::visible', () => { clone.visible = child.visible; });

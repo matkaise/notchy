@@ -29,6 +29,8 @@ if [[ -n "${NOTCHY_TEST_CORNERS_ONLY:-}" ]]; then
     grep -q NOTCHY_TRAY_TEST_OK tests/output/shell.log
 elif [[ -n "${NOTCHY_TEST_DROP_ONLY:-}" ]]; then
     grep -q NOTCHY_DROP_TEST_OK tests/output/shell.log
+elif [[ -n "${NOTCHY_TEST_REGAL_ONLY:-}" ]]; then
+    grep -q NOTCHY_REGAL_TEST_OK tests/output/shell.log
 else
     grep -q NOTCHY_SHELL_TEST_OK tests/output/shell.log
     grep -q NOTCHY_PREFS_TEST_OK tests/output/shell.log

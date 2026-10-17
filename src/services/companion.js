@@ -1,3 +1,4 @@
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
@@ -35,6 +36,8 @@ const XML = `<node><interface name="${BUS_NAME}">
 export class Companion extends Emitter {
     constructor(extension, shelf, operations, productivity) {
         super(); this.extension = extension; this.shelf = shelf; this.operations = operations; this.life = new Lifetime(); this.proc = null; this.position = null;
+        // The Regal's popups (its context menu, tooltips): window -> {clone, life}.
+        this.popups = new Map();
         this.dbus = Gio.DBusExportedObject.wrapJSObject(XML, {
             SetActivity: (name, status, progress) => productivity.setActivity(name, status, progress),
             ClearActivity: name => productivity.clearActivity(name),
@@ -69,8 +72,8 @@ export class Companion extends Emitter {
             // Set title before mapping is asynchronous on Wayland.
             this.life.connect(window, 'notify::title', () => this._positionWindow(window));
             const actor = window.get_compositor_private();
-            if (actor) this.life.connect(actor, 'first-frame', () => this._positionWindow(window));
-            this._positionWindow(window);
+            if (actor) this.life.connect(actor, 'first-frame', () => { this._positionWindow(window); this.trackPopup(window); });
+            this._positionWindow(window); this.trackPopup(window);
             this.life.later(100, () => { try { this._positionWindow(window); } catch { /* Window already closed. */ } });
         });
     }
@@ -104,11 +107,51 @@ export class Companion extends Emitter {
         window.unmaximize(); window.make_above(); window.stick();
         window.move_resize_frame(false, Math.round(x), Math.round(y), width, height);
     }
+    // A popup of the native Regal (its context menu, a tooltip) is its own
+    // Wayland surface. Mutter stacks it with the windows, below the Shell's
+    // chrome, so the island would cover it. It is shown as a clone on top of
+    // everything instead, exactly over the real popup, which keeps the input:
+    // the clone is not reactive, and while a menu is open the island's tab
+    // bar lets clicks through (Island.syncVisibility), so a click there only
+    // dismisses the menu, as a click anywhere outside does.
+    trackPopup(window) {
+        if (this.life.closed || this.popups.has(window) || !this.shelfProc) return;
+        const types = [Meta.WindowType.POPUP_MENU, Meta.WindowType.DROPDOWN_MENU, Meta.WindowType.MENU, Meta.WindowType.COMBO, Meta.WindowType.TOOLTIP];
+        if (!types.includes(window.get_window_type()) || window.get_pid() !== Number(this.shelfProc.get_identifier())) return;
+        const actor = window.get_compositor_private(); if (!actor) return;
+        const life = new Lifetime(), clone = new Clutter.Clone({name: 'notchy-popup', source: actor, reactive: false});
+        Main.layoutManager.uiGroup.add_child(clone);
+        const place = () => { clone.set_position(Math.round(actor.x), Math.round(actor.y)); clone.set_size(actor.width, actor.height); clone.visible = actor.visible; };
+        for (const signal of ['notify::x', 'notify::y', 'notify::width', 'notify::height', 'notify::visible']) life.connect(actor, signal, place);
+        const menu = window.get_window_type() !== Meta.WindowType.TOOLTIP;
+        this.popups.set(window, {clone, life, menu});
+        life.connect(window, 'unmanaged', () => this.untrackPopup(window));
+        life.connect(actor, 'destroy', () => this.untrackPopup(window));
+        place(); this.changed();
+    }
+    untrackPopup(window) {
+        const popup = this.popups.get(window); if (!popup) return;
+        this.popups.delete(window); popup.life.dispose(); popup.clone.destroy();
+        if (!this.life.closed) this.changed();
+    }
+    // A context menu of the Regal is open (tooltips do not count).
+    get menuOpen() { return [...this.popups.values()].some(popup => popup.menu); }
+    containsPopupPoint(x, y) {
+        return [...this.popups.entries()].some(([window, popup]) => {
+            if (!popup.menu) return false;
+            const r = window.get_frame_rect();
+            return x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height;
+        });
+    }
     dropTarget(config) {
         if (!this.life.closed) this.dbus.emit_signal('DropTarget', new GLib.Variant('(s)', [JSON.stringify(config)]));
         if (config.visible) for (const actor of global.get_window_actors()) this._positionWindow(actor.meta_window);
     }
-    containsShelfPoint(x, y) { const p = this.shelfIsland && this.position; return Boolean(p && x >= p.x && x <= p.x + p.width && y >= p.y && y <= p.y + p.height); }
+    // The pane, and its open context menu, count as the island for hover and clicks.
+    containsShelfPoint(x, y) {
+        const p = this.shelfIsland && this.position;
+        return Boolean(p && ((x >= p.x && x <= p.x + p.width && y >= p.y && y <= p.y + p.height) || this.containsPopupPoint(x, y)));
+    }
     positionShelf() {
         const island = this.shelfIsland; if (!island || this.life.closed) return;
         // Exactly where the island settles, so pane and glass share one edge.
@@ -192,6 +235,6 @@ export class Companion extends Emitter {
         const airdrop = this.extension.airdrop;
         return {available: Boolean(airdrop?.available), receiving: Boolean(airdrop?.receiving), state: airdrop?.state ?? 'off', sending: Boolean(airdrop?.sendProc)};
     }
-    dispose() { this.closeShelf(); this.life.dispose(); this.unsub(); this.unsubAirDrop?.(); this.dbus.unexport(); Gio.bus_unown_name(this.owner);
+    dispose() { for (const window of [...this.popups.keys()]) this.untrackPopup(window); this.closeShelf(); this.life.dispose(); this.unsub(); this.unsubAirDrop?.(); this.dbus.unexport(); Gio.bus_unown_name(this.owner);
         this.proc?.force_exit(); this.proc = null; this.shelfProc?.force_exit(); this.shelfProc = null; }
 }

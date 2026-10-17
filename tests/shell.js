@@ -54,6 +54,10 @@ export async function run() {
         await new Promise((resolve, reject) => proc.wait_check_async(null, (p, result) => { try { p.wait_check_finish(result); resolve(); } catch (error) { reject(error); } }));
         ext.disable(); print('NOTCHY_CORNERS_TEST_OK'); return;
     }
+    if (GLib.getenv('NOTCHY_TEST_REGAL_ONLY')) {
+        await regalMenuRegressions(ext, path, screenshot); ext.disable();
+        print('NOTCHY_REGAL_TEST_OK'); return;
+    }
     if (GLib.getenv('NOTCHY_TEST_DROP_ONLY')) {
         ext.settings.set_boolean('clipboard-enabled', true);
         await interactionRegressions(ext, path, screenshot); ext.disable();
@@ -269,6 +273,7 @@ export async function run() {
     await screenshot('basket'); basket.delete(global.get_current_time()); await Scripting.sleep(400);
 
     await interactionRegressions(ext, path, screenshot);
+    await regalMenuRegressions(ext, path, screenshot);
     mock.force_exit(); await Scripting.sleep(300); assert(ext.media.state === null && !island.panelSurface.has_style_class_name('notchy-wide'), 'MPRIS player removal empties the capsule');
     keyboard.run_dispose();
     const life = ext.life; ext.disable(); assert(life.closed && life.sources.size === 0, 'disable removes timers and signals');
@@ -280,8 +285,6 @@ export async function run() {
     print('NOTCHY_SHELL_TEST_OK');
 }
 
-// Where „Aus Regal entfernen“ sits in a text file's menu (second row, middle column).
-const MENU_REMOVE_Y = 112;
 // The native pane is shown as a clone on top of the island's whole glass, exactly over its window,
 // and nothing of Notchy sits among the windows (where Mutter clips painting to the damaged area).
 function paneShownOnGlass(island, windowActor) {
@@ -610,7 +613,8 @@ async function interactionRegressions(ext, path, screenshot) {
             const sourceLauncher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.NONE}); sourceLauncher.setenv('NOTCHY_DROP_SOURCE_BACKEND', 'wayland', true);
             const source = sourceLauncher.spawnv(['/usr/bin/python3', here('mock_drop_source.py'), `${path}/drop-open-regal.json`, file.get_uri()]);
             try {
-                await move(640, 120); island.open('shelf'); await Scripting.sleep(1200);
+                // Pinned: the pointer leaves the island to start the drag in another window.
+                await move(640, 120); island.open('shelf'); island.togglePin(); await Scripting.sleep(1200);
                 const window = global.get_window_actors().map(a => a.meta_window).find(w => w.get_title() === 'Notchy Drop Source');
                 window.move_resize_frame(false, 20, 420, 300, 150); await Scripting.sleep(250);
                 await move(80, 470); await press(Clutter.ButtonState.PRESSED); await move(120, 450); await move(180, 390); await Scripting.sleep(200);
@@ -621,7 +625,7 @@ async function interactionRegressions(ext, path, screenshot) {
                 await screenshot('drop-open-regal');
                 await press(Clutter.ButtonState.RELEASED); await Scripting.sleep(600);
                 assert(ext.shelf.items.some(item => item.uri === file.get_uri()), 'the open Regal takes the dropped file itself');
-            } finally { await press(Clutter.ButtonState.RELEASED); source.force_exit(); island.close(); await move(20, 600); await Scripting.sleep(350); }
+            } finally { await press(Clutter.ButtonState.RELEASED); source.force_exit(); if (island.pinned) island.togglePin(); island.close(); await move(20, 600); await Scripting.sleep(350); }
         }
         await move(20, 600); ext.drops.setDragging(true); await Scripting.sleep(250);
         assert(!ext.drops.dragging && !ext.drops.island, 'a retained DND selection without a pressed mouse button cannot summon a drop zone');
@@ -682,19 +686,24 @@ async function interactionRegressions(ext, path, screenshot) {
             pointer.notify_button(GLib.get_monotonic_time(), 3, Clutter.ButtonState.PRESSED); await Scripting.sleep(120);
             pointer.notify_button(GLib.get_monotonic_time(), 3, Clutter.ButtonState.RELEASED); await Scripting.sleep(400);
             await screenshot('regal-menu');
-            assert(!global.get_window_actors().some(a => a.meta_window.get_window_type() === Meta.WindowType.POPUP_MENU || a.meta_window.get_window_type() === Meta.WindowType.DROPDOWN_MENU),
-                'the file menu opens inside the Regal, not as a popup the island would cover');
+            const menuOpen = () => [...ext.companion.popups.values()].some(popup => popup.menu);
+            for (let i = 0; i < 20 && !menuOpen(); i++) await Scripting.sleep(100);
+            assert(menuOpen() && [...ext.companion.popups.values()].every(popup => popup.clone.mapped), 'the file menu opens as a real popup, shown on top of the island');
             await move(20, 650); await Scripting.sleep(300);
             assert(island.expanded && ext.companion.shelfHeld, 'the native file context menu prevents unintended collapse');
+            await move(panePosition.x + 200, panePosition.y + 200); await Scripting.sleep(150);
             await escape();
-            assert(!ext.companion.shelfHeld, 'dismissing the context menu releases the temporary hold');
+            assert(!ext.companion.shelfHeld && !menuOpen() && island.expanded, 'dismissing the context menu releases the temporary hold');
             // A real click on „Aus Regal entfernen“ in the menu removes that file.
             const before = ext.shelf.items.length;
+            GLib.unlink(`${path}/regal-menu.json`);
             await move(panePosition.x + 60, panePosition.y + 70); await Scripting.sleep(200);
             pointer.notify_button(GLib.get_monotonic_time(), 3, Clutter.ButtonState.PRESSED); await Scripting.sleep(120);
-            pointer.notify_button(GLib.get_monotonic_time(), 3, Clutter.ButtonState.RELEASED); await Scripting.sleep(400);
-            const removeX = panePosition.x + 22 + (panePosition.width - 44) / 2, removeY = panePosition.y + MENU_REMOVE_Y;
-            await move(removeX, removeY); await Scripting.sleep(150); await screenshot('regal-menu-remove');
+            pointer.notify_button(GLib.get_monotonic_time(), 3, Clutter.ButtonState.RELEASED); await Scripting.sleep(700);
+            const [[menuWindow]] = [...ext.companion.popups.entries()].filter(([, popup]) => popup.menu);
+            const [, rowsBytes] = GLib.file_get_contents(`${path}/regal-menu.json`), removeRow = JSON.parse(new TextDecoder().decode(rowsBytes)).find(r => r.label === 'Aus Regal entfernen');
+            const buffer = menuWindow.get_buffer_rect();
+            await move(buffer.x + removeRow.x + removeRow.width / 2, buffer.y + removeRow.y + removeRow.height / 2); await Scripting.sleep(150); await screenshot('regal-menu-remove');
             await press(Clutter.ButtonState.PRESSED); await press(Clutter.ButtonState.RELEASED);
             for (let i = 0; i < 20 && ext.shelf.items.length === before; i++) await Scripting.sleep(100);
             assert(ext.shelf.items.length === before - 1 && !ext.companion.shelfHeld, `the menu's actions work with a real click (${before} → ${ext.shelf.items.length})`);
@@ -731,4 +740,113 @@ async function interactionRegressions(ext, path, screenshot) {
             assert(!island.expanded && !ext.companion.shelfIsland && island.actor.reactive, 'Escape closes the native Regal and restores the capsule');
         } finally { await press(Clutter.ButtonState.RELEASED); destination.force_exit(); island.close(); await move(20, 600); }
     } finally { pointer.run_dispose(); keyboard.run_dispose(); ext.settings.set_boolean('hover-open', true); ext.settings.set_int('collapse-delay', 700); ext.settings.set_string('style', 'dynamic'); }
+}
+
+// The Regal's real context menu: a GTK popover (its own Wayland popup) at the pointer,
+// shown on top of the island, with single and multiple selections.
+async function regalMenuRegressions(ext, path, screenshot) {
+    const island = ext.islands[0];
+    const pointer = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+    const keyboard = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+    const move = async (x, y) => { pointer.notify_absolute_motion(GLib.get_monotonic_time(), x, y); await Scripting.sleep(90); };
+    const click = async (x, y, button = 1, wait = 600) => { await move(x, y); await Scripting.sleep(150); pointer.notify_button(GLib.get_monotonic_time(), button, Clutter.ButtonState.PRESSED); await Scripting.sleep(60); pointer.notify_button(GLib.get_monotonic_time(), button, Clutter.ButtonState.RELEASED); await Scripting.sleep(wait); };
+    const tap = async (keyval, wait = 300) => { keyboard.notify_keyval(GLib.get_monotonic_time(), keyval, Clutter.KeyState.PRESSED); keyboard.notify_keyval(GLib.get_monotonic_time(), keyval, Clutter.KeyState.RELEASED); await Scripting.sleep(wait); };
+    const menus = () => [...ext.companion.popups.entries()].filter(([, popup]) => popup.menu);
+    const waitFor = async (condition, ms = 3000) => { for (let i = 0; i < ms / 50 && !condition(); i++) await Scripting.sleep(50); return condition(); };
+    const rows = () => { try { const [, bytes] = GLib.file_get_contents(`${path}/regal-menu.json`); return JSON.parse(new TextDecoder().decode(bytes)); } catch { return []; } };
+    const clickRow = async label => {
+        const [[window]] = menus(), buffer = window.get_buffer_rect(), row = rows().find(r => r.label === label);
+        if (!row) throw Error(`menu row ${label} not found in ${JSON.stringify(rows().map(r => r.label))}`);
+        await click(buffer.x + row.x + row.width / 2, buffer.y + row.y + row.height / 2, 1, 700);
+    };
+    const openMenu = async ([x, y]) => {
+        GLib.unlink(`${path}/regal-menu.json`);
+        await click(x, y, 3, 400); await waitFor(() => menus().length && rows().length);
+    };
+    const fixtures = ['menu one.png', 'menu two.txt', 'menu three.txt'].map(name => Gio.File.new_for_path(`${path}/${name}`));
+    try {
+        ext.shelf.clear(false);
+        const [, png] = Gio.File.new_for_path(`${path}/collapsed.png`).load_contents(null);
+        fixtures[0].replace_contents(png, null, false, Gio.FileCreateFlags.NONE, null);
+        for (const file of fixtures.slice(1)) file.replace_contents('menu fixture', null, false, Gio.FileCreateFlags.NONE, null);
+        for (const file of fixtures) ext.shelf.add(file.get_uri());
+        ext.settings.set_boolean('hover-open', false); ext.settings.set_int('collapse-delay', 150);
+        await move(640, 100); island.open('shelf');
+        await waitFor(() => ext.companion.shelfWindow?.get_compositor_private()?.mapped && !island.morphing); await Scripting.sleep(900);
+        const regal = ext.companion.position, tileAt = i => [regal.x + 60 + i * 132, regal.y + 70], empty = [regal.x + regal.width - 60, regal.y + regal.height - 24];
+        // Single selection: a right click selects the tile and opens the menu at the pointer.
+        await click(...empty, 1, 400);
+        await openMenu(tileAt(1));
+        const [[window, popup]] = menus(), actor = window.get_compositor_private(), frame = window.get_frame_rect();
+        assert(window.get_transient_for() === ext.companion.shelfWindow && ext.companion.shelfSelected === 1, 'a right click on a tile selects it and opens a real popup menu of the Regal');
+        const [tx, ty] = tileAt(1), area = Main.layoutManager.getWorkAreaForMonitor(island.monitor.index);
+        assert(Math.abs(frame.x + frame.width / 2 - tx) <= 2 && frame.y >= ty - 2 && frame.y <= ty + 12, `the menu opens right at the pointer (${frame.x},${frame.y} ${frame.width}x${frame.height})`);
+        assert(frame.x >= area.x && frame.y >= area.y && frame.x + frame.width <= area.x + area.width && frame.y + frame.height <= area.y + area.height, 'the menu stays inside the work area');
+        const uiChildren = Main.layoutManager.uiGroup.get_children();
+        assert(popup.clone.source === actor && popup.clone.mapped && uiChildren.indexOf(popup.clone) > uiChildren.indexOf(island.actor) && uiChildren.indexOf(popup.clone) > uiChildren.indexOf(global.top_window_group) &&
+            Math.abs(popup.clone.x - actor.x) <= 1 && Math.abs(popup.clone.y - actor.y) <= 1 && !popup.clone.reactive, 'the menu is shown on top of the island and every chrome layer, exactly over its popup');
+        const labels = rows().map(r => r.label);
+        assert(labels[0] === 'Öffnen' && labels.includes('Im Ordner zeigen') && labels.includes('Kopie speichern …') && labels.includes('Als ZIP packen') && labels.at(-1) === 'Aus Regal entfernen' && !labels.includes('Text erkennen'),
+            `a text file's menu lists its actions vertically (${labels.join(', ')})`);
+        // Input reaches the popup where it overlaps the island: the topmost reactive actor there is the popup's window.
+        const overlap = rows().find(r => r.label === 'Als ZIP packen'), buffer = window.get_buffer_rect();
+        const picked = global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, buffer.x + overlap.x + 20, buffer.y + overlap.y + overlap.height / 2);
+        assert(picked && (picked === actor || actor.contains(picked)), `clicks on the menu reach the popup, not the island (picked ${picked?.name ?? picked})`);
+        assert(ext.companion.shelfHeld && island.navButtons.every(([, tab]) => !tab.reactive), 'while the menu is open the island holds and its tab bar lets clicks through');
+        await screenshot('regal-context-menu');
+        // Hover collapse must not close the island while the menu is open.
+        await move(1200, 660); await Scripting.sleep(700);
+        assert(island.expanded && menus().length === 1, 'leaving the island with the pointer while the menu is open keeps island and menu');
+        await move(tx, ty + 40); await Scripting.sleep(200);
+        // Escape closes only the menu.
+        await tap(Clutter.KEY_Escape, 500);
+        assert(!menus().length && !ext.companion.shelfHeld && island.expanded && ext.companion.shelfIsland === island && ext.companion.shelfSelected === 1 && island.navButtons.every(([, tab]) => tab.reactive),
+            'Escape closes only the context menu; the Regal, its selection and the tab bar remain');
+        // A click outside closes only the menu.
+        await openMenu(tileAt(1));
+        await click(regal.x + regal.width - 40, regal.y + 200, 1, 300);
+        assert(!menus().length && island.expanded && ext.companion.shelfIsland === island, 'a click outside closes only the context menu');
+        // A click on the tab bar while the menu is open dismisses the menu, never switches tabs.
+        await openMenu(tileAt(1));
+        const [tabX, tabY] = island.navButtons[2][1].get_transformed_position();
+        await click(tabX + 20, tabY + 15, 1, 400);
+        assert(!menus().length && island.page === 'shelf' && island.expanded, 'a click on the tab bar only dismisses the menu');
+        await move(tx, ty + 40); await Scripting.sleep(300);
+        // Keyboard: the first entry has focus; arrows walk, Enter runs (Kopieren puts the file on the clipboard).
+        St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, 'before');
+        await openMenu(tileAt(1));
+        await tap(Clutter.KEY_Down, 150); await tap(Clutter.KEY_Down, 150); await tap(Clutter.KEY_Return, 300);
+        await waitFor(() => !menus().length, 2000);
+        const mimes = St.Clipboard.get_default().get_mimetypes(St.ClipboardType.CLIPBOARD);
+        assert(!menus().length && mimes.some(m => m === 'text/uri-list' || m === 'x-special/gnome-copied-files'), `arrow keys and Enter run a menu entry (clipboard: ${mimes.join(' ')})`);
+        // Right click on a tile outside the selection: that tile alone is selected.
+        await openMenu(tileAt(0));
+        assert(ext.companion.shelfSelected === 1 && rows().some(r => r.label === 'Öffnen'), 'a right click on another tile moves the selection to it');
+        const imageLabels = rows().map(r => r.label);
+        assert(!GLib.find_program_in_path('tesseract') || imageLabels.includes('Text erkennen'), 'image actions appear for images when their tool is installed');
+        await tap(Clutter.KEY_Escape, 400);
+        // Multiple selection: Ctrl+click adds a tile; the menu acts on all selected files.
+        keyboard.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Control_L, Clutter.KeyState.PRESSED); await Scripting.sleep(80);
+        await click(...tileAt(1), 1, 300);
+        keyboard.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Control_L, Clutter.KeyState.RELEASED); await Scripting.sleep(300);
+        assert(ext.companion.shelfSelected === 2, 'Ctrl+click selects a second tile');
+        await openMenu(tileAt(1));
+        const multi = rows().map(r => r.label);
+        assert(ext.companion.shelfSelected === 2 && multi.includes('2 Dateien öffnen') && multi.includes('Kopien speichern …'), `a right click inside the selection keeps it and offers actions for all (${multi.join(', ')})`);
+        await screenshot('regal-context-menu-multi');
+        const before = ext.shelf.items.length;
+        await clickRow('Aus Regal entfernen');
+        await waitFor(() => ext.shelf.items.length === before - 2);
+        assert(ext.shelf.items.length === before - 2 && fixtures.every(file => file.query_exists(null)) && !ext.companion.shelfHeld, `a real click removes all selected files from the Regal, originals stay (${before} → ${ext.shelf.items.length})`);
+        await move(20, 650); await Scripting.sleep(700);
+        assert(!island.expanded, `with the menu closed, leaving the island collapses it again (pinned ${island.pinned}, held ${ext.companion.shelfHeld}, hovered ${island.hovered}, menus ${menus().length}, page ${island.page})`);
+        // Switching to the Regal with the pointer on the island (which then stops being reactive)
+        // must not leave a stale hover behind: leaving still collapses it.
+        island.open('media'); await Scripting.sleep(500);
+        const [shelfTabX, shelfTabY] = island.navButtons[1][1].get_transformed_position();
+        await click(shelfTabX + 20, shelfTabY + 15, 1, 1200);
+        assert(island.page === 'shelf' && ext.companion.shelfIsland === island && !island.actor.reactive, 'a real click on the Regal tab opens the native pane');
+        await move(20, 650); await Scripting.sleep(700);
+        assert(!island.expanded, `leaving the Regal collapses the island even after hovering it before (hovered ${island.hovered})`);
+    } finally { pointer.run_dispose(); keyboard.run_dispose(); ext.settings.set_boolean('hover-open', true); ext.settings.set_int('collapse-delay', 700); island.close(true); }
 }
