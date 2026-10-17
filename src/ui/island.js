@@ -8,6 +8,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import {GlassLayer} from './glass.js';
 import {NotchEars} from './notchEars.js';
 import {Views} from './views.js';
+import {AirPodsBubble} from './airpodsBubble.js';
 import {Waveform} from './waveform.js';
 import {box, label, icon, gicon, button} from './widgets.js';
 import {Lifetime} from '../lifecycle.js';
@@ -121,6 +122,8 @@ export class Island {
             this.life.cleanups.push(this.airpods.subscribe(() => { if (this.expanded && !this.peeking && this.page === 'media' && !this.views.outputPicker) this.refresh(); }));
         }
         this.ears = new NotchEars(this);
+        // Connected AirPods as a small companion beside the capsule.
+        if (this.airpods) this.airpodsBubble = new AirPodsBubble(this);
         this.applyStyle(); this.updateCompact(); this.position(); this.syncVisibility(); this.syncAirDrop();
     }
     buildPanel() {
@@ -689,12 +692,13 @@ export class Island {
         const menuOpen = this.nativeShelf && this.companion.menuOpen;
         for (const [, tab] of this.navButtons) tab.reactive = !menuOpen;
         if (this.nativeShelf) this.companion.syncShelfVisibility();
-        this.ears?.sync();
+        this.ears?.sync(); this.airpodsBubble?.sync();
     }
     dispose() {
         for (const {notification, id} of this.queuedNotifications ?? []) notification.disconnect(id);
         this.queuedNotifications = []; this.releaseNotifications(this.waitingNotifications ?? []);
         if (this.nativeShelf) this.companion.closeShelf();
+        this.airpodsBubble?.dispose(); this.airpodsBubble = null;
         this.returnPanelHeader(); this.ears?.dispose(); this.paneLife?.dispose(); this.glass.destroy(); this.life.dispose(); this.views.dispose();
         this.dateMenu.menu.close();
         this.clockContainer.get_parent()?.remove_child(this.clockContainer);

@@ -20,8 +20,16 @@ import time
 
 PSM = 0x1001
 HANDSHAKE = bytes.fromhex('00000400010002000000000000000000')
+# Unlocks conversational awareness during playback and adaptive transparency.
+FEATURES = bytes.fromhex('040004004d00d700000000000000')
 NOTIFICATIONS = bytes.fromhex('040004000f00ffffffff')
 HEADER = bytes.fromhex('04000400')
+HANDSHAKE_ACK = bytes.fromhex('01000400')
+FEATURES_ACK = bytes.fromhex('040004002b00')
+# Connection steps (as LibrePods does it): handshake, wait for its answer,
+# unlock features, request notifications, ask again until batteries arrive.
+HANDSHAKE_TRIES, HANDSHAKE_WAIT = 4, 1.5
+NOTIFY_TRIES, NOTIFY_WAIT = 4, 2.0
 ANC_CODES = {1: 'off', 2: 'noise', 3: 'transparency', 4: 'adaptive'}
 ANC_VALUES = {name: code for code, name in ANC_CODES.items()}
 # Battery components and states as the AirPods report them.
@@ -141,20 +149,29 @@ def run(mac, out=sys.stdout, stdin=sys.stdin):
     def emit():
         out.write(json.dumps(state) + '\n')
         out.flush()
+    # step: 'handshake' until the AirPods answer, then 'notify' until a battery arrives, then 'ready'.
+    step, tries, deadline = 'handshake', 1, time.monotonic() + HANDSHAKE_WAIT
     channel.send(HANDSHAKE)
-    time.sleep(0.1)
-    channel.send(NOTIFICATIONS)
     emit()
     inputs = [channel, stdin]
     try:
         while True:
-            ready, _, _ = select.select(inputs, [], [], 0.3 if replay else 30)
+            timeout = 0.3 if replay else max(0.05, deadline - time.monotonic()) if step != 'ready' else 30
+            ready, _, _ = select.select(inputs, [], [], timeout)
             if channel in ready:
                 packet = channel.recv(1024)
                 if not packet:
                     break
+                if step == 'handshake' and packet.startswith(HANDSHAKE_ACK):
+                    channel.send(FEATURES)
+                    step, tries, deadline = 'features', 1, time.monotonic() + 1.0
+                elif step == 'features' and packet.startswith(FEATURES_ACK):
+                    channel.send(NOTIFICATIONS)
+                    step, tries, deadline = 'notify', 1, time.monotonic() + NOTIFY_WAIT
                 if parse(packet, state):
                     emit()
+                if step == 'notify' and any(value is not None for value in state['battery'].values()):
+                    step = 'ready'
             if stdin in ready:
                 line = stdin.readline()
                 if not line:
@@ -166,6 +183,22 @@ def run(mac, out=sys.stdout, stdin=sys.stdin):
                 packet = command(line)
                 if packet:
                     channel.send(packet)
+            if not replay and step != 'ready' and time.monotonic() >= deadline:
+                if step == 'handshake':
+                    if tries >= HANDSHAKE_TRIES:
+                        raise OSError('Die AirPods antworten nicht auf den Handshake')
+                    channel.send(HANDSHAKE)
+                    tries, deadline = tries + 1, time.monotonic() + HANDSHAKE_WAIT
+                elif step == 'features':
+                    # Not every model confirms the feature packet.
+                    channel.send(NOTIFICATIONS)
+                    step, tries, deadline = 'notify', 1, time.monotonic() + NOTIFY_WAIT
+                elif step == 'notify':
+                    if tries >= NOTIFY_TRIES:
+                        step = 'ready'  # Connected, but the AirPods report no battery (yet).
+                    else:
+                        channel.send(NOTIFICATIONS)
+                        tries, deadline = tries + 1, time.monotonic() + NOTIFY_WAIT
             # A replay ends once its packets and its commands are used up.
             if replay and not ready and stdin not in inputs:
                 break

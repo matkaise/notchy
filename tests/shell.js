@@ -1081,6 +1081,35 @@ async function airpodsRegressions(ext, path, screenshot) {
         assert(island.peekKind === 'notification' && styled(island.body, 'notchy-peek-title')[0]?.text === 'AirPods Pro verbunden', 'once the card folds away, the held-back notification shows');
         island.close(); echo.destroy(); await Scripting.sleep(500);
         assert(!island.peeking, 'the card and the notification fold away');
+        // Beside the notch: the AirPods as a small symbol in a battery ring; a click opens their controls.
+        const bubble = island.airpodsBubble, center = Main.panel._centerBox.get_children();
+        await Scripting.sleep(300);
+        const [capsuleX] = island.panelSurface.get_transformed_position(), [bubbleX] = bubble.content.get_transformed_position();
+        assert(bubble.button.visible && bubble.level === 60 && center.indexOf(bubble.button.container) === center.indexOf(island.panelButton.container) + 1 && bubbleX > capsuleX + island.panelSurface.width + 10,
+            `connected AirPods appear as a symbol right beside the notch with the lower bud in the ring (${bubble.level} %)`);
+        Main.panel.set_style('background-color: transparent;'); await screenshot('airpods-bubble'); Main.panel.set_style(null);
+        const bubblePointer = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+        try {
+            const [bx, by] = bubble.content.get_transformed_position();
+            bubblePointer.notify_absolute_motion(GLib.get_monotonic_time(), bx + bubble.content.width / 2, by + bubble.content.height / 2); await Scripting.sleep(150);
+            bubblePointer.notify_button(GLib.get_monotonic_time(), 1, Clutter.ButtonState.PRESSED); await Scripting.sleep(60);
+            bubblePointer.notify_button(GLib.get_monotonic_time(), 1, Clutter.ButtonState.RELEASED); await Scripting.sleep(500);
+            const menuBox = bubble.button.menu.box;
+            assert(bubble.button.menu.isOpen && styled(menuBox, 'notchy-airpods-menu-title')[0]?.text === 'AirPods Pro 2 (USB-C)' && styled(menuBox, 'notchy-airpods-card-value').map(a => a.text).join('|') === '90 %|60 %|60 %',
+                `a real click on the symbol opens the AirPods controls with the batteries (open ${bubble.button.menu.isOpen}, ${styled(menuBox, 'notchy-airpods-menu-title')[0]?.text}, ${styled(menuBox, 'notchy-airpods-card-value').map(a => a.text).join('|')})`);
+            const modeButtons = styled(menuBox, 'notchy-airpods-mode');
+            assert(modeButtons.map(b => b.accessible_name).join('|') === 'Geräuschunterdrückung|Transparenz|Adaptiv|Geräuschkontrolle aus' && modeButtons[0].has_style_class_name('active'), 'the controls offer the noise control modes with the active one marked');
+            await screenshot('airpods-bubble-menu');
+            modeButtons[1].emit('clicked', 1); await waitFor(() => airpods.state.anc === 'transparency');
+            await Scripting.sleep(200);
+            assert(calls().some(c => c.method === 'SetAncMode' && c.args[0] === 'transparency') && styled(bubble.button.menu.box, 'notchy-airpods-mode')[1]?.has_style_class_name('active'), 'choosing a mode in the controls sets it and the menu follows');
+            bubble.button.menu.close(); await Scripting.sleep(300);
+        } finally { bubblePointer.run_dispose(); }
+        island.open('media'); await Scripting.sleep(500);
+        assert(!bubble.button.visible, 'the opened island covers the symbol, so it hides');
+        island.close(true); await Scripting.sleep(400);
+        assert(bubble.button.visible, 'it returns when the island closes');
+        await airpods.setAnc('noise'); await waitFor(() => airpods.state.anc === 'noise');
         // The media tab: batteries and the noise control of this model.
         island.open('media'); await Scripting.sleep(600);
         const row = styled(island.body, 'notchy-airpods-row')[0];
@@ -1134,7 +1163,7 @@ async function airpodsRegressions(ext, path, screenshot) {
         // Disconnecting.
         await fixture('Drop'); await waitFor(() => !airpods.connected);
         await Scripting.sleep(200);
-        assert(!airpods.connected && toasts.some(t => t.endsWith('getrennt')), 'disconnecting is announced');
+        assert(!airpods.connected && toasts.some(t => t.endsWith('getrennt')) && !island.airpodsBubble.button.visible, 'disconnecting is announced and the symbol leaves');
         island.open('media'); await Scripting.sleep(500);
         assert(styled(island.body, 'notchy-airpods-row')[0]?.has_style_class_name('disconnected') && !styled(island.body, 'notchy-airpods-battery').length && buttons(island.body, 'Verbinden').length === 1,
             'disconnected AirPods leave a compact row with „Verbinden“ and no batteries');

@@ -196,6 +196,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
         const main = group(pods, 'AirPods', 'Akkustände, Geräuschkontrolle und eine Verbindungsanimation in der Island. Notchy nutzt dafür den optionalen Dienst airpods-helper und installiert oder ändert selbst nichts am System.');
         toggle(main, 'airpods-enabled', 'AirPods-Integration');
         toggle(main, 'airpods-animation', 'Verbindungsanimation', 'Beim Verbinden wächst die Island kurz und zeigt die Akkustände.');
+        toggle(main, 'airpods-bubble', 'Symbol neben der Notch', 'Verbundene AirPods als kleines Symbol mit Akkuring neben der Uhr; ein Klick öffnet die Steuerung.');
         toggle(main, 'airpods-battery-warning', 'Warnung bei niedrigem Akkustand');
         number(main, 'airpods-battery-threshold', 'Warnen unter (Prozent)', 5, 50, 5);
         toggle(main, 'airpods-builtin', 'Ohne airpods-helper: AirPods direkt auslesen', 'Notchy liest verbundene AirPods selbst über Apples Zubehörprotokoll (AAP): Akkustände von Buds und Case, Ohrerkennung, Geräuschkontrolle. Ohne Root, ohne zusätzliche Software.');

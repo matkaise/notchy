@@ -37,6 +37,7 @@
     <key name="airpods-animation" type="b"><default>true</default><summary>Show a short connection animation with the battery levels when AirPods connect</summary></key>
     <key name="airpods-battery-warning" type="b"><default>true</default><summary>Warn in the island when an AirPod or the case runs low</summary></key>
     <key name="airpods-battery-threshold" type="i"><default>15</default><range min="5" max="50"/><summary>Battery level in percent below which the island warns</summary></key>
+    <key name="airpods-bubble" type="b"><default>true</default><summary>Show connected AirPods as a small symbol with a battery ring beside the notch; a click opens their controls</summary></key>
     <key name="airpods-builtin" type="b"><default>true</default><summary>Without airpods-helper, read connected AirPods over Apple's accessory protocol (AAP) directly: batteries, ear state, noise control</summary></key>
     <key name="airpods-ear-pause" type="b"><default>true</default><summary>With the built-in reader: pause media when a bud is taken out, resume when it is back</summary></key>
     <key name="airpods-bluez-fallback" type="b"><default>true</default><summary>Without airpods-helper, show connection and battery of Apple headphones reported by BlueZ</summary></key>

@@ -36,10 +36,10 @@ const SNAP_TILE = [76, 48];
 // Height of the calendar tab's two scrolling lists.
 const CAL_LIST_HEIGHT = 196;
 // AirPods noise control: symbol and name per mode.
-const ANC_ICON = {noise: 'notchy-anc-symbolic', transparency: 'notchy-transparency-symbolic', adaptive: 'notchy-adaptive-symbolic', off: 'notchy-anc-off-symbolic'};
-const ANC_NAME = {noise: 'Geräuschunterdrückung', transparency: 'Transparenz', adaptive: 'Adaptiv', off: 'Geräuschkontrolle aus'};
+export const ANC_ICON = {noise: 'notchy-anc-symbolic', transparency: 'notchy-transparency-symbolic', adaptive: 'notchy-adaptive-symbolic', off: 'notchy-anc-off-symbolic'};
+export const ANC_NAME = {noise: 'Geräuschunterdrückung', transparency: 'Transparenz', adaptive: 'Adaptiv', off: 'Geräuschkontrolle aus'};
 // The batteries an AirPods model reports: both buds and the case, or one (AirPods Max).
-function airpodsParts(state) {
+export function airpodsParts(state) {
     if (state.battery.single !== null || state.headphones || state.backend === 'bluez') return [{key: 'single', short: '', name: 'Akku', icon: 'notchy-airpods-symbolic'}];
     return [{key: 'left', short: 'L', name: 'Links'}, {key: 'right', short: 'R', name: 'Rechts'}, {key: 'case', short: '', name: 'Case', icon: 'notchy-airpods-case-symbolic'}];
 }
@@ -84,7 +84,7 @@ function drawProduct(cr, kind, size) {
 }
 // One product of the connection card: its picture inside a battery ring, the
 // percentage below. The picture springs in, the ring fills and the number counts up.
-function productCell(kind, caption) {
+export function productCell(kind, caption) {
     const SIZE = 84, actor = box(true, {style_class: 'notchy-airpods-cell'});
     const stack = new St.Widget({layout_manager: new Clutter.BinLayout(), width: SIZE, height: SIZE, x_align: Clutter.ActorAlign.CENTER});
     const ring = new St.DrawingArea({width: SIZE, height: SIZE});

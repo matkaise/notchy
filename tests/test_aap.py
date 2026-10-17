@@ -22,7 +22,9 @@ class AapTest(unittest.TestCase):
         state = aap.new_state()
         records = packets()
         aap.parse(records[0], state)  # the handshake reply changes nothing
+        aap.parse(records[1], state)  # nor does the feature acknowledgement
         self.assertEqual(state, aap.new_state())
+        records = records[1:]
         aap.parse(records[1], state)
         self.assertEqual((state['name'], state['model']), ('AirPods Pro', 'A3048'))
         aap.parse(records[2], state); aap.parse(records[3], state)
@@ -71,7 +73,9 @@ class AapTest(unittest.TestCase):
             self.assertEqual(states[-1]['anc'], 'noise')
             self.assertEqual(states[-1]['battery']['case'], 90)
             sent = Path(log).read_text().split()
-            self.assertEqual(sent[:2], [aap.HANDSHAKE.hex(), aap.NOTIFICATIONS.hex()])
+            # Handshake, then features after its answer, then notifications after theirs.
+            self.assertEqual(sent[:2], [aap.HANDSHAKE.hex(), aap.FEATURES.hex()])
+            self.assertIn(aap.NOTIFICATIONS.hex(), sent)
             self.assertIn('0400040009000d02000000', sent)
 
 

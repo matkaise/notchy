@@ -40,6 +40,9 @@ const APPLE = /^(bluetooth:v004C|usb:v05AC)/i;
 const PRODUCT_ANC = [0x200e, 0x2014, 0x2024, 0x2027, 0x200a, 0x201f, 0x201b];
 const PRODUCT_ADAPTIVE = [0x2014, 0x2024, 0x2027, 0x201b];
 const PRODUCT_HEADPHONES = [0x200a, 0x201f];
+// The AAP reader starts this long after BlueZ reports the connection, and
+// retries a failed channel after these delays while the AirPods stay connected.
+const AAP_SETTLE = 1500, AAP_BACKOFF = [2000, 4000, 8000, 15000, 30000, 60000];
 // The headless test never touches the machine's real Bluetooth.
 const NO_SYSTEM_BLUETOOTH = Boolean(GLib.getenv('NOTCHY_NO_SYSTEM_BLUETOOTH'));
 
@@ -55,7 +58,7 @@ export class AirPods extends Emitter {
         this.life.connect(settings, 'changed::airpods-enabled', () => this.sync());
         this.life.connect(settings, 'changed::airpods-bluez-fallback', () => this.syncBluez());
         this.life.connect(settings, 'changed::airpods-builtin', () => this.syncAap());
-        this.aap = null; this.aapRetries = 0;
+        this.aap = null; this.aapRetries = 0; this.aapWanted = null; this.aapTimer = 0;
         this.sync();
     }
     get enabled() { return this.settings.get_boolean('airpods-enabled'); }
@@ -266,8 +269,16 @@ export class AirPods extends Emitter {
     syncAap() {
         const device = this.bluez?.device;
         const wanted = device?.connected && !this.helperRunning && this.enabled && this.settings.get_boolean('airpods-builtin') && !this.life.closed ? device.address : null;
-        if (this.aap && this.aap.address !== wanted) this.stopAap();
-        if (wanted && !this.aap) this.startAap(wanted);
+        if (wanted !== this.aapWanted) {
+            // A fresh connection starts over: the AirPods need a moment for their
+            // audio profiles before they answer on the AAP channel.
+            this.aapWanted = wanted; this.aapRetries = 0;
+            this.life.cancel(this.aapTimer); this.aapTimer = 0;
+            if (this.aap) this.stopAap();
+            if (wanted) this.aapTimer = this.life.later(AAP_SETTLE, () => { this.aapTimer = 0; this.syncAap(); });
+            return;
+        }
+        if (wanted && !this.aap && !this.aapTimer) this.startAap(wanted);
     }
     startAap(address) {
         try {
@@ -279,15 +290,20 @@ export class AirPods extends Emitter {
                 let line = null;
                 try { [line] = stream.read_line_finish_utf8(result); } catch { return; }
                 if (line === null || this.aap !== aap) return;
-                try { aap.state = JSON.parse(line); if (aap.state.connected) this.aapRetries = 0; } catch { /* Not a state line. */ }
+                try {
+                    aap.state = JSON.parse(line);
+                    if (Object.values(aap.state.battery ?? {}).some(level => level !== null) || aap.state.anc) this.aapRetries = 0;
+                } catch { /* Not a state line. */ }
                 this.update(); read();
             });
             read();
             proc.wait_async(null, () => {
                 if (this.aap !== aap) return;
                 this.aap = null; this.update();
-                // The channel can fail right after connecting; try again a few times.
-                if (this.aapRetries++ < 3) this.life.later(4000, () => this.syncAap());
+                // While the AirPods stay connected, keep trying, ever more patiently.
+                if (this.life.closed || !this.aapWanted) return;
+                const wait = AAP_BACKOFF[Math.min(this.aapRetries++, AAP_BACKOFF.length - 1)];
+                this.aapTimer = this.life.later(wait, () => { this.aapTimer = 0; this.syncAap(); });
             });
         } catch (e) { console.warn(`Notchy AirPods: ${e.message}`); this.aap = null; }
     }
