@@ -11,6 +11,7 @@ import {formatTimeSpan} from 'resource:///org/gnome/shell/misc/dateUtils.js';
 import {box, label, icon, gicon, button, textButton, emptyState, scroll, time} from './widgets.js';
 import {relativeTime, isoWeek, weekDays, groupBy, SNAP_LAYOUTS, zoneRect} from '../model.js';
 import {launchUri} from '../launcher/providers.js';
+import {ageText} from '../services/batteries.js';
 import {Waveform} from './waveform.js';
 import {Lifetime} from '../lifecycle.js';
 
@@ -29,6 +30,8 @@ function outputGicon(output) {
 
 // Long device names end in an ellipsis.
 const shorten = (text, max) => text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+// Thunderstorm's field, footer and padding around its result list.
+const SEARCH_CHROME = 64 + 26 + 10;
 // The AirDrop radar's size.
 const RADAR = 84;
 // A snap layout's miniature screen.
@@ -42,6 +45,16 @@ export const ANC_NAME = {noise: 'Geräuschunterdrückung', transparency: 'Transp
 export function airpodsParts(state) {
     if (state.battery.single !== null || state.headphones || state.backend === 'bluez') return [{key: 'single', short: '', name: 'Akku', icon: 'notchy-airpods-symbolic'}];
     return [{key: 'left', short: 'L', name: 'Links'}, {key: 'right', short: 'R', name: 'Rechts'}, {key: 'case', short: '', name: 'Case', icon: 'notchy-airpods-case-symbolic'}];
+}
+// One cell's reading: the live level (both buds together: the lower one), its
+// charging, and the last valid reading when the part reports nothing now.
+export function partReading(state, key) {
+    const b = state.battery, c = state.charging, info = state.batteries ?? {};
+    const level = key === 'buds' ? (b.left === null ? b.right : b.right === null ? b.left : Math.min(b.left, b.right)) : b[key];
+    const charging = Boolean(key === 'buds' ? c.left || c.right : key === 'single' ? c.left : c[key]);
+    const remembered = key === 'buds' ? ['left', 'right'].map(p => info[p]).filter(p => p?.status === 'stale') : [info[key]].filter(p => p?.status === 'stale');
+    const stale = level === null && remembered.length ? {level: Math.min(...remembered.map(p => p.last)), at: Math.min(...remembered.map(p => p.at))} : null;
+    return {level, charging, stale};
 }
 // AirPods drawn in white, like the product pictures on an iPhone: two buds
 // (stem and head), an over-ear headphone, or the charging case with its lid
@@ -91,8 +104,10 @@ export function productCell(kind, caption) {
     const picture = new St.DrawingArea({width: 56, height: 56, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, pivot_point: new Graphene.Point({x: 0.5, y: 0.5})});
     stack.add_child(ring); stack.add_child(picture);
     const value = label('–', 'notchy-airpods-card-value', {x_align: Clutter.ActorAlign.CENTER});
-    actor.add_child(stack); actor.add_child(value); actor.add_child(label(caption, 'notchy-airpods-card-caption', {x_align: Clutter.ActorAlign.CENTER}));
-    const cell = {actor, kind, level: null, charging: false, low: false, progress: 0, timeline: null};
+    const captionLabel = label(caption, 'notchy-airpods-card-caption', {x_align: Clutter.ActorAlign.CENTER});
+    actor.add_child(stack); actor.add_child(value); actor.add_child(captionLabel);
+    // `stale`: the last valid reading ({level, at}) while the part reports none now.
+    const cell = {actor, kind, caption, level: null, charging: false, low: false, stale: null, progress: 0, timeline: null};
     picture.connect('repaint', () => { const cr = picture.get_context(); drawProduct(cr, kind, picture.get_surface_size()[0]); cr.$dispose(); });
     ring.connect('repaint', () => {
         const cr = ring.get_context(), [w, h] = ring.get_surface_size(), r = Math.min(w, h) / 2 - 3;
@@ -101,13 +116,24 @@ export function productCell(kind, caption) {
             if (cell.low) cr.setSourceRGBA(1, 0.62, 0.04, 1); else cr.setSourceRGBA(0.2, 0.78, 0.35, 1);
             cr.setLineCap(Cairo.LineCap.ROUND);
             cr.arc(w / 2, h / 2, r, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.max(0.01, cell.level / 100 * cell.progress)); cr.stroke();
+        } else if (cell.level === null && cell.stale) {
+            // A remembered level: a quiet grey ring, never the live green.
+            cr.setSourceRGBA(1, 1, 1, 0.32); cr.setLineCap(Cairo.LineCap.ROUND);
+            cr.arc(w / 2, h / 2, r, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.max(0.01, cell.stale.level / 100)); cr.stroke();
         }
         cr.$dispose();
     });
-    const text = () => { value.text = cell.level === null ? '–' : `${cell.charging ? '⚡ ' : ''}${Math.round(cell.level * cell.progress)} %`; };
-    cell.set = (level, charging, low) => {
+    const text = () => {
+        const stale = cell.level === null && cell.stale;
+        value.text = cell.level !== null ? `${cell.charging ? '⚡ ' : ''}${Math.round(cell.level * cell.progress)} %` : stale ? `${cell.stale.level} %` : '–';
+        stale ? value.add_style_class_name('stale') : value.remove_style_class_name('stale');
+        const words = stale ? `${cell.caption} · ${cell.stale.at ? ageText(cell.stale.at) : 'zuletzt'}` : cell.caption;
+        if (captionLabel.text !== words) captionLabel.text = words;
+    };
+    cell.setCaption = words => { cell.caption = words; text(); };
+    cell.set = (level, charging, low, stale = null) => {
         const first = cell.level === null && level !== null && !cell.instant;
-        cell.level = level; cell.charging = charging; cell.low = low;
+        cell.level = level; cell.charging = charging; cell.low = low; cell.stale = level === null && stale?.level !== null && stale?.level !== undefined ? stale : null;
         if (first) {
             cell.timeline?.stop(); cell.progress = 0;
             cell.timeline = new Clutter.Timeline({actor: ring, duration: 1100, progress_mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
@@ -115,7 +141,7 @@ export function productCell(kind, caption) {
             cell.timeline.connect('completed', () => { cell.progress = 1; text(); ring.queue_repaint(); });
             cell.timeline.start();
         } else if (level !== null && !cell.timeline?.is_playing()) cell.progress = 1;
-        actor.accessible_name = `${caption}: ${level === null ? 'unbekannt' : `${level} %`}${charging ? ', lädt' : ''}`;
+        actor.accessible_name = `${cell.caption}: ${level !== null ? `${level} %` : cell.stale ? `zuletzt ${cell.stale.level} %, ${ageText(cell.stale.at)}` : 'unbekannt'}${charging ? ', lädt' : ''}`;
         text(); ring.queue_repaint();
     };
     // The picture springs in once on screen, slightly turned, like on an iPhone.
@@ -254,10 +280,8 @@ export class Views {
                 if (shown) for (const cell of cells.values()) { cell.instant = true; cell.progress = 1; cell.picture.opacity = 255; cell.picture.scale_x = cell.picture.scale_y = 1; cell.picture.rotation_angle_z = 0; }
             }
             for (const [partKey, cell] of cells) {
-                const b = state.battery, c = state.charging;
-                const level = partKey === 'buds' ? (b.left === null ? b.right : b.right === null ? b.left : Math.min(b.left, b.right)) : b[partKey];
-                const charging = partKey === 'buds' ? c.left || c.right : partKey === 'single' ? c.left : c[partKey];
-                cell.set(level, Boolean(charging), level !== null && level < threshold && !charging);
+                const {level, charging, stale} = partReading(state, partKey);
+                cell.set(level, charging, level !== null && level < threshold && !charging, stale);
             }
         };
         const unsubscribe = airpods.subscribe(draw); draw();
@@ -646,14 +670,14 @@ export class Views {
     // ↑↓ choose, ↵ runs, Strg+↵ the second action, Strg+K all actions, Esc
     // steps back or closes. Providers live in src/launcher/.
     searchView() {
-        const root = box(true, {style_class: 'notchy-search'});
+        const root = box(true, {style_class: 'notchy-search', y_expand: true});
         const bar = box(false, {style_class: 'notchy-search-bar'});
         bar.add_child(new St.Icon({icon_name: 'weather-storm-symbolic', icon_size: 22, style_class: 'notchy-search-bolt', y_align: Clutter.ActorAlign.CENTER}));
-        const entry = new St.Entry({style_class: 'notchy-search-entry', hint_text: 'Apps, Dateien, Befehle, Rechnen …', can_focus: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const entry = new St.Entry({style_class: 'notchy-search-entry', hint_text: 'Apps, Befehle, Rechnen … · „datei …“ für Dateien', can_focus: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         bar.add_child(entry); bar.add_child(label('Esc', 'notchy-keycap', {y_align: Clutter.ActorAlign.CENTER}));
         root.add_child(bar); this.focusEntry = entry;
         const list = box(true, {style_class: 'notchy-results'});
-        const view = new St.ScrollView({style_class: 'notchy-scroll notchy-results-scroll', x_expand: true, overlay_scrollbars: true});
+        const view = new St.ScrollView({style_class: 'notchy-scroll notchy-results-scroll', x_expand: true, y_expand: true, overlay_scrollbars: true});
         view.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC); view.set_child(list); root.add_child(view);
         const footer = box(false, {style_class: 'notchy-search-footer'});
         const status = label('', 'notchy-search-footer-text', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
@@ -683,7 +707,7 @@ export class Views {
         const session = launcher.session(ctx, this.pageLife, (results, info) => {
             if (state.drill) return;
             const keep = state.fresh || !state.moved ? null : state.results[state.selected]?.id;
-            state.results = results; state.pending = info.pending; state.empty = Boolean(info.empty);
+            state.results = results; state.pending = info.pending; state.empty = Boolean(info.empty); state.mode = info.mode ?? 'all';
             if (state.fresh) state.moved = false;
             state.fresh = false;
             // A new query starts at the top, and so does a late answer (files) —
@@ -770,6 +794,7 @@ export class Views {
             status.text = state.panel ? state.panel.result.title
                 : state.drill ? 'Indizierte Ordner · Esc zurück'
                 : state.pending ? 'Suche Dateien …'
+                : state.mode === 'files' && query ? `Nur Dateien und Ordner · ${state.results.length} Treffer`
                 : state.backend === 'fallback' && query ? 'Dateiindex nicht aktiv · einfache Suche in persönlichen Ordnern'
                 : !this.settings.get_boolean('launcher-file-search') && query ? 'Dateisuche ist ausgeschaltet'
                 : state.empty ? 'Thunderstorm' : `${state.results.length} ${state.results.length === 1 ? 'Treffer' : 'Treffer'}`;
@@ -784,10 +809,13 @@ export class Views {
                 if (!state.panel && item.section && item.section !== section) { section = item.section; list.add_child(label(section, 'notchy-results-section')); headers++; }
                 list.add_child(row(item, index, index === state.selected)); rows++;
             });
-            // The list's own height, up to VISIBLE rows (and its headers); beyond that it scrolls.
+            // The list's own height, up to VISIBLE rows (and its headers) and the
+            // screen; beyond that it scrolls. A constraint, not a measurement: the
+            // rows just built may not be on the stage or styled yet, and the
+            // island measures the whole page once they are (Island.resize).
             view.visible = rows > 0;
-            const natural = list.get_preferred_height(-1)[1];
-            view.height = Math.ceil(Math.min(natural, VISIBLE * ROW + Math.min(headers, 3) * HEADER));
+            const room = island.monitor.height - island.topInset - 24 - SEARCH_CHROME;
+            view.set_style(`max-height: ${Math.max(ROW, Math.min(room, VISIBLE * ROW + Math.min(headers, 3) * HEADER))}px;`);
             footer.visible = rows > 0 || state.pending || Boolean(entry.get_text().trim());
             drawFooter(); keepVisible();
             this.pageLife.later(0, () => island.resize());

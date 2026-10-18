@@ -306,7 +306,7 @@
 .notchy-airpods-cell { spacing: 3px; }
 .notchy-airpods-ring-part { font-size: 10.5px; font-weight: bold; color: rgba(255,255,255,0.75); }
 .notchy-airpods-ring-value { font-size: 11px; color: rgba(255,255,255,0.8); font-feature-settings: "tnum"; }
-#panel .notchy-airpods-bubble-button { -minimum-hpadding: 0; -natural-hpadding: 0 !important; padding: 0; margin: 0 0 0 14px; border: 0 !important; background-color: transparent; box-shadow: none; }
+#panel .notchy-airpods-bubble-button { -minimum-hpadding: 0; -natural-hpadding: 0 !important; padding: 0; margin: 0; border: 0 !important; background-color: transparent; box-shadow: none; }
 .notchy-airpods-bubble { border-radius: 999px; color: #ffffff; }
 .notchy-airpods-bubble.notchy-dynamic { background-color: #000000; }
 .notchy-airpods-bubble.notchy-liquid { background-color: rgba(26,22,30,0.86); }
@@ -319,3 +319,40 @@
 .notchy-airpods-mode:hover, .notchy-airpods-mode:focus { background-color: rgba(255,255,255,0.1); color: #ffffff; }
 .notchy-airpods-mode.active { background-color: rgba(255,255,255,0.2); color: #ffffff; }
 .notchy-airpods-mode-label { font-size: 10.5px; margin-top: 3px; }
+/* ── Indicators beside the notch (AirPods, agents) ───────────────────── */
+.notchy-side-left { padding-right: 10px; }
+.notchy-side-right { padding-left: 10px; }
+.notchy-side-row { spacing: 6px; }
+#panel .notchy-side-button { -minimum-hpadding: 0; -natural-hpadding: 0 !important; padding: 0; margin: 0; border: 0 !important; background-color: transparent; box-shadow: none; }
+.notchy-side-group { border-radius: 999px; color: #ffffff; font-size: 11px; font-weight: bold; }
+.notchy-side-group.notchy-dynamic { background-color: #000000; }
+.notchy-side-group.notchy-liquid { background-color: rgba(26,22,30,0.86); }
+#panel .notchy-side-button:hover .notchy-side-group, #panel .notchy-side-button:checked .notchy-side-group { background-color: #1c1c1e; }
+.notchy-agent-bubble { border-radius: 999px; color: #ffffff; }
+.notchy-agent-bubble.notchy-dynamic { background-color: #000000; }
+.notchy-agent-bubble.notchy-liquid { background-color: rgba(26,22,30,0.86); }
+#panel .notchy-side-button:hover .notchy-agent-bubble, #panel .notchy-side-button:checked .notchy-agent-bubble { background-color: #1c1c1e; }
+.notchy-agent-bubble .notchy-agent-icon { color: rgba(255,255,255,0.92); }
+.notchy-agent-bubble.notchy-agent-idle .notchy-agent-icon { color: rgba(255,255,255,0.55); }
+.notchy-agent-badge { font-size: 9px; font-weight: bold; color: #000000; background-color: #ffffff; border-radius: 7px; min-width: 14px; height: 14px; text-align: center; }
+.notchy-agent-badge.waiting { background-color: #ff9f0a; }
+.notchy-agent-badge.error { background-color: #ff453a; color: #ffffff; }
+.notchy-agent-badge.completed { background-color: #34c759; color: #ffffff; }
+.notchy-agent-menu { min-width: 320px; }
+.notchy-agent-menu-title { font-size: 14px; font-weight: bold; color: #ffffff; }
+.notchy-agent-menu-sub { font-size: 11.5px; color: rgba(255,255,255,0.6); }
+.notchy-agent-row { spacing: 10px; }
+.notchy-agent-row-title { font-size: 12.5px; font-weight: bold; color: #ffffff; }
+.notchy-agent-row-sub { font-size: 11px; color: rgba(255,255,255,0.6); }
+.notchy-agent-row-time { font-size: 11px; color: rgba(255,255,255,0.5); font-feature-settings: "tnum"; }
+.notchy-agent-row-icon { color: rgba(255,255,255,0.8); }
+.notchy-agent-dot { width: 8px; height: 8px; border-radius: 4px; background-color: rgba(255,255,255,0.35); }
+.notchy-agent-dot.working { background-color: #6cb4ff; }
+.notchy-agent-dot.waiting { background-color: #ff9f0a; }
+.notchy-agent-dot.error { background-color: #ff453a; }
+.notchy-agent-dot.completed { background-color: #34c759; }
+.notchy-agent-progress { height: 4px; border-radius: 2px; background-color: rgba(255,255,255,0.15); margin-top: 4px; }
+.notchy-agent-progress-fill { height: 4px; border-radius: 2px; background-color: #6cb4ff; }
+.notchy-agent-switch { padding: 3px 10px; border-radius: 10px; font-size: 11px; color: #ffffff; background-color: rgba(255,255,255,0.12); }
+.notchy-agent-switch:hover, .notchy-agent-switch:focus { background-color: rgba(255,255,255,0.22); }
+.notchy-airpods-card-value.stale { color: rgba(255,255,255,0.55); font-weight: normal; }

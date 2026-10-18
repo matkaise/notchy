@@ -1,30 +1,151 @@
 #!/usr/bin/python3
-"""Small local CLI for file-manager scripts and agent hooks."""
+"""Small local CLI for file-manager scripts and agent hooks.
+
+  notchyctl add FILE…                       put files on the shelf
+  notchyctl list                            list the shelf
+  notchyctl activity NAME STATUS [--progress P]   a simple named live activity
+  notchyctl clear-activity NAME
+  notchyctl activities
+
+  notchyctl agent start  --provider P --session ID [--project NAME] [--pid PID] [--heartbeat SEC]
+  notchyctl agent update --session ID --state working|waiting|idle|completed|error [--provider P] [--status TEXT] [--progress 0..1]
+  notchyctl agent heartbeat --session ID [--provider P]
+  notchyctl agent stop   --session ID [--provider P]
+  notchyctl agent list
+  notchyctl agent hooks status|install|uninstall [--provider claude|codex|antigravity] [--dry-run] [--json]
+
+Agent sessions are kept per session id, so several sessions of one agent are
+shown separately. Notchy has no network port: everything goes over the user's
+session bus.
+"""
 import argparse
 import json
 from pathlib import Path
-from gi.repository import Gio, GLib
+import sys
 
-parser = argparse.ArgumentParser(description='Notchy local integration')
-commands = parser.add_subparsers(dest='command', required=True)
-add = commands.add_parser('add', help='Add files to the tray'); add.add_argument('files', nargs='+')
-commands.add_parser('list', help='List tray entries')
-activity = commands.add_parser('activity', help='Publish an agent live activity'); activity.add_argument('name'); activity.add_argument('status'); activity.add_argument('--progress', type=float, default=0)
-clear = commands.add_parser('clear-activity'); clear.add_argument('name')
-commands.add_parser('activities')
-args = parser.parse_args()
-proxy = Gio.DBusProxy.new_for_bus_sync(Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, None, 'org.gnome.Shell.Extensions.Notchy', '/org/gnome/Shell/Extensions/Notchy', 'org.gnome.Shell.Extensions.Notchy', None)
-if not proxy.get_name_owner():
-    parser.exit(1, 'Notchy is not enabled.\n')
-if args.command == 'add':
-    files = [Path(path).expanduser().resolve() for path in args.files]
-    if not all(path.exists() for path in files):
-        parser.exit(1, 'One or more files do not exist.\n')
-    print(proxy.call_sync('AddUris', GLib.Variant('(s)', ('\r\n'.join(p.as_uri() for p in files),)), Gio.DBusCallFlags.NONE, 5000, None).unpack()[0])
-elif args.command in ('list', 'activities'):
-    reply = proxy.call_sync('GetItems' if args.command == 'list' else 'GetActivities', None, Gio.DBusCallFlags.NONE, 5000, None)
-    print(json.dumps(json.loads(reply.unpack()[0]), ensure_ascii=False, indent=2))
-elif args.command == 'activity':
-    proxy.call_sync('SetActivity', GLib.Variant('(ssd)', (args.name, args.status, args.progress)), Gio.DBusCallFlags.NONE, 5000, None)
-elif args.command == 'clear-activity':
-    proxy.call_sync('ClearActivity', GLib.Variant('(s)', (args.name,)), Gio.DBusCallFlags.NONE, 5000, None)
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent / 'helper'))
+
+BUS = 'org.gnome.Shell.Extensions.Notchy'
+PATH = '/org/gnome/Shell/Extensions/Notchy'
+
+
+def proxy():
+    from gi.repository import Gio
+    bus = Gio.DBusProxy.new_for_bus_sync(Gio.BusType.SESSION, Gio.DBusProxyFlags.DO_NOT_AUTO_START, None, BUS, PATH, BUS, None)
+    if not bus.get_name_owner():
+        sys.exit('Notchy is not enabled.')
+    return bus
+
+
+def call(method, signature=None, values=None):
+    from gi.repository import Gio, GLib
+    reply = proxy().call_sync(method, GLib.Variant(signature, values) if signature else None, Gio.DBusCallFlags.NONE, 5000, None)
+    return reply.unpack() if reply else ()
+
+
+def agent_event(args, kind, **extra):
+    if extra.get('pid'):
+        # The process to watch: its start time tells a reused pid apart.
+        import agent_hook
+        info = agent_hook.stat(extra['pid'])
+        if not info:
+            sys.exit(f"No process {extra['pid']}.")
+        extra['pidStart'] = info[2]
+    event = {'provider': args.provider, 'session': args.session, 'event': kind, 'source': 'cli', **{k: v for k, v in extra.items() if v is not None}}
+    error = call('AgentEvent', '(s)', (json.dumps(event),))[0]
+    if error:
+        sys.exit(f'Notchy: {error}')
+
+
+def hooks(args):
+    import agent_setup
+    providers = [args.provider] if args.provider else list(agent_setup.EVENTS)
+    results = []
+    for provider in providers:
+        if args.action == 'status':
+            results.append(agent_setup.status(provider))
+        elif args.action == 'install':
+            results.append({'provider': provider, **agent_setup.install(provider, dry_run=args.dry_run)})
+        else:
+            results.append({'provider': provider, **agent_setup.uninstall(provider, dry_run=args.dry_run)})
+    if args.json:
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+        return 0 if all(r.get('ok', True) for r in results) else 1
+    for result in results:
+        name = agent_setup.LABELS[result['provider']]
+        if args.action == 'status':
+            print(f"{name}: {result['state']} ({result['config']})" + (f" — {result['error']}" if result['error'] else '') + ('' if result['program'] else ' — Programm nicht gefunden'))
+            if result['note']:
+                print(f"  {result['note']}")
+        elif not result.get('ok'):
+            print(f"{name}: nicht geändert — {result['error']}")
+        elif args.dry_run:
+            print(f"{name}: würde {result['config']} {'ändern' if result['changed'] else 'nicht ändern'}:")
+            print(json.dumps(result['preview'], ensure_ascii=False, indent=2))
+        else:
+            print(f"{name}: {result['config']} {'geändert' if result['changed'] else 'unverändert'}" + (f", Sicherung: {result['backup']}" if result.get('backup') else ''))
+    return 0 if all(r.get('ok', True) for r in results) else 1
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Notchy local integration')
+    commands = parser.add_subparsers(dest='command', required=True)
+    add = commands.add_parser('add', help='Add files to the tray'); add.add_argument('files', nargs='+')
+    commands.add_parser('list', help='List tray entries')
+    activity = commands.add_parser('activity', help='Publish a simple named live activity'); activity.add_argument('name'); activity.add_argument('status'); activity.add_argument('--progress', type=float, default=0)
+    clear = commands.add_parser('clear-activity'); clear.add_argument('name')
+    commands.add_parser('activities')
+    agent = commands.add_parser('agent', help='AI agent sessions beside the notch')
+    verbs = agent.add_subparsers(dest='verb', required=True)
+    for verb in ('start', 'update', 'heartbeat', 'stop'):
+        sub = verbs.add_parser(verb)
+        sub.add_argument('--provider', default='cli', help='claude, codex, antigravity or your own name (a-z, 0-9, ._-)')
+        sub.add_argument('--session', required=True)
+        if verb in ('start', 'update'):
+            sub.add_argument('--project'); sub.add_argument('--status')
+            sub.add_argument('--pid', type=int, help='the agent\'s process: the session ends when it exits')
+            sub.add_argument('--heartbeat', type=int, help='seconds between heartbeats; three missed ones end the session')
+        if verb == 'update':
+            sub.add_argument('--state', choices=['working', 'waiting', 'idle', 'completed', 'error'])
+            sub.add_argument('--progress', type=float, help='real progress between 0 and 1')
+    verbs.add_parser('list')
+    hook = verbs.add_parser('hooks', help="Set up Notchy's hook adapter in an agent's own configuration")
+    hook.add_argument('action', choices=['status', 'install', 'uninstall'])
+    hook.add_argument('--provider', choices=['claude', 'codex', 'antigravity'])
+    hook.add_argument('--dry-run', action='store_true', help='show the result without writing')
+    hook.add_argument('--json', action='store_true')
+    args = parser.parse_args()
+
+    if args.command == 'add':
+        from gi.repository import GLib
+        files = [Path(path).expanduser().resolve() for path in args.files]
+        if not all(path.exists() for path in files):
+            parser.exit(1, 'One or more files do not exist.\n')
+        print(call('AddUris', '(s)', ('\r\n'.join(p.as_uri() for p in files),))[0])
+    elif args.command in ('list', 'activities'):
+        print(json.dumps(json.loads(call('GetItems' if args.command == 'list' else 'GetActivities')[0]), ensure_ascii=False, indent=2))
+    elif args.command == 'activity':
+        call('SetActivity', '(ssd)', (args.name, args.status, args.progress))
+    elif args.command == 'clear-activity':
+        call('ClearActivity', '(s)', (args.name,))
+    elif args.command == 'agent':
+        if args.verb == 'hooks':
+            return hooks(args)
+        if args.verb == 'list':
+            print(json.dumps(json.loads(call('GetAgents')[0]), ensure_ascii=False, indent=2))
+        elif args.verb == 'start':
+            agent_event(args, 'start', project=args.project, status=args.status, pid=args.pid, heartbeat=args.heartbeat)
+        elif args.verb == 'update':
+            if args.state is None and args.status is None and args.progress is None and args.project is None:
+                parser.exit(2, 'agent update needs --state, --status, --progress or --project\n')
+            agent_event(args, 'update', state=args.state, status=args.status, progress=args.progress, project=args.project, pid=args.pid, heartbeat=args.heartbeat)
+        elif args.verb == 'heartbeat':
+            agent_event(args, 'heartbeat')
+        elif args.verb == 'stop':
+            agent_event(args, 'end')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

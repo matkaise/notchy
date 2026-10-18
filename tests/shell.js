@@ -66,6 +66,11 @@ export async function run() {
         await airpodsRegressions(ext, path, screenshot); ext.disable();
         print('NOTCHY_AIRPODS_TEST_OK'); return;
     }
+    if (GLib.getenv('NOTCHY_TEST_LAYOUT_ONLY')) {
+        await layoutRegressions(ext, path, screenshot);
+        await agentRegressions(ext, path, screenshot); ext.disable();
+        print('NOTCHY_LAYOUT_TEST_OK'); return;
+    }
     if (GLib.getenv('NOTCHY_TEST_DROP_ONLY')) {
         ext.settings.set_boolean('clipboard-enabled', true);
         await interactionRegressions(ext, path, screenshot); ext.disable();
@@ -283,7 +288,9 @@ export async function run() {
     await interactionRegressions(ext, path, screenshot);
     await regalMenuRegressions(ext, path, screenshot);
     await launcherRegressions(ext, path, screenshot);
-    mock.force_exit(); await Scripting.sleep(300); assert(ext.media.state === null && !island.panelSurface.has_style_class_name('notchy-wide'), 'MPRIS player removal empties the capsule');
+    await layoutRegressions(ext, path, screenshot);
+    await agentRegressions(ext, path, screenshot);
+    mock.force_exit(); for (let i = 0; i < 40 && (ext.media.state || ext.islands[0].toastState); i++) await Scripting.sleep(100); assert(ext.media.state === null && !ext.islands[0].panelSurface.has_style_class_name('notchy-wide'), `MPRIS player removal empties the capsule (${ext.media.state?.title ?? 'no state'}, ${ext.islands[0].panelSurface.get_style_class_name()})`);
     keyboard.run_dispose();
     // Last, as it ends with repeated disable/enable cycles.
     await airpodsRegressions(ext, path, screenshot);
@@ -884,7 +891,10 @@ async function launcherRegressions(ext, path, screenshot) {
     const root = `${path}/thunderstorm`; GLib.mkdir_with_parents(`${root}/Berichte`, 0o700); GLib.mkdir_with_parents(`${root}/.geheim`, 0o700);
     const files = ['Bericht Quartal.pdf', 'Notizen zum bericht.txt', '.geheim/bericht privat.txt'].map(name => `${root}/${name}`);
     for (const file of files) GLib.file_set_contents(file, 'fixture');
-    const indexed = [...files, `${root}/Berichte`, `${root}/verschwunden/bericht alt.txt`];
+    // 30 files named after an installed app, to rank against the app itself.
+    const chromeFiles = Array.from({length: 30}, (_, i) => `${root}/${i === 0 ? 'chrome' : i % 2 ? `chrome export ${i}.json` : `Chrome Lesezeichen ${i}.html`}`);
+    for (const file of chromeFiles) GLib.file_set_contents(file, 'fixture');
+    const indexed = [...files, `${root}/Berichte`, `${root}/verschwunden/bericht alt.txt`, ...chromeFiles];
     const log = `${path}/localsearch-queries.log`; GLib.unlink(log);
     const queries = () => { try { return new TextDecoder().decode(GLib.file_get_contents(log)[1]).trim().split('\n').filter(Boolean).map(JSON.parse); } catch { return []; } };
     const mock = Gio.Subprocess.new(['/usr/bin/python3', here('mock_localsearch.py'), log, 'ber', ...indexed], Gio.SubprocessFlags.NONE);
@@ -900,6 +910,34 @@ async function launcherRegressions(ext, path, screenshot) {
         assert(report && report.kind === 'Datei' && report.subtitle.endsWith('tests/output/thunderstorm') && state().backend === 'localsearch', `files come from the LocalSearch index with name, kind and folder (${titles().join(', ')})`);
         assert(state().selected === 0 && titles()[0] === 'Bericht Quartal.pdf', 'file results arriving late take the top and the selection, above the web search');
         await Scripting.sleep(400); await screenshot('thunderstorm-files');
+        // Apps before files: "Chrome" with Google Chrome installed (a stand-in app) and 30 chrome files.
+        const {matchScore: score} = await import(`${ext.dir.get_uri()}/src/launcher/logic.js`);
+        const apps = ext.launcher.providers.app, realApps = apps.search;
+        apps.search = query => {
+            const s = Math.max(score(query, 'Google Chrome'), score(query, 'google-chrome-stable') - 40);
+            return s >= 300 ? [{id: 'app:google-chrome.desktop', kind: 'App', title: 'Google Chrome', subtitle: 'Webbrowser', icon: 'web-browser-symbolic', score: s, actions: [{title: 'Öffnen', icon: 'go-next-symbolic', run: () => opened.push('app:chrome')}]}] : [];
+        };
+        try {
+            for (const text of ['chrome', 'Chrome', 'chro']) {
+                await type(text); await waitFor(() => !state().pending && titles().some(t => t.startsWith('chrome') || t.startsWith('Chrome ')), 4000);
+                assert(titles()[0] === 'Google Chrome' && state().selected === 0 && titles().filter(t => /chrome/i.test(t) && t !== 'Google Chrome').length >= 3,
+                    `„${text}“: the Chrome app leads, its files stay reachable below (${titles().slice(0, 5).join(', ')})`);
+            }
+            await type('google chrome'); await waitFor(() => !state().pending, 4000);
+            assert(titles()[0] === 'Google Chrome', 'the full app name finds the app first');
+            // The user moved; late file results keep the selected row.
+            await type('chrom', 0); await press(Clutter.KEY_Down, 30);
+            const chosen = state().results[state().selected]?.id;
+            await waitFor(() => !state().pending, 4000); await Scripting.sleep(200);
+            assert(state().results[state().selected]?.id === chosen && chosen, `a late file answer does not move the selection the user chose (${chosen})`);
+            // The explicit file mode.
+            await type('datei chrome'); await waitFor(() => !state().pending && titles().length > 3, 4000);
+            assert(titles()[0] === 'chrome' && !titles().includes('Google Chrome') && state().results.every(r => ['Datei', 'Ordner', 'Regal'].includes(r.kind)) && titles().length > 8,
+                `„datei chrome“ lists files and folders only, the exact name first (${titles().slice(0, 4).join(', ')} … ${titles().length})`);
+            assert(styled(island.body, 'notchy-search-footer-text')[0]?.text.startsWith('Nur Dateien und Ordner'), 'the footer says the search is limited to files');
+            await type('/chrome'); await waitFor(() => !state().pending, 4000);
+            assert(titles()[0] === 'chrome', 'a leading slash searches files too');
+        } finally { apps.search = realApps; }
         await type('berichte'); await waitFor(() => titles().includes('Berichte') && !state().pending, 3000);
         assert(state().results.find(r => r.title === 'Berichte')?.kind === 'Ordner', 'folders are listed as folders');
         await type('bericht'); await waitFor(() => !state().pending && titles().includes('Notizen zum bericht.txt'), 4000);
@@ -1047,7 +1085,9 @@ async function airpodsRegressions(ext, path, screenshot) {
         // No backend installed: nothing in the island, a clear status for the settings.
         await Scripting.sleep(300);
         assert(airpods.state === null && airpods.backend === null && ['missing', 'bluez'].includes(airpods.status), `without airpods-helper there is no AirPods state (${airpods.status})`);
-        assert(!island.airpodsBubble.button.visible, 'without a device there is no AirPods symbol beside the notch');
+        // An indicator beside the notch shows when it is placed, visible and mapped.
+        const shownBeside = id => { const item = island.sides.items.get(id); return Boolean(item?.actor.visible && item.actor.mapped && island.sides.sideOf(id)); };
+        assert(!shownBeside('airpods'), 'without a device there is no AirPods symbol beside the notch');
         island.open('media'); await Scripting.sleep(500);
         assert(!styled(island.body, 'notchy-airpods-row').length, 'the media tab stays free of AirPods controls');
         island.close(true); await Scripting.sleep(300);
@@ -1083,11 +1123,13 @@ async function airpodsRegressions(ext, path, screenshot) {
         island.close(); echo.destroy(); await Scripting.sleep(500);
         assert(!island.peeking, 'the card and the notification fold away');
         // Beside the notch: the AirPods as a small symbol in a battery ring; a click opens their controls.
-        const bubble = island.airpodsBubble, center = Main.panel._centerBox.get_children();
+        const bubble = island.airpodsBubble;
         await Scripting.sleep(300);
         const [capsuleX] = island.panelSurface.get_transformed_position(), [bubbleX] = bubble.content.get_transformed_position();
-        assert(bubble.button.visible && bubble.level === 60 && center.indexOf(bubble.button.container) === center.indexOf(island.panelButton.container) + 1 && bubbleX > capsuleX + island.panelSurface.width + 10,
-            `connected AirPods appear as a symbol right beside the notch with the lower bud in the ring (${bubble.level} %)`);
+        assert(shownBeside('airpods') && island.sides.sideOf('airpods') === 'right' && bubble.level === 60 && bubbleX >= capsuleX + island.panelSurface.width + 8 && bubbleX <= capsuleX + island.panelSurface.width + 14,
+            `connected AirPods appear as a symbol right beside the notch with the lower bud in the ring (${bubble.level} %, ${bubbleX - capsuleX - island.panelSurface.width} px apart)`);
+        const notchCenter = capsuleX + island.panelSurface.width / 2, monitorCenter = island.monitor.x + island.monitor.width / 2;
+        assert(Math.abs(notchCenter - monitorCenter) <= 1, `the AirPods symbol does not push the notch out of the middle (${notchCenter} vs ${monitorCenter})`);
         Main.panel.set_style('background-color: transparent;'); await screenshot('airpods-bubble'); Main.panel.set_style(null);
         const bubblePointer = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
         try {
@@ -1107,9 +1149,9 @@ async function airpodsRegressions(ext, path, screenshot) {
             bubble.button.menu.close(); await Scripting.sleep(300);
         } finally { bubblePointer.run_dispose(); }
         island.open('media'); await Scripting.sleep(500);
-        assert(!bubble.button.visible, 'the opened island covers the symbol, so it hides');
+        assert(!shownBeside('airpods'), 'the opened island covers the symbol, so it hides');
         island.close(true); await Scripting.sleep(400);
-        assert(bubble.button.visible, 'it returns when the island closes');
+        assert(shownBeside('airpods'), 'it returns when the island closes');
         await airpods.setAnc('noise'); await waitFor(() => airpods.state.anc === 'noise');
         // The controls live beside the notch only; the media tab has none.
         const menu = bubble.button.menu, menuBox = menu.box;
@@ -1155,7 +1197,7 @@ async function airpodsRegressions(ext, path, screenshot) {
         // Disconnecting.
         await fixture('Drop'); await waitFor(() => !airpods.connected);
         await Scripting.sleep(200);
-        assert(!airpods.connected && toasts.some(t => t.endsWith('getrennt')) && !island.airpodsBubble.button.visible, 'disconnecting is announced and the symbol leaves');
+        assert(!airpods.connected && toasts.some(t => t.endsWith('getrennt')) && !shownBeside('airpods'), 'disconnecting is announced and the symbol leaves');
         // Connecting from Thunderstorm, disconnecting from the controls: both through the daemon.
         const offer = ext.launcher.providers.cmd.search('airpods', {}).find(r => r.title === 'AirPods verbinden');
         assert(offer, 'Thunderstorm offers to connect known AirPods');
@@ -1204,5 +1246,288 @@ async function airpodsRegressions(ext, path, screenshot) {
     } finally {
         island.toast = realToast; try { daemon?.force_exit(); } catch { /* Gone. */ }
         ext.settings?.set_boolean('hover-open', true);
+    }
+}
+
+// Compact geometry: the closed capsule keeps one width for one content,
+// whatever opened and closed it (hover, overview, shortcuts) and how often;
+// Thunderstorm reaches its full height with its footer inside the surface.
+async function layoutRegressions(ext, path, screenshot) {
+    const island = ext.islands[0];
+    const pointer = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+    const move = async (x, y, wait = 0) => { pointer.notify_absolute_motion(GLib.get_monotonic_time(), x, y); await Scripting.sleep(wait); };
+    const waitFor = async (condition, ms = 3000) => { for (let i = 0; i < ms / 50 && !condition(); i++) await Scripting.sleep(50); return condition(); };
+    const away = () => move(640, 600, 0);
+    // The capsule at rest: in the bar, nothing animating, no stale morph state.
+    const settled = () => !island.panelAttached && !island.expanded && !island.morphing && !island.actor.visible && !island.panelSurface.get_transitions?.()?.length && island.sizeTarget === null;
+    const width = () => island.panelSurface.width, natural = () => Math.ceil(island.panelSurface.get_preferred_width(-1)[1]);
+    const centred = () => { const [x] = island.panelSurface.get_transformed_position(); return Math.abs(x + island.panelSurface.width / 2 - (island.monitor.x + island.monitor.width / 2)) <= 1; };
+    const hoverCycle = async () => {
+        const [cx, cy] = island.clockContainer.get_transformed_position();
+        await move(cx + island.clockContainer.width / 2, cy + 8, 0);
+        await waitFor(() => island.expanded && !island.morphing, 3000); await Scripting.sleep(100);
+        await away(); await waitFor(settled, 4000); await Scripting.sleep(100);
+    };
+    const mock = Gio.Subprocess.new(['/usr/bin/python3', here('mock_mpris.py')], Gio.SubprocessFlags.NONE);
+    ext.settings.set_boolean('hover-open', true);
+    try {
+        await waitFor(() => ext.media.state?.playing, 4000);
+        await waitFor(() => ext.cover.file, 3000);
+        ext.spectrum.sync = () => {}; ext.settings.set_boolean('media-waveform', true); ext.spectrum.stop(); ext.spectrum.start('', true);
+        await away(); await waitFor(settled); await Scripting.sleep(400);
+        const playing = width();
+        assert(playing === natural() && playing > 200 && centred() && island.panelSurface.has_style_class_name('notchy-wide'), `playing media: the capsule has its full width with cover and waveform (${playing})`);
+        const waveform = styled(island.rightRow, 'notchy-waveform')[0], art = styled(island.leftRow, 'notchy-mini-art')[0];
+        // 20 hover cycles, every fifth followed by the overview (Super).
+        const widths = [];
+        for (let round = 0; round < 20; round++) {
+            await hoverCycle();
+            widths.push(width());
+            if (round % 5 === 4) { Main.overview.show(); await Scripting.sleep(500); Main.overview.hide(); await waitFor(() => !Main.overview.visible, 2000); await Scripting.sleep(300); widths.push(width()); }
+        }
+        assert(widths.every(w => w === playing) && centred(), `the closed capsule keeps its width over 20 hover cycles and the overview (${[...new Set(widths)].join(', ')} vs ${playing})`);
+        assert(styled(island.rightRow, 'notchy-waveform')[0] === waveform && styled(island.leftRow, 'notchy-mini-art')[0] === art, 'cover and waveform keep their actors across MPRIS updates and cycles');
+        const [wx, , ] = waveform.get_transformed_position(), [sx] = island.panelSurface.get_transformed_position();
+        assert(wx + waveform.width <= sx + island.panelSurface.width && art.get_transformed_position()[0] >= sx, 'cover and waveform lie inside the capsule, nothing cut off');
+        // Rapid hover in and out.
+        const [cx, cy] = island.clockContainer.get_transformed_position();
+        for (let i = 0; i < 12; i++) { await move(cx + 20, cy + 8, 70 + (i % 3) * 60); await away(); await Scripting.sleep(60 + (i % 4) * 90); }
+        await waitFor(settled, 5000); await Scripting.sleep(200);
+        assert(settled() && width() === playing, `rapid hovering ends in the same geometry (${width()})`);
+        // A track change while the island is open: it folds back to the width of what it shows now.
+        island.open('media'); await waitFor(() => !island.morphing); await ext.media.goTo(ext.media.queue[1].trackId); await Scripting.sleep(500);
+        island.close(); await waitFor(settled, 3000); await Scripting.sleep(200);
+        assert(width() === natural() && width() === playing, `a track change while open folds back to the correct width (${width()})`);
+        // Tabs in between.
+        island.open('media'); await Scripting.sleep(350); island.open('calendar'); await Scripting.sleep(350); island.open('clipboard'); await Scripting.sleep(350); island.open('media'); await Scripting.sleep(350);
+        island.close(); await waitFor(settled, 3000); await Scripting.sleep(200);
+        assert(width() === playing, 'switching tabs leaves the compact width alone');
+        // The HUD during playback widens the capsule and gives the width back.
+        island.hud(new Gio.ThemedIcon({name: 'audio-volume-high-symbolic'}), 'Lautstärke', 0.5, 1); await Scripting.sleep(400);
+        const hud = width();
+        assert(hud > playing && hud === natural(), `the HUD widens the capsule (${hud})`);
+        await waitFor(() => !island.hudState, 3000); await Scripting.sleep(400);
+        assert(width() === playing && styled(island.rightRow, 'notchy-waveform')[0], 'after the HUD the media activity returns at its width');
+        // A toast arriving while the island folds: the surface follows the new width.
+        island.open('media'); await waitFor(() => !island.morphing); island.close(); await Scripting.sleep(60); island.toast('edit-copy-symbolic', 'In Zwischenablage kopiert');
+        await Scripting.sleep(400);
+        assert(!island.panelAttached && width() === natural(), `a toast during folding ends at the toast's width (${width()} vs ${natural()})`);
+        await waitFor(() => !island.toastState, 3000); await Scripting.sleep(300);
+        assert(width() === playing, 'and returns to the media width');
+        // Paused and stopped.
+        await ext.media.call('Pause'); await Scripting.sleep(300);
+        const paused = width();
+        await hoverCycle(); await hoverCycle();
+        assert(width() === paused && styled(island.rightRow, 'notchy-waveform').length === 0, `paused media keeps one width over cycles (${paused})`);
+        await ext.media.call('Play'); await Scripting.sleep(300);
+        // Liquid Glass, then Dynamic Glass again.
+        ext.settings.set_string('style', 'liquid'); await Scripting.sleep(400);
+        const liquid = width();
+        await hoverCycle(); await hoverCycle();
+        assert(width() === liquid && island.panelSurface.has_style_class_name('notchy-liquid') && island.panelSurface.has_style_class_name('notchy-wide'), `Liquid Glass keeps its width over cycles (${liquid})`);
+        ext.settings.set_string('style', 'dynamic'); await Scripting.sleep(400);
+        await hoverCycle();
+        assert(width() === playing, 'back in Dynamic Glass the width is the same as before');
+        // A taller bar: the header follows, the width stays.
+        Main.panel.set_height(40); await Scripting.sleep(400);
+        island.open('media'); await waitFor(() => !island.morphing); await Scripting.sleep(100);
+        assert(island.headerRow.height === 40 && Math.abs(island.surface.height - (40 + 8 + 300 + 50)) <= 1, `the opened island follows a taller bar (${island.surface.height})`);
+        island.close(); await waitFor(settled, 3000); await Scripting.sleep(200);
+        assert(width() === natural() && island.panelSurface.height === 40, 'and folds back into it');
+        Main.panel.set_height(-1); await Scripting.sleep(400);
+        // A different scale factor: still stable.
+        const theme = St.ThemeContext.get_for_stage(global.stage), scale = theme.scale_factor;
+        theme.scale_factor = 2; await Scripting.sleep(800);
+        const scaled = width();
+        await hoverCycle(); await hoverCycle();
+        assert(width() === scaled && scaled === natural() && centred(), `at scale 2 the capsule keeps its width (${scaled})`);
+        theme.scale_factor = scale; await Scripting.sleep(800);
+        await hoverCycle();
+        assert(width() === playing, `back at scale ${scale} the width is restored (${width()})`);
+        await screenshot('layout-compact');
+
+        // Thunderstorm: the full height from the first open, the footer always inside.
+        await away(); await waitFor(settled);
+        const searchRoot = () => island.body.get_first_child();
+        const inside = () => {
+            const root = searchRoot(), footer = styled(root, 'notchy-search-footer')[0];
+            if (!footer?.visible) return true;
+            const [, sy] = island.surface.get_transformed_position(), [, fy] = footer.get_transformed_position();
+            return fy + footer.height <= sy + island.surface.height + 0.5;
+        };
+        const fits = () => {
+            const root = searchRoot(), view = styled(root, 'notchy-results-scroll')[0];
+            return Math.abs(island.surface.height - root.get_preferred_height(620)[1]) <= 1 && (!view.visible || view.vadjustment.upper - view.vadjustment.page_size <= 1 || view.height >= 8 * 42);
+        };
+        for (let open = 0; open < 3; open++) {
+            island.toggle('search'); await waitFor(() => !island.morphing, 2000); await Scripting.sleep(150);
+            assert(fits() && inside(), `Thunderstorm ${open ? 'reopened' : 'opened the first time'} at its full height with the start list (${island.surface.height})`);
+            island.close(true); await Scripting.sleep(150);
+        }
+        island.toggle('search'); await Scripting.sleep(400);
+        let outside = 0;
+        for (const text of ['e', 'ei', 'ein', 'eins', 'einst', 'x', 'fire', '2+2', '', 'a', 'au', 'aus', 'xyz-none', 'einstellungen']) {
+            island.views.focusEntry.set_text(text);
+            for (let frame = 0; frame < 4; frame++) { await Scripting.sleep(30); if (!inside()) outside++; }
+        }
+        await waitFor(() => !island.morphing, 2000); await Scripting.sleep(400);
+        assert(outside === 0 && fits() && inside(), `fast typing never leaves the footer outside the surface and ends at the full height (${outside} frames outside)`);
+        // Many results scroll within the screen.
+        island.views.focusEntry.set_text('e'); await Scripting.sleep(800);
+        const view = styled(searchRoot(), 'notchy-results-scroll')[0];
+        assert(island.surface.height <= island.monitor.height && view.vadjustment.upper > view.vadjustment.page_size && inside(), `many results scroll inside a surface that fits the screen (${view.vadjustment.upper} > ${view.vadjustment.page_size})`);
+        // The action panel and a confirmation keep the full height too.
+        island.views.focusEntry.set_text('ausschalten'); await Scripting.sleep(500);
+        assert(fits() && inside(), 'a short list fits exactly');
+        await screenshot('layout-search');
+        island.close(true); await Scripting.sleep(100); island.toggle('search'); await Scripting.sleep(30); island.close(true); await Scripting.sleep(30); island.toggle('search');
+        await waitFor(() => !island.morphing, 2000); await Scripting.sleep(200);
+        assert(fits() && inside(), 'closing and reopening at once still reaches the full height');
+        island.close(true);
+    } finally {
+        pointer.run_dispose(); mock.force_exit(); Main.panel.set_height(-1);
+        ext.settings.set_string('style', 'dynamic'); await Scripting.sleep(300);
+    }
+}
+
+// AI agents beside the notch: events over Notchy's D-Bus API and through the
+// real hook adapter (helper/agent_hook.py); sessions, states, the indicators'
+// sides, sizes and popups, crashes and disable/enable. No real agent runs.
+async function agentRegressions(ext, path, screenshot) {
+    let island = ext.islands[0];
+    const waitFor = async (condition, ms = 3000) => { for (let i = 0; i < ms / 50 && !condition(); i++) await Scripting.sleep(50); return condition(); };
+    const send = event => new Promise((resolve, reject) => Gio.DBus.session.call('org.gnome.Shell.Extensions.Notchy', '/org/gnome/Shell/Extensions/Notchy', 'org.gnome.Shell.Extensions.Notchy', 'AgentEvent',
+        new GLib.Variant('(s)', [JSON.stringify({time: Date.now(), ...event})]), null, Gio.DBusCallFlags.NONE, 3000, null, (c, r) => { try { resolve(c.call_finish(r).deep_unpack()[0]); } catch (e) { reject(e); } }));
+    const adapter = (provider, payload) => new Promise(resolve => {
+        const proc = Gio.Subprocess.new(['/usr/bin/python3', `${ext.path}/helper/agent_hook.py`, provider], Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE);
+        proc.communicate_utf8_async(JSON.stringify(payload), null, (p, result) => { const [, out] = p.communicate_utf8_finish(result); resolve(out); });
+    });
+    const item = id => island.sides.items.get(id);
+    const shown = id => { const entry = item(id); return Boolean(entry?.actor.visible && entry.actor.mapped && island.sides.sideOf(id)); };
+    const box = actor => { const [x, y] = actor.get_transformed_position(); return {x, y, w: actor.width, h: actor.height}; };
+    const capsule = () => box(island.panelSurface);
+    const centred = () => { const c = capsule(); return Math.abs(c.x + c.w / 2 - (island.monitor.x + island.monitor.width / 2)) <= 1; };
+    const noOverlap = () => {
+        const actors = [...island.sides.items.values()].filter(e => shown(e.id)).map(e => box(e.actor)), c = capsule();
+        for (const group of Object.values(island.sides.groups)) if (group.button.container.visible && group.button.container.mapped) actors.push(box(group.button.container));
+        const all = [...actors, c];
+        for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) if (all[i].x < all[j].x + all[j].w - 0.5 && all[j].x < all[i].x + all[i].w - 0.5) return false;
+        const left = Main.panel._leftBox, right = Main.panel._rightBox, lb = box(left), rb = box(right);
+        return actors.every(a => a.x >= lb.x + left.get_preferred_width(-1)[1] && a.x + a.w <= rb.x + rb.w - right.get_preferred_width(-1)[1]);
+    };
+    ext.settings.set_boolean('hover-open', false);
+    let daemon = null, sleeper = null;
+    try {
+        // Nothing reports: no indicator. A started process alone is never "working".
+        assert(ext.agents.sessions.length === 0 && ![...island.sides.items.keys()].some(id => id.startsWith('agent:')), 'without hooks or reports there is no agent indicator');
+        assert((await send({provider: 'claude', session: 'x', event: 'explode'})).startsWith('Unbekanntes Ereignis') && (await send({provider: 'bad name', session: 'x'})) === 'Ungültiger Anbieter', 'malformed agent events are refused with a reason');
+        // One Claude Code session through the real hook adapter.
+        await adapter('claude', {hook_event_name: 'SessionStart', session_id: 'claude-a', cwd: '/home/test/Notchy', source: 'startup'});
+        await waitFor(() => ext.agents.sessions.length === 1);
+        assert(ext.agents.sessions[0]?.task === 'idle' && ext.agents.sessions[0].project === 'Notchy', 'SessionStart through the hook adapter: the session is there and idle, not working');
+        await adapter('claude', {hook_event_name: 'UserPromptSubmit', session_id: 'claude-a', prompt: 'geheimer Prompt'});
+        await waitFor(() => ext.agents.sessions[0]?.task === 'working' && shown('agent:claude'));
+        const claude = island.agentIndicators.bubbles.get('claude');
+        assert(shown('agent:claude') && claude.spinner.visible && claude.spinner.get_transition('rotation-angle-z') && !JSON.stringify(ext.agents.toJSON()).includes('geheim'),
+            'a submitted prompt shows Claude as working with a turning ring; the prompt is not kept');
+        assert(island.sides.sideOf('agent:claude') === 'left' && centred() && noOverlap(), 'the first agent goes beside the notch where there is room, the notch stays centred');
+        await screenshot('agents-one');
+        // A second session of the same agent, waiting for approval.
+        await adapter('claude', {hook_event_name: 'PermissionRequest', session_id: 'claude-b', tool_name: 'Bash', tool_input: {command: 'rm -rf x'}});
+        await waitFor(() => claude.group?.count === 2 && claude.group.state === 'waiting');
+        assert(claude.group.count === 2 && claude.group.state === 'waiting' && claude.badge.visible && claude.ring.get_transition('opacity') && !claude.spinner.visible,
+            `two parallel Claude Code sessions: one indicator, the waiting one decides (${claude.group.state}, ${claude.badge.text})`);
+        // The popup: one row per session, updated in place.
+        claude.button.menu.open(); await Scripting.sleep(300);
+        const rows = [...claude.rows.values()], waitingRow = claude.rows.get('claude-b');
+        const order = claude.rowSection.box.get_children();
+        assert(claude.button.menu.isOpen && rows.length === 2 && order[0] === waitingRow.item && waitingRow.sub.text.startsWith('Wartet auf dich') && rows.some(r => r.title.text === 'Notchy') && rows.every(r => /\d+ s|Min/.test(r.time.text)),
+            `the popup lists both sessions with state, project and running time (${rows.map(r => `${r.title.text}: ${r.sub.text}, ${r.time.text}`).join(' / ')})`);
+        await adapter('claude', {hook_event_name: 'PostToolUse', session_id: 'claude-b', tool_name: 'Bash'});
+        await waitFor(() => claude.group.state === 'working');
+        assert(claude.rows.get('claude-b') === waitingRow && waitingRow.sub.text.startsWith('Arbeitet') && claude.button.menu.isOpen && claude.rows.size === 2,
+            'a state change updates the open popup in place (same row, new text)');
+        claude.button.menu.close(); await Scripting.sleep(200);
+        // Claude, Codex and Antigravity at once, with AirPods.
+        daemon = Gio.Subprocess.new(['/usr/bin/python3', here('mock_airpodsd.py'), GLib.getenv('NOTCHY_AIRPODS_NAME'), `${path}/airpods-agents.log`], Gio.SubprocessFlags.NONE);
+        await waitFor(() => ext.airpods.backend === 'airpods-helper');
+        ext.settings.set_boolean('airpods-animation', false);
+        await new Promise(resolve => Gio.DBus.session.call(GLib.getenv('NOTCHY_AIRPODS_NAME'), '/org/costa/AirPods', 'org.notchy.AirPodsFixture', 'Connect', new GLib.Variant('(sas)', ['AirPods Pro', ['anc']]), null, Gio.DBusCallFlags.NONE, 3000, null, () => resolve()));
+        await waitFor(() => shown('airpods'));
+        await adapter('codex', {hook_event_name: 'UserPromptSubmit', session_id: 'codex-1', cwd: '/w/api', turn_id: 't'});
+        await adapter('antigravity', {hookEventName: 'PreInvocation', conversationId: 'ag-1', workspacePaths: ['/w/site'], invocationNum: 1});
+        await waitFor(() => shown('agent:codex') && shown('agent:antigravity') && shown('airpods'));
+        const sides = ['agent:claude', 'agent:codex', 'agent:antigravity', 'airpods'].map(id => island.sides.sideOf(id));
+        assert(sides.filter(s => s === 'left').length === 2 && sides.filter(s => s === 'right').length === 2 && island.sides.sideOf('airpods') === 'right',
+            `AirPods and three agents share both sides evenly (${sides.join(', ')})`);
+        await Scripting.sleep(500);
+        const layout = () => JSON.stringify({capsule: capsule(), left: island.sides.left.width, right: island.sides.right.width, items: [...island.sides.items.values()].filter(e => shown(e.id)).map(e => [e.id, box(e.actor)])});
+        assert(centred() && noOverlap() && Math.abs(island.sides.left.width - island.sides.right.width) < 1, `the notch stays centred, nothing overlaps the notch or GNOME's panel items (${layout()})`);
+        Main.panel.set_style('background-color: transparent;'); await screenshot('agents-airpods'); Main.panel.set_style(null);
+        // A status event does not reshuffle.
+        const before = ['agent:claude', 'agent:codex', 'agent:antigravity', 'airpods'].map(id => island.sides.sideOf(id)).join();
+        await adapter('codex', {hook_event_name: 'PermissionRequest', session_id: 'codex-1', tool_name: 'shell'});
+        await adapter('antigravity', {hookEventName: 'Stop', conversationId: 'ag-1', fullyIdle: true, executionNum: 1});
+        await waitFor(() => island.agentIndicators.bubbles.get('antigravity')?.group?.state === 'completed');
+        assert(['agent:claude', 'agent:codex', 'agent:antigravity', 'airpods'].map(id => island.sides.sideOf(id)).join() === before, 'status changes never move an indicator to the other side');
+        const gravity = island.agentIndicators.bubbles.get('antigravity');
+        assert(gravity.group.state === 'completed' && gravity.badge.text === '✓' && !gravity.spinner.visible, 'Antigravity finished: a check, no spinner');
+        // The opened island covers the indicators; closing brings them back.
+        island.open('media'); await Scripting.sleep(400);
+        assert(!island.sides.left.visible && !island.sides.right.visible, 'while the island is open the indicators are hidden, no overlap');
+        island.close(true); await Scripting.sleep(400);
+        assert(shown('agent:claude') && shown('airpods') && centred(), 'closing the island shows them again');
+        // Events out of order: a late tool event does not undo a finished task.
+        await send({provider: 'codex', session: 'codex-1', event: 'stop', time: Date.now()});
+        await send({provider: 'codex', session: 'codex-1', event: 'tool', time: Date.now() - 5000});
+        await Scripting.sleep(200);
+        assert(ext.agents.registry.get('codex', 'codex-1').task === 'completed', 'a late, older event does not turn a completed task back to working');
+        // More agents than room: the urgent stay, the rest gathers in +N.
+        for (let i = 0; i < 26; i++) await send({provider: `tool${i}`, session: 's', event: 'update', state: i === 25 ? 'waiting' : 'working'});
+        await Scripting.sleep(500);
+        const groups = Object.values(island.sides.groups).filter(g => g.button.container.visible);
+        assert(groups.length > 0 && groups.reduce((n, g) => n + g.ids.length, 0) > 0 && shown('agent:tool25') && shown('airpods') && noOverlap() && centred(),
+            `more agents than room: a +N group, the waiting agent and AirPods stay visible (${groups.map(g => g.count.text).join(' ')})`);
+        await screenshot('agents-overflow');
+        const group = groups[0];
+        group.button.menu.open(); await Scripting.sleep(300);
+        assert(group.button.menu.isOpen && group.button.menu._getMenuItems().length === group.ids.length, 'the group lists the agents that did not fit');
+        group.button.menu.close();
+        for (let i = 0; i < 26; i++) await send({provider: `tool${i}`, session: 's', event: 'end'});
+        await waitFor(() => !Object.values(island.sides.groups).some(g => g.button.container.visible), 4000);
+        // A crashed agent: its process is gone, its session ends.
+        sleeper = Gio.Subprocess.new(['/usr/bin/sleep', '60'], Gio.SubprocessFlags.NONE);
+        const pid = Number(sleeper.get_identifier());
+        await send({provider: 'cli', session: 'crashy', event: 'update', state: 'working', pid});
+        await waitFor(() => shown('agent:cli'));
+        sleeper.force_exit(); await new Promise(resolve => sleeper.wait_async(null, () => resolve())); sleeper = null;
+        ext.agents.checkProcesses(); await waitFor(() => !ext.agents.registry.get('cli', 'crashy') && !item('agent:cli'), 4000);
+        assert(!ext.agents.registry.get('cli', 'crashy') && !item('agent:cli'), 'an agent whose process crashed disappears');
+        // Session end through the adapter.
+        await adapter('claude', {hook_event_name: 'SessionEnd', session_id: 'claude-b', reason: 'prompt_input_exit'});
+        await waitFor(() => claude.group?.count === 1, 4000);
+        assert(claude.group.count === 1, 'SessionEnd removes that session only');
+        // Disable and enable while a task runs: it comes back.
+        await adapter('claude', {hook_event_name: 'UserPromptSubmit', session_id: 'claude-a'});
+        await waitFor(() => ext.agents.registry.get('claude', 'claude-a')?.task === 'working');
+        ext.disable(); ext.enable(); await Scripting.sleep(800);
+        island = ext.islands[0];
+        await waitFor(() => shown('agent:claude'), 3000);
+        assert(ext.agents.registry.get('claude', 'claude-a')?.task === 'working' && shown('agent:claude'), 'a task running while Notchy was disabled and enabled is shown again');
+        ext.settings.set_boolean('hover-open', false);
+        // Turning the indicators off hides them; the legacy activity text stays.
+        ext.settings.set_boolean('agents-enabled', false); await Scripting.sleep(300);
+        assert(!item('agent:claude'), 'turning agent indicators off removes them');
+        ext.settings.set_boolean('agents-enabled', true);
+        await waitFor(() => !island.toastState && !island.hudState, 4000);
+        ext.productivity.setActivity('Build', 'Kompiliert …', NaN); ext.productivity.setActivity(' Build ', 'Kompiliert …', 0.5); await Scripting.sleep(200);
+        assert(ext.productivity.activities.size === 1 && ext.productivity.activities.get('Build').progress === 0.5 && styled(island.rightRow, 'notchy-activity-text')[0]?.text === 'Kompiliert …',
+            'set_activity still shows its text in the capsule; names are trimmed and progress validated');
+        ext.productivity.clearActivity(`${'x'.repeat(100)}`); ext.productivity.setActivity('x'.repeat(100), 'lang', 0); ext.productivity.clearActivity('x'.repeat(100)); ext.productivity.clearActivity('Build');
+        assert(ext.productivity.activities.size === 0, 'long names are cleared like they were set');
+    } finally {
+        try { sleeper?.force_exit(); } catch { /* Gone. */ }
+        try { daemon?.force_exit(); } catch { /* Gone. */ }
+        ext.settings?.set_boolean('airpods-animation', true); ext.settings?.set_boolean('hover-open', true);
     }
 }

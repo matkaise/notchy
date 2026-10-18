@@ -4,6 +4,7 @@ import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Emitter, Lifetime} from '../lifecycle.js';
+import {AGENT_DBUS} from './agents.js';
 
 export const BUS_NAME = 'org.gnome.Shell.Extensions.Notchy';
 export const BUS_PATH = '/org/gnome/Shell/Extensions/Notchy';
@@ -23,6 +24,7 @@ const XML = `<node><interface name="${BUS_NAME}">
  <method name="SetActivity"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="d" direction="in"/></method>
  <method name="ClearActivity"><arg type="s" direction="in"/></method>
  <method name="GetActivities"><arg type="s" direction="out"/></method>
+${AGENT_DBUS}
  <method name="AirDropAsk"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="u" direction="in"/><arg type="b" direction="out"/></method>
  <method name="AirDropSend"><arg type="s" direction="in"/><arg type="b" direction="out"/></method>
  <method name="AirDropDropped"><arg type="s" direction="in"/><arg type="b" direction="out"/></method>
@@ -42,6 +44,10 @@ export class Companion extends Emitter {
             SetActivity: (name, status, progress) => productivity.setActivity(name, status, progress),
             ClearActivity: name => productivity.clearActivity(name),
             GetActivities: () => JSON.stringify([...productivity.activities.values()]),
+            // Structured agent sessions (notchyctl agent …, the MCP bridge, hook adapters).
+            AgentEvent: json => extension.agents?.report(json) ?? 'Agenten-Indikatoren sind nicht verfügbar',
+            AgentHook: (provider, json) => extension.agents?.hook(provider, json) ?? 'Agenten-Indikatoren sind nicht verfügbar',
+            GetAgents: () => JSON.stringify(extension.agents?.toJSON() ?? []),
             GetItems: () => JSON.stringify(shelf.items), AddUris: text => shelf.add(text),
             AddDroppedUris: text => extension.drops?.accepted(text) ?? 0,
             DropReady: backend => extension.drops?.receiverReady(backend),
@@ -66,6 +72,7 @@ export class Companion extends Emitter {
         this.dbus.export(Gio.DBus.session, BUS_PATH);
         this.owner = Gio.bus_own_name_on_connection(Gio.DBus.session, BUS_NAME, Gio.BusNameOwnerFlags.NONE, null, null);
         this.unsub = shelf.subscribe(() => this.dbus.emit_signal('Changed', null));
+        this.unsubAgents = extension.agents?.subscribe(() => this.dbus.emit_signal('AgentsChanged', new GLib.Variant('(s)', [JSON.stringify(extension.agents.toJSON())])));
         // The native panes show AirDrop's switch and state.
         this.unsubAirDrop = extension.airdrop?.subscribe(() => this.dbus.emit_signal('AirDrop', new GLib.Variant('(s)', [JSON.stringify(this.airdropConfig())])));
         this.life.connect(global.display, 'window-created', (_d, window) => {
@@ -235,6 +242,6 @@ export class Companion extends Emitter {
         const airdrop = this.extension.airdrop;
         return {available: Boolean(airdrop?.available), receiving: Boolean(airdrop?.receiving), state: airdrop?.state ?? 'off', sending: Boolean(airdrop?.sendProc)};
     }
-    dispose() { for (const window of [...this.popups.keys()]) this.untrackPopup(window); this.closeShelf(); this.life.dispose(); this.unsub(); this.unsubAirDrop?.(); this.dbus.unexport(); Gio.bus_unown_name(this.owner);
+    dispose() { for (const window of [...this.popups.keys()]) this.untrackPopup(window); this.closeShelf(); this.life.dispose(); this.unsub(); this.unsubAirDrop?.(); this.unsubAgents?.(); this.dbus.unexport(); Gio.bus_unown_name(this.owner);
         this.proc?.force_exit(); this.proc = null; this.shelfProc?.force_exit(); this.shelfProc = null; }
 }

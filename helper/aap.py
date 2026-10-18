@@ -30,6 +30,10 @@ FEATURES_ACK = bytes.fromhex('040004002b00')
 # unlock features, request notifications, ask again until batteries arrive.
 HANDSHAKE_TRIES, HANDSHAKE_WAIT = 4, 1.5
 NOTIFY_TRIES, NOTIFY_WAIT = 4, 2.0
+# The case reports its battery only while it is connected to a bud (a bud in
+# it). When it is still unknown once the buds report, ask again a little
+# later, at most this often: the AirPods push every change themselves.
+CASE_REQUESTS, CASE_REQUEST_AFTER = 2, (15.0, 45.0)
 ANC_CODES = {1: 'off', 2: 'noise', 3: 'transparency', 4: 'adaptive'}
 ANC_VALUES = {name: code for code, name in ANC_CODES.items()}
 # Battery components and states as the AirPods report them.
@@ -154,9 +158,12 @@ def run(mac, out=sys.stdout, stdin=sys.stdin):
     channel.send(HANDSHAKE)
     emit()
     inputs = [channel, stdin]
+    case_asked, ready_at = 0, None
     try:
         while True:
-            timeout = 0.3 if replay else max(0.05, deadline - time.monotonic()) if step != 'ready' else 30
+            now = time.monotonic()
+            case_due = ready_at + CASE_REQUEST_AFTER[case_asked] if ready_at is not None and case_asked < CASE_REQUESTS else None
+            timeout = 0.3 if replay else max(0.05, deadline - now) if step != 'ready' else max(0.05, min(30, case_due - now)) if case_due else 30
             ready, _, _ = select.select(inputs, [], [], timeout)
             if channel in ready:
                 packet = channel.recv(1024)
@@ -171,7 +178,7 @@ def run(mac, out=sys.stdout, stdin=sys.stdin):
                 if parse(packet, state):
                     emit()
                 if step == 'notify' and any(value is not None for value in state['battery'].values()):
-                    step = 'ready'
+                    step, ready_at = 'ready', time.monotonic()
             if stdin in ready:
                 line = stdin.readline()
                 if not line:
@@ -183,6 +190,10 @@ def run(mac, out=sys.stdout, stdin=sys.stdin):
                 packet = command(line)
                 if packet:
                     channel.send(packet)
+            if not replay and step == 'ready' and case_due and time.monotonic() >= case_due:
+                case_asked += 1
+                if state['battery']['case'] is None and state['battery']['single'] is None:
+                    channel.send(NOTIFICATIONS)
             if not replay and step != 'ready' and time.monotonic() >= deadline:
                 if step == 'handshake':
                     if tries >= HANDSHAKE_TRIES:
@@ -195,7 +206,7 @@ def run(mac, out=sys.stdout, stdin=sys.stdin):
                     step, tries, deadline = 'notify', 1, time.monotonic() + NOTIFY_WAIT
                 elif step == 'notify':
                     if tries >= NOTIFY_TRIES:
-                        step = 'ready'  # Connected, but the AirPods report no battery (yet).
+                        step, ready_at = 'ready', time.monotonic()  # Connected, but the AirPods report no battery (yet).
                     else:
                         channel.send(NOTIFICATIONS)
                         tries, deadline = tries + 1, time.monotonic() + NOTIFY_WAIT

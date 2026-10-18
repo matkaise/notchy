@@ -9,6 +9,8 @@ import {GlassLayer} from './glass.js';
 import {NotchEars} from './notchEars.js';
 import {Views} from './views.js';
 import {AirPodsBubble} from './airpodsBubble.js';
+import {AgentIndicators} from './agentBubble.js';
+import {SideIndicators} from './sideIndicators.js';
 import {Waveform} from './waveform.js';
 import {box, label, icon, gicon, button} from './widgets.js';
 import {Lifetime} from '../lifecycle.js';
@@ -27,6 +29,29 @@ export const TAB_WIDTH = 46, TAB_HEIGHT = 30, TAB_INSET = 3, TABBAR_HEIGHT = 50;
 const TOP_GAP = 8, RADIUS = 30, SLIDE = 24;
 const WIDTH = {search: 620, drop: 460, notification: 440, snap: 560};
 const LIQUID_INSET = 3, FADE = 70;
+
+// An icon from a name, a Gio.Icon or a Gio.File, set only when it changed
+// (a new FileIcon for the same cover would make St load it again).
+function setIcon(actor, source) {
+    const file = typeof source?.query_exists === 'function';
+    const key = typeof source === 'string' ? source : file ? source.get_uri() : source?.to_string?.() ?? '';
+    if (actor.notchyIcon === key) return;
+    actor.notchyIcon = key;
+    actor.gicon = typeof source === 'string' ? gicon(source) : file ? new Gio.FileIcon({file: source}) : source;
+}
+// One row of the capsule from its parts [{key, make, update}]: a part whose
+// key is still there keeps its actor and only gets update(); new parts are
+// made, gone ones destroyed, and the order follows the list.
+export function syncRow(row, parts) {
+    const existing = new Map(row.get_children().map(child => [child.notchyKey, child])), kept = new Set();
+    parts.forEach((part, index) => {
+        let actor = existing.get(part.key);
+        if (!actor) { actor = part.make(); actor.notchyKey = part.key; row.insert_child_at_index(actor, index); }
+        else if (row.get_child_at_index(index) !== actor) row.set_child_at_index(actor, index);
+        part.update?.(actor); kept.add(actor);
+    });
+    for (const child of row.get_children()) if (!kept.has(child)) child.destroy();
+}
 
 // The island is GNOME's clock grown into a surface: in the bar it is a capsule
 // (live activity · clock · live activity); opened, the same live clock heads a
@@ -122,8 +147,10 @@ export class Island {
             this.life.cleanups.push(this.airpods.subscribe(() => { if (this.expanded && !this.peeking && this.page === 'media' && !this.views.outputPicker) this.refresh(); }));
         }
         this.ears = new NotchEars(this);
-        // Connected AirPods as a small companion beside the capsule.
+        // Indicators beside the capsule: connected AirPods and AI agents.
+        this.sides = new SideIndicators(this);
         if (this.airpods) this.airpodsBubble = new AirPodsBubble(this);
+        if (this.agents) this.agentIndicators = new AgentIndicators(this);
         this.applyStyle(); this.updateCompact(); this.position(); this.syncVisibility(); this.syncAirDrop();
     }
     buildPanel() {
@@ -181,7 +208,7 @@ export class Island {
     get expandedWidth() { return Math.min(this.settings.get_int('width'), this.monitor.width - 32); }
     get currentWidth() {
         if (this.dropActive) return WIDTH.drop;
-        if (this.peeking) return Math.max(this.peekKind === 'snap' ? WIDTH.snap : WIDTH.notification, this.panelCompactWidth ?? 0);
+        if (this.peeking) return Math.max(this.peekKind === 'snap' ? WIDTH.snap : WIDTH.notification, this.compactWidth);
         return this.page === 'search' ? WIDTH.search : this.expandedWidth;
     }
     // Native panes start right below the clock row; the shelf pane includes the
@@ -191,11 +218,43 @@ export class Island {
     get shelfHeight() { return CONTENT_HEIGHT.shelf; }
     get shelfWindowHeight() { return CONTENT_HEIGHT.shelf + TOP_GAP; }
     applyStyle() {
-        const style = this.style, attached = this.panelAttached;
-        this.surface.set_style_class_name(`notchy-surface notchy-${style}${this.expanded || this.dropActive ? ' notchy-expanded' : ''}`);
-        this.panelSurface.set_style_class_name(`notchy-capsule notchy-${style}${attached ? ' notchy-attached' : ''}${this.hudState ? ' notchy-hud' : ''}`);
+        this.surface.set_style_class_name(`notchy-surface notchy-${this.style}${this.expanded || this.dropActive ? ' notchy-expanded' : ''}`);
+        this.syncCapsuleClass();
         this.headerRow.height = this.headerHeight; this.panelHeader.height = this.headerHeight;
+        if (this.panelPlaceholder) this.panelPlaceholder.height = Main.panel.height;
         this.syncShade();
+    }
+    // The capsule's classes in one place: style, attached, and what its live
+    // activity needs (wide slots around the clock, the HUD, a toast). Style
+    // changes and content changes both come through here, so neither can drop
+    // the other's classes (that left the closed capsule too narrow, see
+    // layoutRegressions).
+    syncCapsuleClass() {
+        const flags = this.compactFlags ?? {};
+        const classes = ['notchy-capsule', `notchy-${this.style}`, this.panelAttached && 'notchy-attached', flags.wide && 'notchy-wide',
+            flags.hud && 'notchy-hud', flags.toasting && 'notchy-toasting'].filter(Boolean).join(' ');
+        if (this.panelSurface.get_style_class_name() !== classes) this.panelSurface.set_style_class_name(classes);
+    }
+    // The closed capsule's width for what it shows now: GNOME's clock, the
+    // live activity on either side (cover, waveform, media state, HUD, toast,
+    // AirDrop, agent text, file work) and the capsule's padding. Always
+    // measured from the capsule's current content, never remembered from an
+    // earlier moment: a track, toast or HUD that changed while the island was
+    // open changes the width the island folds back to.
+    get compactWidth() { return Math.ceil(this.panelSurface.get_preferred_width(-1)[1]); }
+    // While the capsule heads the opened surface, its place in the bar is held
+    // by a placeholder of the same width; a folding surface follows a width
+    // that changed under it.
+    syncCompactGeometry() {
+        if (!this.panelAttached || this.life.closed) return;
+        const width = this.compactWidth;
+        if (this.panelPlaceholder && this.panelPlaceholder.width !== width) this.panelPlaceholder.width = width;
+        if (this.expanded || this.dropActive || this.foldWidth === undefined || this.foldWidth === width) return;
+        this.foldWidth = width;
+        const mode = Clutter.AnimationMode.EASE_OUT_CUBIC, duration = Math.min(160, this.settings.get_int('animation-duration'));
+        this.surface.ease({width, duration, mode});
+        this.targetX = this.centeredX(width);
+        this.actor.ease({width, x: this.targetX, duration, mode});
     }
     syncShade() {
         const width = this.surface.width, height = this.surface.height;
@@ -257,8 +316,12 @@ export class Island {
         return {black: this.opaque ? 100000 : Math.max(0, this.blackFor(total) - this.headerHeight), fade: FADE};
     }
     position() {
-        const width = this.expanded || this.dropActive ? this.currentWidth : this.panelSurface.width;
-        this.actor.x = this.targetX = this.centeredX(width);
+        const width = this.expanded || this.dropActive ? this.currentWidth : this.panelAttached ? (this.foldWidth ?? this.compactWidth) : this.panelSurface.width;
+        const x = this.centeredX(width);
+        // A morph in progress keeps its spring; only a moved target redirects it.
+        if (this.actor.get_transition('x')) {
+            if (Math.abs(x - this.targetX) >= 1) { this.targetX = x; this.actor.ease({x, duration: 120, mode: Clutter.AnimationMode.EASE_OUT_CUBIC}); }
+        } else this.actor.x = this.targetX = x;
         this.actor.y = this.monitor.y + this.topInset;
         if (this.nativeShelf) this.companion.positionShelf();
     }
@@ -270,24 +333,24 @@ export class Island {
     attachPanelHeader() {
         if (this.panelAttached) return;
         const [x] = this.panelSurface.get_transformed_position();
-        this.panelCompactWidth = this.panelSurface.width;
+        const width = this.compactWidth;
         this.panelButton.remove_child(this.panelSurface);
         // PanelMenu allocates its first child. Reserve the original clock slot
         // while that same live clock heads the expanding surface.
-        this.panelPlaceholder = new St.Widget({width: this.panelCompactWidth, height: Main.panel.height});
+        this.panelPlaceholder = new St.Widget({width, height: Main.panel.height});
         this.panelButton.add_child(this.panelPlaceholder);
         this.panelHeader.set_child(this.panelSurface);
-        this.panelAttached = true; this.applyStyle(); this.ears?.sync();
+        this.panelAttached = true; this.foldWidth = undefined; this.applyStyle(); this.ears?.sync();
         if (!this.expanded && !this.dropActive) {
-            this.surface.set_size(this.panelCompactWidth, this.headerHeight);
-            this.actor.set_size(this.panelCompactWidth, this.headerHeight);
+            this.surface.set_size(width, this.headerHeight);
+            this.actor.set_size(width, this.headerHeight);
             this.actor.set_position(x, this.monitor.y + this.topInset);
             this.body.opacity = 0; this.nav.opacity = 0; this.headerActions.opacity = 0;
         }
     }
     returnPanelHeader() {
         if (!this.panelAttached) return;
-        this.panelAttached = false;
+        this.panelAttached = false; this.foldWidth = undefined;
         this.panelHeader.set_child(null);
         this.panelPlaceholder.destroy(); this.panelPlaceholder = null;
         this.panelButton.add_child(this.panelSurface);
@@ -301,10 +364,16 @@ export class Island {
         this.headerActions.visible = tabs;
         const width = this.currentWidth, total = (header ? this.headerHeight : 0) + (tabs ? TOP_GAP : 0) + contentHeight + (tabs ? TABBAR_HEIGHT : 0);
         this.headerRow.visible = header; this.nav.visible = tabs;
-        this.body.height = contentHeight + (tabs ? TOP_GAP : 0);
+        // Thunderstorm's page fills the surface while it morphs: its result list
+        // takes what is left between the field and the footer, so the footer
+        // stays inside the surface at every step of the spring. Tabs and banners
+        // keep their designed height.
+        const flexible = this.page === 'search' && this.expanded && !this.peeking && !this.dropActive;
+        this.body.y_expand = flexible;
+        this.body.height = flexible ? -1 : contentHeight + (tabs ? TOP_GAP : 0);
         tabs ? this.body.add_style_class_name('with-gap') : this.body.remove_style_class_name('with-gap');
         if (this.sizeTarget?.[0] === width && this.sizeTarget?.[1] === total) return;
-        this.sizeTarget = [width, total];
+        this.sizeTarget = [width, total]; this.foldWidth = undefined;
         this.surface.remove_all_transitions(); this.actor.remove_all_transitions();
         this.life.cancel(this.morphTimeout);
         const duration = this.settings.get_int('animation-duration');
@@ -358,6 +427,7 @@ export class Island {
     }
     open(page = 'media') {
         if (this.life.closed || this.dropActive) return; this.cancelCollapse(); this.life.cancel(this.hoverTimeout); this.hoverTimeout = 0;
+        this.foldWidth = undefined;
         const fromPeek = this.peeking; this.endPeek(); this.clearHud();
         if (page !== 'shelf' && this.nativeShelf) this.companion.closeShelf();
         this.dateMenu.menu.close();
@@ -407,7 +477,9 @@ export class Island {
         if (!this.expanded || this.peeking || this.dropActive || this.life.closed) return;
         const content = this.body.get_first_child(); if (!content) return;
         const width = this.currentWidth; this.body.width = width;
-        const height = this.page === 'search' ? content.get_preferred_height(width)[1] : CONTENT_HEIGHT[this.page] ?? 190;
+        // Measured here, with the page on the stage and styled: Thunderstorm's
+        // height follows its rows, capped to the screen below the bar.
+        const height = this.page === 'search' ? Math.min(content.get_preferred_height(width)[1], this.monitor.height - this.topInset - 24) : CONTENT_HEIGHT[this.page] ?? 190;
         this.animateSize(height);
         this.syncTabs(); this.syncPin();
     }
@@ -434,13 +506,17 @@ export class Island {
         this.headerRow.show(); this.shownPage = null; this.tabIndicatorPlaced = false; this.syncPin();
         this.surface.remove_all_transitions(); this.actor.remove_all_transitions();
         this.life.cancel(this.morphTimeout); this.morphTimeout = 0; this.morphing = false; this.sizeTarget = null;
+        this.body.y_expand = false;
         if (!this.panelAttached) { this.applyStyle(); this.updateCompact(); this.syncVisibility(); return; }
         const duration = immediate ? 0 : this.settings.get_int('animation-duration');
-        const width = this.panelCompactWidth, height = this.headerHeight;
+        // The capsule's content first, then the width it needs now.
+        this.applyStyle(); this.updateCompact();
+        const width = this.foldWidth = this.compactWidth, height = this.headerHeight;
         this.headerActions.ease({opacity: 0, duration: Math.round(duration / 3)});
         this.surface.ease({width, height, duration, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
-        this.actor.ease({width, height, x: this.centeredX(width), duration, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
-        this.applyStyle(); this.updateCompact(); this.syncVisibility();
+        this.targetX = this.centeredX(width);
+        this.actor.ease({width, height, x: this.targetX, duration, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+        this.syncVisibility();
         // A mapped popup source must remain mapped for the calendar's lifetime.
         if (this.dateMenu.menu.isOpen) return;
         if (!duration) { this.returnPanelHeader(); this.syncVisibility(); }
@@ -459,58 +535,46 @@ export class Island {
 
     // Live activities in the capsule: cover and waveform frame the clock;
     // volume and brightness replace them briefly; agents and file work speak.
+    // Each part keeps its actor while it stays (MPRIS reports position and
+    // metadata many times a minute): the waveform keeps drawing, the cover is
+    // not reloaded and the capsule's width does not flicker.
     updateCompact() {
         if (this.life.closed) return;
-        this.leftRow.destroy_all_children(); this.rightRow.destroy_all_children();
         const state = this.settings.get_boolean('media-enabled') ? this.media.state : null;
-        const activity = [...this.productivity.activities.values()][0];
-        let wide = false;
+        const activity = [...this.productivity.activities.values()].sort((a, b) => b.updated - a.updated)[0];
         const hud = this.hudState, toast = this.toastState, airdrop = !hud && !toast ? this.airdropActivity : null;
+        const center = {y_align: Clutter.ActorAlign.CENTER};
+        const text = (key, cls, value) => ({key, make: () => label(value, cls, center), update: a => { if (a.text !== String(value)) a.text = String(value); }});
+        const glyph = (key, cls, size, source) => ({key, make: () => new St.Icon({icon_size: size, style_class: cls, ...center}), update: a => setIcon(a, source)});
+        const track = (key, cls, ratio) => ({key, make: () => { const t = new St.Widget({style_class: 'notchy-hud-track', width: 70, ...center}); t.add_child(new St.Widget({style_class: cls})); return t; },
+            update: a => { const fill = a.get_first_child(); fill.set_style_class_name(cls); fill.width = Math.round(70 * Math.max(0, Math.min(1, ratio))); }});
+        let left = [], right = [], wide = false;
         if (airdrop) {
-            const glyph = new St.Icon({gicon: gicon(airdrop.icon), icon_size: 16, style_class: 'notchy-airdrop-icon', y_align: Clutter.ActorAlign.CENTER});
-            this.leftRow.add_child(glyph);
-            if (airdrop.progress !== null) {
-                const track = new St.Widget({style_class: 'notchy-hud-track', width: 70, y_align: Clutter.ActorAlign.CENTER});
-                track.add_child(new St.Widget({style_class: 'notchy-hud-fill notchy-airdrop-fill', width: Math.round(70 * airdrop.progress / 100)}));
-                this.rightRow.add_child(track);
-                this.rightRow.add_child(label(String(airdrop.progress), 'notchy-hud-value', {y_align: Clutter.ActorAlign.CENTER}));
-            } else this.rightRow.add_child(label(airdrop.text, 'notchy-airdrop-text', {y_align: Clutter.ActorAlign.CENTER}));
+            left = [glyph('airdrop-icon', 'notchy-airdrop-icon', 16, airdrop.icon)];
+            right = airdrop.progress !== null ? [track('airdrop-track', 'notchy-hud-fill notchy-airdrop-fill', airdrop.progress / 100), text('airdrop-value', 'notchy-hud-value', airdrop.progress)]
+                : [text('airdrop-text', 'notchy-airdrop-text', airdrop.text)];
             wide = true;
         } else if (toast && !hud) {
-            const glyph = new St.Icon({gicon: toast.icon, icon_size: 16, style_class: 'notchy-toast-icon', y_align: Clutter.ActorAlign.CENTER});
-            const words = label(toast.text, 'notchy-toast-text', {y_align: Clutter.ActorAlign.CENTER});
-            this.leftRow.add_child(glyph); this.rightRow.add_child(words);
-            // Fade in once; later redraws during the same toast keep it steady.
-            if (GLib.get_monotonic_time() - toast.shown < 100000) for (const actor of [glyph, words]) { actor.opacity = 0; actor.ease({opacity: 255, duration: 220, mode: Clutter.AnimationMode.EASE_OUT_QUAD}); }
+            // A new toast fades in once; redraws during the same toast keep it steady.
+            const fade = actor => { actor.opacity = 0; actor.ease({opacity: 255, duration: 220, mode: Clutter.AnimationMode.EASE_OUT_QUAD}); return actor; };
+            const icon_ = glyph(`toast-icon-${toast.shown}`, 'notchy-toast-icon', 16, toast.icon), words = text(`toast-text-${toast.shown}`, 'notchy-toast-text', toast.text);
+            left = [{...icon_, make: () => fade(icon_.make())}]; right = [{...words, make: () => fade(words.make())}];
             wide = true;
         } else if (hud) {
-            const glyph = new St.Icon({icon_size: 17, style_class: 'notchy-hud-icon', y_align: Clutter.ActorAlign.CENTER});
-            if (typeof hud.icon === 'string') glyph.icon_name = hud.icon; else glyph.gicon = hud.icon;
-            this.leftRow.add_child(glyph);
-            if (hud.level === null) {
-                // A state without a level (Caps Lock): its words beside the clock.
-                this.rightRow.add_child(label(hud.text, 'notchy-hud-text', {y_align: Clutter.ActorAlign.CENTER}));
-            } else {
-                const track = new St.Widget({style_class: 'notchy-hud-track', width: 70, y_align: Clutter.ActorAlign.CENTER});
-                const ratio = Math.max(0, Math.min(1, hud.level / (hud.max > 0 ? hud.max : 1)));
-                track.add_child(new St.Widget({style_class: `notchy-hud-fill${hud.level > 1 ? ' boost' : ''}`, width: Math.round(70 * ratio)}));
-                this.rightRow.add_child(track);
-                this.rightRow.add_child(label(String(Math.round(hud.level * 100)), 'notchy-hud-value', {y_align: Clutter.ActorAlign.CENTER}));
-            }
+            left = [glyph('hud-icon', 'notchy-hud-icon', 17, hud.icon)];
+            // A state without a level (Caps Lock): its words beside the clock.
+            right = hud.level === null ? [text('hud-text', 'notchy-hud-text', hud.text)]
+                : [track('hud-track', `notchy-hud-fill${hud.level > 1 ? ' boost' : ''}`, hud.level / (hud.max > 0 ? hud.max : 1)), text('hud-value', 'notchy-hud-value', Math.round(hud.level * 100))];
             wide = true;
         } else {
-            if (state) {
-                const art = new St.Icon({icon_name: 'audio-x-generic-symbolic', icon_size: 20, style_class: 'notchy-mini-art', y_align: Clutter.ActorAlign.CENTER});
-                if (this.cover.file) art.gicon = new Gio.FileIcon({file: this.cover.file});
-                this.leftRow.add_child(art); wide = true;
-            }
-            if (activity || this.operations.busy) this.rightRow.add_child(label(activity ? activity.status : 'Verarbeitung …', 'notchy-activity-text', {y_align: Clutter.ActorAlign.CENTER}));
-            if (state?.playing && this.settings.get_boolean('media-waveform')) this.rightRow.add_child(new Waveform(this.spectrum, 22, 13));
-            else if (state) this.rightRow.add_child(icon(state.playing ? 'audio-volume-high-symbolic' : 'media-playback-pause-symbolic', 14));
+            if (state) { left = [glyph('art', 'notchy-mini-art', 20, this.cover.file ?? 'audio-x-generic-symbolic')]; wide = true; }
+            if (activity || this.operations.busy) right.push(text('activity', 'notchy-activity-text', activity ? activity.status : 'Verarbeitung …'));
+            if (state?.playing && this.settings.get_boolean('media-waveform')) right.push({key: 'waveform', make: () => new Waveform(this.spectrum, 22, 13)});
+            else if (state) right.push(glyph('media-state', '', 14, state.playing ? 'audio-volume-high-symbolic' : 'media-playback-pause-symbolic'));
         }
-        wide ? this.panelSurface.add_style_class_name('notchy-wide') : this.panelSurface.remove_style_class_name('notchy-wide');
-        hud ? this.panelSurface.add_style_class_name('notchy-hud') : this.panelSurface.remove_style_class_name('notchy-hud');
-        toast && !hud ? this.panelSurface.add_style_class_name('notchy-toasting') : this.panelSurface.remove_style_class_name('notchy-toasting');
+        syncRow(this.leftRow, left); syncRow(this.rightRow, right);
+        this.compactFlags = {wide, hud: Boolean(hud), toasting: Boolean(toast && !hud)};
+        this.syncCapsuleClass(); this.syncCompactGeometry();
     }
     // AirDrop as a live activity: what the radio is doing right now.
     get airdropActivity() {
@@ -692,13 +756,15 @@ export class Island {
         const menuOpen = this.nativeShelf && this.companion.menuOpen;
         for (const [, tab] of this.navButtons) tab.reactive = !menuOpen;
         if (this.nativeShelf) this.companion.syncShelfVisibility();
-        this.ears?.sync(); this.airpodsBubble?.sync();
+        this.ears?.sync(); this.sides?.queue();
     }
     dispose() {
         for (const {notification, id} of this.queuedNotifications ?? []) notification.disconnect(id);
         this.queuedNotifications = []; this.releaseNotifications(this.waitingNotifications ?? []);
         if (this.nativeShelf) this.companion.closeShelf();
+        this.agentIndicators?.dispose(); this.agentIndicators = null;
         this.airpodsBubble?.dispose(); this.airpodsBubble = null;
+        this.sides?.dispose(); this.sides = null;
         this.returnPanelHeader(); this.ears?.dispose(); this.paneLife?.dispose(); this.glass.destroy(); this.life.dispose(); this.views.dispose();
         this.dateMenu.menu.close();
         this.clockContainer.get_parent()?.remove_child(this.clockContainer);

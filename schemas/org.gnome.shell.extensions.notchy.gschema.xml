@@ -41,6 +41,15 @@
     <key name="airpods-builtin" type="b"><default>true</default><summary>Without airpods-helper, read connected AirPods over Apple's accessory protocol (AAP) directly: batteries, ear state, noise control</summary></key>
     <key name="airpods-ear-pause" type="b"><default>true</default><summary>With the built-in reader: pause media when a bud is taken out, resume when it is back</summary></key>
     <key name="airpods-bluez-fallback" type="b"><default>true</default><summary>Without airpods-helper, show connection and battery of Apple headphones reported by BlueZ</summary></key>
+    <key name="agents-enabled" type="b"><default>true</default><summary>Show AI agent sessions (Claude Code, Codex, Antigravity, notchyctl, MCP) as indicators beside the notch</summary></key>
+    <key name="agents-claude" type="b"><default>true</default><summary>Show Claude Code sessions (from its hooks)</summary></key>
+    <key name="agents-codex" type="b"><default>true</default><summary>Show Codex sessions (from its hooks)</summary></key>
+    <key name="agents-antigravity" type="b"><default>true</default><summary>Show Google Antigravity sessions (from its hooks)</summary></key>
+    <key name="agents-auto-layout" type="b"><default>true</default><summary>Distribute indicators beside the notch automatically between left and right</summary></key>
+    <key name="agents-side" type="s"><default>'{}'</default><summary>Preferred side per agent provider as JSON, e.g. {"claude": "left"}; missing or "auto" means automatic</summary></key>
+    <key name="agents-show-idle" type="b"><default>true</default><summary>Show agents that are ready but have no task</summary></key>
+    <key name="agents-completion-animation" type="b"><default>true</default><summary>Play a short animation when an agent finishes a task</summary></key>
+    <key name="agents-completed-seconds" type="i"><default>8</default><range min="2" max="120"/><summary>How long a finished task is shown as completed before the agent counts as idle</summary></key>
     <key name="toggle-search" type="as"><default>['&lt;Super&gt;space']</default><summary>Thunderstorm search in the island</summary></key>
     <key name="toggle-island" type="as"><default>['&lt;Super&gt;&lt;Control&gt;space']</default><summary>Toggle island</summary></key>
     <key name="toggle-clipboard" type="as"><default>['&lt;Super&gt;&lt;Shift&gt;space']</default><summary>Open clipboard</summary></key>

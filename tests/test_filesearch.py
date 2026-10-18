@@ -132,3 +132,67 @@ class FileSearchTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FailingEndpoint:
+    """A LocalSearch endpoint whose Query call fails every time."""
+    def call_sync(self, *args):
+        return GLib.Variant('(b)', (True,))
+
+    def call_with_unix_fd_list_sync(self, *args):
+        raise GLib.Error('Timeout was reached')
+
+
+class ResourceTest(unittest.TestCase):
+    def open_fds(self):
+        return len(os.listdir('/proc/self/fd'))
+
+    def test_failed_queries_close_every_descriptor(self):
+        searcher = filesearch.Searcher(bus=FailingEndpoint(), names=('org.notchy.Failing',))
+        searcher.fallback_entries = lambda extra=(): []
+        before = self.open_fds()
+        for _ in range(200):
+            with self.assertRaises(GLib.Error):
+                searcher.query('org.notchy.Failing', 'bericht*')
+            reply = searcher.search('bericht')
+            self.assertEqual(reply['backend'], 'fallback')
+            self.assertIn('Timeout', reply['error'])
+        self.assertLessEqual(self.open_fds(), before + 1, 'no file descriptor leaks over 400 failed index queries')
+        searcher.pool.shutdown()
+
+    def test_a_hanging_drive_neither_blocks_nor_exhausts_the_search(self):
+        import threading
+        release = threading.Event()
+        with tempfile.TemporaryDirectory() as temp:
+            stuck_dir, fine_dir = Path(temp) / 'netz', Path(temp) / 'lokal'
+            stuck_dir.mkdir(); fine_dir.mkdir()
+            for i in range(12):
+                (stuck_dir / f'bericht {i}.txt').write_text('x')
+            (fine_dir / 'bericht lokal.txt').write_text('x')
+            searcher = filesearch.Searcher(bus=NoBus(), names=('org.notchy.None',))
+            searcher.fallback_entries = lambda extra=(): [(str(p), p.name, False) for p in [*stuck_dir.iterdir(), *fine_dir.iterdir()]]
+            real_describe, real_mounts = filesearch.describe, filesearch.mount_points
+            filesearch.describe = lambda path: (release.wait(10), real_describe(path))[1] if '/netz/' in path else real_describe(path)
+            filesearch.mount_points = lambda: [str(stuck_dir), '/']
+            try:
+                first = searcher.search('bericht')
+                self.assertEqual([r['name'] for r in first['results']], ['bericht lokal.txt'], 'the answering drive is listed despite the hanging one')
+                self.assertIn(str(stuck_dir), searcher.slow_mounts)
+                again = searcher.search('bericht')
+                self.assertEqual([r['name'] for r in again['results']], ['bericht lokal.txt'])
+                self.assertEqual(len(searcher.stuck), 1, 'only one probe waits on the hanging drive; it is not asked again while known to be slow')
+                for _ in range(10):
+                    searcher.slow_mounts.clear()
+                    third = searcher.search('bericht')
+                self.assertEqual([r['name'] for r in third['results']], ['bericht lokal.txt'], 'a pool whose workers all hang is replaced')
+                self.assertLess(len(searcher.stuck), 8)
+            finally:
+                release.set(); filesearch.describe, filesearch.mount_points = real_describe, real_mounts
+                searcher.pool.shutdown()
+
+    def test_mount_lookup_reads_text_only(self):
+        mounts = ['/home/a/net', '/home', '/']
+        self.assertEqual(filesearch.mount_of('/home/a/net/x.txt', mounts), '/home/a/net')
+        self.assertEqual(filesearch.mount_of('/home/a/network.txt', mounts), '/home')
+        self.assertEqual(filesearch.mount_of('/etc/x', mounts), '/')
+        self.assertIn('/', filesearch.mount_points())

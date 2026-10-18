@@ -42,6 +42,8 @@ elif [[ -n "${NOTCHY_TEST_REGAL_ONLY:-}" ]]; then
     grep -q NOTCHY_REGAL_TEST_OK tests/output/shell.log
 elif [[ -n "${NOTCHY_TEST_LAUNCHER_ONLY:-}" ]]; then
     grep -q NOTCHY_LAUNCHER_TEST_OK tests/output/shell.log
+elif [[ -n "${NOTCHY_TEST_LAYOUT_ONLY:-}" ]]; then
+    grep -q NOTCHY_LAYOUT_TEST_OK tests/output/shell.log
 elif [[ -n "${NOTCHY_TEST_AIRPODS_ONLY:-}" ]]; then
     grep -q NOTCHY_AIRPODS_TEST_OK tests/output/shell.log
 else
@@ -50,7 +52,7 @@ else
     grep -q NOTCHY_TRAY_TEST_OK tests/output/shell.log
 fi
 
-if grep -Eq 'Gjs-CRITICAL|GLib-GObject-CRITICAL|Gtk-CRITICAL|libmutter-CRITICAL|Script failed|Traceback' tests/output/shell.log; then
+if grep -Eq 'Gjs-CRITICAL|GLib-GObject-CRITICAL|Gtk-CRITICAL|St-CRITICAL|Clutter-CRITICAL|libmutter-CRITICAL|Script failed|Traceback' tests/output/shell.log; then
     printf 'Integration log contains runtime errors.
 ' >&2
     exit 1

@@ -31,6 +31,7 @@ import {Drops} from './src/services/drops.js';
 import {FileSearch} from './src/services/filesearch.js';
 import {Launcher} from './src/launcher/launcher.js';
 import {AirPods} from './src/services/airpods.js';
+import {Agents} from './src/services/agents.js';
 
 export default class Notchy extends Extension {
     openPreferences() {
@@ -60,7 +61,7 @@ export default class Notchy extends Extension {
             this.cover = new Cover(this, this.media, this.settings);
             this.spectrum = new Spectrum(this, this.media, this.system, this.settings);
             this.outputs = new Outputs(this, this.system, this.settings);
-            this.productivity = new Productivity(); this.calendar = new Calendar(); this.notifications = new Notifications();
+            this.productivity = new Productivity(); this.agents = new Agents(this, this.settings); this.calendar = new Calendar(); this.notifications = new Notifications();
             this.capture = new Capture(this); this.radial = new RadialMenu(this);
             this.airdrop = new AirDrop(this, this.shelf, this.settings);
             this.operations = new Operations(this, this.shelf); this.companion = new Companion(this, this.shelf, this.operations, this.productivity);
@@ -86,7 +87,7 @@ export default class Notchy extends Extension {
         for (const island of this.islands) island.dispose(); this.islands = [];
         // Notchy lives in the top bar, which GNOME shows on the primary monitor.
         const services = {cover: this.cover, spectrum: this.spectrum, calendar: this.calendar, notifications: this.notifications, productivity: this.productivity, settings: this.settings, store: this.store, shelf: this.shelf, clipboard: this.clipboard,
-            media: this.media, system: this.system, outputs: this.outputs, airdrop: this.airdrop, operations: this.operations, companion: this.companion, launcher: this.launcher, airpods: this.airpods};
+            media: this.media, system: this.system, outputs: this.outputs, airdrop: this.airdrop, operations: this.operations, companion: this.companion, launcher: this.launcher, airpods: this.airpods, agents: this.agents};
         this.services = services;
         const monitor = Main.layoutManager.primaryMonitor;
         if (monitor) this.islands.push(new Island(this, monitor, services));
@@ -184,7 +185,7 @@ export default class Notchy extends Extension {
         this.injections?.clear(); this.injections = null; this.life?.dispose();
         for (const island of this.islands ?? []) island.dispose(); this.islands = [];
         this.files?.dispose(); this.files = this.launcher = null; this.airpods?.dispose(); this.airpods = null;
-        this.companion?.dispose(); this.operations?.dispose(); this.clipboard?.dispose(); this.cover?.dispose(); this.cover = null; this.spectrum?.dispose(); this.spectrum = null; this.outputs?.dispose(); this.outputs = null; this.snap?.dispose(); this.snap = null; this.airdrop?.dispose(); this.airdrop = null; this.media?.dispose(); this.system?.dispose(); this.productivity?.dispose(); this.calendar?.dispose(); this.calendar = null; this.notifications?.dispose(); this.notifications = null; this.shelf?.dispose(); this.store?.dispose();
+        this.companion?.dispose(); this.operations?.dispose(); this.clipboard?.dispose(); this.cover?.dispose(); this.cover = null; this.spectrum?.dispose(); this.spectrum = null; this.outputs?.dispose(); this.outputs = null; this.snap?.dispose(); this.snap = null; this.airdrop?.dispose(); this.airdrop = null; this.media?.dispose(); this.system?.dispose(); this.productivity?.dispose(); this.agents?.dispose(); this.agents = null; this.calendar?.dispose(); this.calendar = null; this.notifications?.dispose(); this.notifications = null; this.shelf?.dispose(); this.store?.dispose();
         this.companion = this.operations = this.clipboard = this.media = this.system = this.shelf = this.store = this.life = this.settings = null;
         this.notificationSources?.clear(); this.productivity = this.radial = this.capture = this.services = null;
     }

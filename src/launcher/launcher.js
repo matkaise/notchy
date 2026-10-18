@@ -1,8 +1,10 @@
 import GLib from 'gi://GLib';
-import {rank, recordUse, recentUses} from './logic.js';
+import {rank, recordUse, recentUses, fileQuery} from './logic.js';
 import {CalculatorProvider, UnitsProvider, QuicklinkProvider, WebSearchProvider, AppsProvider, SystemProvider, WindowProvider,
     ClipboardProvider, SnippetProvider, EmojiProvider, ShelfProvider, FileProvider, launchUri} from './providers.js';
 
+// The providers the explicit file mode asks (the file index and the Regal).
+const FILE_PROVIDERS = ['shelf', 'file'];
 // How long typing must pause before the file index is asked.
 export const FILE_DEBOUNCE = 140;
 // At most this many results in the list (it scrolls beyond the visible rows).
@@ -47,21 +49,27 @@ export class Session {
         if (/^(snippet|snip|text)\s/i.test(query)) return {...PER_KIND, Snippet: 10};
         return PER_KIND;
     }
-    merged(query) { return rank([...this.syncResults, ...this.fileResults], {history: this.launcher.history, limit: TOTAL, perKind: this.perKind(query)}); }
+    merged(query, mode = 'all') {
+        const perKind = mode === 'files' ? {} : this.perKind(query);
+        return rank([...this.syncResults, ...this.fileResults], {history: this.launcher.history, limit: TOTAL, perKind, mode});
+    }
     // Drop every answer still on its way (a drill-down took over the list).
     cancel() { this.generation++; this.life.cancel(this.timer); this.timer = 0; this.pending = false; }
     query(text) {
-        const generation = ++this.generation, query = text.trim();
+        const generation = ++this.generation;
+        // "datei …", "file …" or "/…" searches files and folders only.
+        const only = fileQuery(text), mode = only === null ? 'all' : 'files', query = only ?? text.trim();
         this.life.cancel(this.timer); this.timer = 0; this.fileResults = [];
-        if (!query) { this.empty(generation); return; }
+        if (!text.trim()) { this.empty(generation); return; }
         this.syncResults = [];
         for (const [name, provider] of Object.entries(this.launcher.providers)) {
-            if (!provider.search) continue;
-            try { this.syncResults.push(...provider.search(text, this.ctx)); } catch (e) { console.warn(`Notchy launcher ${name}: ${e.message}`); }
+            if (!provider.search || (mode === 'files' && !FILE_PROVIDERS.includes(name))) continue;
+            try { this.syncResults.push(...provider.search(mode === 'files' ? query : text, this.ctx)); } catch (e) { console.warn(`Notchy launcher ${name}: ${e.message}`); }
         }
         const files = this.launcher.providers.file;
         this.pending = files.files.enabled && query.length >= 2;
-        this.onUpdate(this.merged(query), {pending: this.pending});
+        this.mode = mode;
+        this.onUpdate(this.merged(query, mode), {pending: this.pending, mode});
         if (!this.pending) return;
         // Debounced; an answer for an older query is dropped by its generation.
         this.timer = this.life.later(FILE_DEBOUNCE, async () => {
@@ -70,7 +78,7 @@ export class Session {
             try { results = await files.searchAsync(query, this.ctx); } catch (e) { console.warn(`Notchy file search: ${e.message}`); }
             if (generation !== this.generation || this.life.closed) return;
             this.pending = false; this.fileResults = results ?? [];
-            this.onUpdate(this.merged(query), {pending: false});
+            this.onUpdate(this.merged(query, mode), {pending: false, mode});
         });
     }
     // The empty field: recently used results, the dock's favourites, recent files.

@@ -63,10 +63,52 @@ export function recentUses(history, limit = 5) {
     return Object.entries(history).sort(([, a], [, b]) => b.last - a.last).slice(0, limit).map(([id, entry]) => ({id, ...entry}));
 }
 
-// Results from all providers in one list: by score, frecency added, at most
-// `perKind` of one kind, `limit` in all; equal scores keep provider order.
-export function rank(results, {history = {}, limit = 8, perKind = {}, now = Date.now()} = {}) {
-    const scored = results.map((result, order) => ({result, order, total: result.score + frecency(history[result.id], now)}));
+// Thunderstorm's ranking is type-aware. A provider's `score` is how well the
+// query matches (matchScore, 0–1000); above 1000 it is an explicit intent
+// (the calculator, a unit conversion, a quicklink keyword, a prefixed search
+// such as "emoji …") that always leads. Ordinary results are placed in bands
+// by their family and match quality, so for a normal search
+//   exact apps > strong apps > exact commands and quicklinks > exact files
+//   > the remaining apps, commands and files > weak (fuzzy) matches,
+// while a weak app still yields to an exactly matching file. Within a band the
+// match quality, a provider's own small `bonus` (files: recently changed,
+// shallow, recently opened) and frecency — capped per family, so a frequently
+// opened file never pushes an exactly matching app down — order the results.
+// In the explicit file mode ("datei …", "file …", "/…") files lead instead.
+export const FAMILY = {App: 'app', Befehl: 'command', Link: 'command', Fenster: 'command', Datei: 'file', Ordner: 'file', Regal: 'file', 'Zuletzt geöffnet': 'file'};
+export function matchTier(score) { return score >= 1000 ? 'exact' : score >= 680 ? 'strong' : score >= 450 ? 'medium' : 'weak'; }
+const TIER_FLOOR = {exact: 1000, strong: 680, medium: 450, weak: 0};
+const BANDS = {
+    app: {exact: 3200, strong: 2600, medium: 1700, weak: 700},
+    command: {exact: 2300, strong: 1900, medium: 1500, weak: 600},
+    file: {exact: 2000, strong: 1800, medium: 1300, weak: 500},
+    other: {exact: 2000, strong: 1600, medium: 1200, weak: 400},
+};
+const FILE_MODE_BANDS = {exact: 3400, strong: 3000, medium: 2500, weak: 1200};
+const FRECENCY_CAP = {app: 300, command: 250, file: 150, other: 200};
+const BONUS_LIMIT = [-200, 100];
+export function rankScore(result, {history = {}, now = Date.now(), mode = 'all'} = {}) {
+    if (result.score > 1000) return 5000 + result.score;
+    // The web search is the way out, always the last row.
+    if (result.kind === 'Web') return Math.min(100, result.score);
+    const family = FAMILY[result.kind] ?? 'other', match = Math.max(0, Math.min(1000, result.score)), tier = matchTier(match);
+    const band = mode === 'files' && family === 'file' ? FILE_MODE_BANDS[tier] : BANDS[family][tier];
+    const within = tier === 'exact' ? 0 : Math.min(160, (match - TIER_FLOOR[tier]) / (tier === 'weak' ? 3 : 2));
+    const bonus = Math.max(BONUS_LIMIT[0], Math.min(BONUS_LIMIT[1], result.bonus ?? 0));
+    return band + within + bonus + Math.min(FRECENCY_CAP[family], frecency(history[result.id], now));
+}
+
+// The file mode: "datei bericht", "file bericht", "/bericht". Returns the
+// search text without its prefix, or null for a normal query.
+export function fileQuery(text) {
+    const match = /^\s*(?:(?:datei|dateien|file|files)\s+|\/(?=[^\s/]))(.*)$/is.exec(String(text));
+    return match ? match[1].trim() : null;
+}
+
+// Results from all providers in one list, by rankScore, at most `perKind` of
+// one kind and `limit` in all; equal scores keep provider order.
+export function rank(results, {history = {}, limit = 8, perKind = {}, now = Date.now(), mode = 'all'} = {}) {
+    const scored = results.map((result, order) => ({result, order, total: rankScore(result, {history, now, mode})}));
     scored.sort((a, b) => b.total - a.total || a.order - b.order);
     const counts = {}, out = [], seen = new Set();
     for (const {result} of scored) {

@@ -73,6 +73,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
         sync();
         this.thunderstormPage(window, settings, page, group, toggle, number);
         this.airpodsPage(settings, page, group, toggle, number);
+        this.agentsPage(window, settings, page, group, toggle, number);
         const privacy = page('Ablage', 'edit-paste-symbolic');
         const history = group(privacy, 'Verlauf', 'Lokal gespeichert. Aufzeichnung und dauerhafte Speicherung sind anfangs aus.');
         toggle(history, 'clipboard-enabled', 'Zwischenablage aufzeichnen');
@@ -231,4 +232,68 @@ export default class NotchyPreferences extends ExtensionPreferences {
             null, Gio.DBusCallFlags.NONE, 10000, null, (c, r) => { try { c.call_finish(r); } catch (e) { status.subtitle = `Start fehlgeschlagen: ${e.message}`; } refresh(); }));
         refresh();
     }
+    // AI agents beside the notch, and the optional hook adapters. Nothing in an
+    // agent's own configuration changes without a click and a confirmation.
+    agentsPage(window, settings, page, group, toggle, number) {
+        const agents = page('Agenten', 'system-run-symbolic');
+        const main = group(agents, 'Agenten neben der Notch', 'Claude Code, Codex und Antigravity melden ihren Zustand über ihre eigenen Hooks an Notchy: arbeitet, wartet auf dich, fertig, Fehler. Ein bloß laufendes Programm gilt nie als „arbeitet“. Prompts und Inhalte werden nicht gelesen oder gespeichert.');
+        toggle(main, 'agents-enabled', 'Agenten-Indikatoren anzeigen');
+        toggle(main, 'agents-auto-layout', 'Automatisch links und rechts verteilen', 'Neue Indikatoren kommen auf die Seite mit mehr Platz; die Notch bleibt in der Mitte.');
+        toggle(main, 'agents-show-idle', 'Bereite Agenten ohne Aufgabe anzeigen', 'Als ruhiges, unbewegtes Symbol.');
+        toggle(main, 'agents-completion-animation', 'Kurze Animation bei abgeschlossener Aufgabe');
+        number(main, 'agents-completed-seconds', '„Fertig“ anzeigen für (Sekunden)', 2, 120, 1, 'Danach gilt der Agent als bereit.');
+        const SIDES = ['auto', 'left', 'right'];
+        const readSides = () => { try { return JSON.parse(settings.get_string('agents-side')) ?? {}; } catch { return {}; } };
+        const hooks = group(agents, 'Integrationen', 'Einrichten trägt Notchys Hook-Adapter neben deinen bestehenden Hooks in die Konfiguration des Agenten ein und legt vorher eine Sicherung an. Entfernen nimmt genau diese Einträge wieder heraus.');
+        const ctl = `${this.path}/scripts/notchyctl`;
+        const run = args => new Promise(resolve => {
+            try {
+                const proc = Gio.Subprocess.new(['/usr/bin/python3', ctl, 'agent', 'hooks', ...args, '--json'], Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
+                proc.communicate_utf8_async(null, null, (p, result) => {
+                    try { const [, out] = p.communicate_utf8_finish(result); resolve(JSON.parse(out)); } catch (e) { resolve([{ok: false, error: e.message}]); }
+                });
+            } catch (e) { resolve([{ok: false, error: e.message}]); }
+        });
+        const STATE = {installed: 'Eingerichtet', partial: 'Teilweise eingerichtet', missing: 'Nicht eingerichtet', error: 'Konfiguration fehlerhaft'};
+        for (const [id, name, key] of [['claude', 'Claude Code', 'agents-claude'], ['codex', 'Codex', 'agents-codex'], ['antigravity', 'Antigravity', 'agents-antigravity']]) {
+            const row = new Adw.ExpanderRow({title: name, subtitle: 'Wird geprüft …', show_enable_switch: true});
+            settings.bind(key, row, 'enable-expansion', Gio.SettingsBindFlags.DEFAULT);
+            const side = new Adw.ComboRow({title: 'Bevorzugte Seite', model: Gtk.StringList.new(['Automatisch', 'Links', 'Rechts']), selected: Math.max(0, SIDES.indexOf(readSides()[id] ?? 'auto'))});
+            side.connect('notify::selected', () => { const all = readSides(); all[id] = SIDES[side.selected]; if (all[id] === 'auto') delete all[id]; settings.set_string('agents-side', JSON.stringify(all)); });
+            row.add_row(side);
+            const config = new Adw.ActionRow({title: 'Hook-Adapter', subtitle: ''});
+            const install = new Gtk.Button({label: 'Einrichten', valign: Gtk.Align.CENTER}), remove = new Gtk.Button({label: 'Entfernen', valign: Gtk.Align.CENTER});
+            install.add_css_class('suggested-action');
+            config.add_suffix(install); config.add_suffix(remove); row.add_row(config);
+            hooks.add(row);
+            const refresh = async () => {
+                const [status] = await run(['status', '--provider', id]);
+                if (!status || status.ok === false) { row.subtitle = `Status unbekannt: ${status?.error ?? ''}`; return; }
+                row.subtitle = `${STATE[status.state] ?? status.state}${status.program ? '' : ' · Programm nicht gefunden'}`;
+                config.subtitle = `${status.config}${status.error ? ` · ${status.error}` : ''}${status.note ? ` · ${status.note}` : ''}`;
+                install.sensitive = status.state !== 'installed' && status.state !== 'error';
+                remove.sensitive = ['installed', 'partial'].includes(status.state);
+            };
+            const confirm = (action, verb) => {
+                const dialog = new Adw.AlertDialog({heading: `${name}: Hooks ${verb}?`,
+                    body: action === 'install' ? `Notchy trägt seinen Hook-Adapter in ${config.subtitle.split(' · ')[0]} ein. Bestehende Hooks bleiben unverändert; vorher wird eine Sicherung angelegt.${id === 'codex' ? ' Codex führt die neuen Hooks erst aus, nachdem du sie mit /hooks freigegeben hast.' : ''}`
+                        : `Notchy entfernt nur seine eigenen Einträge aus ${config.subtitle.split(' · ')[0]}; vorher wird eine Sicherung angelegt.`});
+                dialog.add_response('cancel', 'Abbrechen'); dialog.add_response('ok', verb);
+                dialog.set_response_appearance('ok', action === 'install' ? Adw.ResponseAppearance.SUGGESTED : Adw.ResponseAppearance.DESTRUCTIVE);
+                dialog.connect('response', async (_d, response) => {
+                    if (response !== 'ok') return;
+                    const [result] = await run([action, '--provider', id]);
+                    if (result?.ok === false) config.subtitle = `Nicht geändert: ${result.error}`;
+                    refresh();
+                });
+                dialog.present(window);
+            };
+            install.connect('clicked', () => confirm('install', 'Einrichten'));
+            remove.connect('clicked', () => confirm('uninstall', 'Entfernen'));
+            refresh();
+        }
+        const other = group(agents, 'Andere Agenten und ChatGPT', 'ChatGPT im Browser und in der Desktop-App bieten keine Statusschnittstelle; Notchy liest dort nichts aus. Eigene Skripte und andere Agenten melden sich mit notchyctl oder über den MCP-Server (Werkzeuge agent_status, agent_end).');
+        other.add(new Adw.ActionRow({title: 'notchyctl agent update --session ID --state working', subtitle: 'Weitere Befehle: start, heartbeat, stop, list; Details in der README.', subtitle_selectable: true}));
+    }
+
 }

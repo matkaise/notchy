@@ -1,6 +1,7 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {Emitter, Lifetime} from '../lifecycle.js';
+import {BatteryCache} from './batteries.js';
 
 // AirPods through airpods-helper (github.com/superninjv/airpods-helper): its
 // daemon owns the AirPods' control session (AAP) and publishes everything on
@@ -49,6 +50,11 @@ const NO_SYSTEM_BLUETOOTH = Boolean(GLib.getenv('NOTCHY_NO_SYSTEM_BLUETOOTH'));
 // A battery value as Notchy shows it: a whole percentage, or null when the
 // AirPods do not report one (-1, e.g. a bud in the closed case). Never 0 for unknown.
 export const battery = value => Number.isInteger(value) && value >= 0 && value <= 100 ? value : null;
+// One cache entry per device, whichever backend reads it.
+export const deviceKey = state => (state?.address ? state.address.toUpperCase() : state?.name ? `name:${state.name}` : '');
+// The battery parts a model and backend report: one battery for over-ear
+// models and for BlueZ (which only knows one number), buds and case otherwise.
+export const batteryParts = state => (state.headphones || state.backend === 'bluez' ? ['single'] : ['left', 'right', 'case']);
 
 export class AirPods extends Emitter {
     constructor(extension, settings) {
@@ -59,6 +65,12 @@ export class AirPods extends Emitter {
         this.life.connect(settings, 'changed::airpods-bluez-fallback', () => this.syncBluez());
         this.life.connect(settings, 'changed::airpods-builtin', () => this.syncAap());
         this.aap = null; this.aapRetries = 0; this.aapWanted = null; this.aapTimer = 0;
+        // Each helper appearance gets a generation: a proxy that finishes after
+        // the daemon vanished (or appeared again) is dropped, never installed.
+        this.helperGeneration = 0;
+        this.store = extension.store;
+        this.batteries = new BatteryCache(this.store?.read('airpods-batteries', {}) ?? {});
+        this.saveTimer = 0; this.lastKey = '';
         this.sync();
     }
     get enabled() { return this.settings.get_boolean('airpods-enabled'); }
@@ -82,16 +94,21 @@ export class AirPods extends Emitter {
     checkInstalled() {
         Gio.DBus.session.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'ListActivatableNames', null, null,
             Gio.DBusCallFlags.NONE, 3000, this.cancellable, (connection, result) => {
-                try { const [names] = connection.call_finish(result).deep_unpack(); this.helperInstalled = this.helperInstalled || names.includes(HELPER_NAME); if (!this.life.closed) this.update(); } catch { /* Bus gone or cancelled. */ }
+                // "Installed" means D-Bus can start it; a daemon that was started by hand and quit is not.
+                try { const [names] = connection.call_finish(result).deep_unpack(); this.helperInstalled = names.includes(HELPER_NAME); if (!this.life.closed) this.update(); } catch { /* Bus gone or cancelled. */ }
             });
     }
     helperAppeared() {
         if (this.life.closed) return;
-        this.helperRunning = true; this.helperInstalled = true; this.dropProxy();
+        const generation = ++this.helperGeneration;
+        this.helperRunning = true; this.dropProxy();
+        // The daemon owns the AirPods' control channel from now on: Notchy's own
+        // reader closes its channel at once, before the proxy is even ready.
+        this.syncBluez();
         Gio.DBusProxy.new(Gio.DBus.session, Gio.DBusProxyFlags.DO_NOT_AUTO_START, INFO, HELPER_NAME, PATH, IFACE, this.cancellable, (_o, result) => {
             let proxy;
-            try { proxy = Gio.DBusProxy.new_finish(result); } catch (e) { if (!this.life.closed) console.warn(`Notchy AirPods: ${e.message}`); return; }
-            if (this.life.closed || !this.helperRunning) return;
+            try { proxy = Gio.DBusProxy.new_finish(result); } catch (e) { if (!this.life.closed && generation === this.helperGeneration) console.warn(`Notchy AirPods: ${e.message}`); return; }
+            if (this.life.closed || !this.helperRunning || generation !== this.helperGeneration) return;
             this.proxy = proxy;
             this.proxySignals = [proxy.connect('g-properties-changed', () => this.update()),
                 proxy.connect('g-signal', (_p, _sender, name) => { if (['DeviceConnected', 'DeviceDisconnected'].includes(name)) this.update(); })];
@@ -99,7 +116,9 @@ export class AirPods extends Emitter {
         });
     }
     helperVanished() {
+        this.helperGeneration++;
         this.helperRunning = false; this.dropProxy();
+        if (!this.life.closed && this.watch) this.checkInstalled();
         if (!this.life.closed) { this.syncBluez(); this.update(); }
     }
     dropProxy() {
@@ -109,7 +128,15 @@ export class AirPods extends Emitter {
     prop(name, fallback = null) { return this.proxy?.get_cached_property(name)?.deep_unpack() ?? fallback; }
     get backend() { return this.proxy ? 'airpods-helper' : this.aap?.state?.connected ? 'aap' : this.bluez?.device ? 'bluez' : null; }
     // Everything the island shows, normalised. Unknown values are null.
+    // `battery` holds the live levels only; `batteries` adds per part the last
+    // valid reading, its age and whether it is live, stale, unknown or
+    // unsupported (see batteries.js).
     get state() {
+        const state = this.rawState; if (!state) return null;
+        const key = deviceKey(state);
+        return {...state, key, batteries: this.batteries.view(key)};
+    }
+    get rawState() {
         if (this.proxy) {
             const features = this.prop('Features', []), headphones = features.includes('headphones');
             return {backend: 'airpods-helper', connected: Boolean(this.prop('Connected', false)), name: this.prop('ModelName', '') || 'AirPods', model: this.prop('Model', ''), address: this.prop('Address', ''),
@@ -152,6 +179,13 @@ export class AirPods extends Emitter {
     }
     update() {
         if (this.life.closed) return;
+        // Readings go into the cache first: an unknown value never erases a valid one.
+        const raw = this.rawState, key = raw ? deviceKey(raw) : '';
+        let stored = false;
+        if (raw?.connected) stored = this.batteries.observe(key, raw.backend, raw.battery, raw.charging, {parts: batteryParts(raw)});
+        if (this.lastKey && (this.lastKey !== key || !raw?.connected)) stored = this.batteries.disconnect(this.lastKey) || stored;
+        this.lastKey = raw?.connected ? key : '';
+        if (stored) this.saveBatteries();
         const state = this.state, connected = Boolean(state?.connected);
         if (connected !== this.wasConnected) {
             this.wasConnected = connected; this.warned = {}; this.bothInEar = undefined; this.pausedByEar = false;
@@ -172,6 +206,11 @@ export class AirPods extends Emitter {
         const media = this.extension.media;
         if (!both && media?.state?.playing) { this.pausedByEar = true; media.call('Pause'); }
         else if (both && this.pausedByEar) { this.pausedByEar = false; media?.call('Play'); }
+    }
+    // The last valid readings survive a restart, written a moment after they change.
+    saveBatteries() {
+        if (this.saveTimer || !this.store) return;
+        this.saveTimer = this.life.later(3000, () => { this.saveTimer = 0; this.store.write('airpods-batteries', this.batteries.toJSON()); });
     }
     // Low battery: once per part when it drops below the threshold without charging.
     checkBattery(state) {
@@ -331,6 +370,8 @@ export class AirPods extends Emitter {
         return this.aap?.state?.connected ? 'aap' : this.bluez?.device ? 'bluez' : 'missing';
     }
     dispose() {
+        if (this.saveTimer) { this.life.cancel(this.saveTimer); this.saveTimer = 0; this.store?.write('airpods-batteries', this.batteries.toJSON()); }
+        this.helperGeneration++;
         if (this.watch) Gio.bus_unwatch_name(this.watch); this.watch = 0;
         this.cancellable?.cancel(); this.dropProxy(); this.stopAap(); this.stopBluez(); this.stopAap(); this.life.dispose(); this.events.clear(); this.listeners.clear();
     }

@@ -40,6 +40,9 @@ MINER_SCHEMA = 'org.freedesktop.Tracker3.Miner.Files'
 SPARQL = 'SELECT ?url ?name WHERE { ?s fts:match ~match ; nie:url ?url ; nfo:fileName ?name } LIMIT 200'
 CANDIDATES = 60
 STAT_TIMEOUT = 0.8
+POOL_SIZE = 8
+# A drive whose files did not answer in time is skipped for this long.
+SLOW_MOUNT_TTL = 60
 FALLBACK_MAX_ENTRIES = 40000
 FALLBACK_DEPTH = 5
 FALLBACK_BUDGET = 4.0
@@ -111,6 +114,24 @@ def coarse_score(name, words, query):
     return 0
 
 
+def mount_points(path='/proc/self/mounts'):
+    """Mount points from the kernel's table, longest first; read as text, so a
+    hanging network drive is never touched to find out where it is."""
+    try:
+        with open(path, encoding='utf-8', errors='replace') as table:
+            points = [line.split()[1].replace('\\040', ' ') for line in table if len(line.split()) > 1]
+    except OSError:
+        points = ['/']
+    return sorted(set(points), key=len, reverse=True)
+
+
+def mount_of(path, mounts):
+    for point in mounts:
+        if path == point or path.startswith(point.rstrip('/') + '/'):
+            return point
+    return '/'
+
+
 def describe(path):
     """Metadata for one candidate; None when it is gone (stale index entry,
     unmounted drive). Permission problems are reported, not hidden."""
@@ -132,7 +153,11 @@ class Searcher:
         self.bus = bus or Gio.bus_get_sync(Gio.BusType.SESSION, None)
         override = os.environ.get('NOTCHY_LOCALSEARCH_NAME')
         self.names = names or ((override,) if override else BUS_NAMES)
-        self.pool = ThreadPoolExecutor(max_workers=8)
+        self.pool = ThreadPoolExecutor(max_workers=POOL_SIZE)
+        # Checks still running after their deadline (a network drive that does
+        # not answer), and mount points that timed out recently.
+        self.stuck = set()
+        self.slow_mounts = {}
         self.fallback = None
         self.fallback_at = 0
         self.fallback_lock = threading.Lock()
@@ -152,18 +177,27 @@ class Searcher:
         return None
 
     def query(self, name, terms):
+        # Every descriptor is closed on every path: a failing call (endpoint
+        # gone, timeout, too many open files) must not leak the pipe's read end,
+        # or repeated failures exhaust the helper's descriptors.
         read, write = os.pipe()
-        fds = Gio.UnixFDList.new()
-        index = fds.append(write)
-        os.close(write)
         try:
-            self.bus.call_with_unix_fd_list_sync(name, ENDPOINT_PATH, ENDPOINT_IFACE, 'Query',
-                                                 GLib.Variant('(sha{sv})', (SPARQL, index, {'match': GLib.Variant('s', terms)})),
-                                                 GLib.VariantType('(as)'), Gio.DBusCallFlags.NO_AUTO_START, 4000, fds, None)
-        finally:
-            # Our copy of the write end must go, or the read never ends.
-            for fd in fds.steal_fds():
-                os.close(fd)
+            fds = Gio.UnixFDList.new()
+            try:
+                index = fds.append(write)
+            finally:
+                os.close(write)
+            try:
+                self.bus.call_with_unix_fd_list_sync(name, ENDPOINT_PATH, ENDPOINT_IFACE, 'Query',
+                                                     GLib.Variant('(sha{sv})', (SPARQL, index, {'match': GLib.Variant('s', terms)})),
+                                                     GLib.VariantType('(as)'), Gio.DBusCallFlags.NO_AUTO_START, 4000, fds, None)
+            finally:
+                # Our copy of the write end must go, or the read never ends.
+                for fd in fds.steal_fds():
+                    os.close(fd)
+        except BaseException:
+            os.close(read)
+            raise
         # A misbehaving endpoint never wedges the helper: the cursor must
         # arrive within the deadline.
         chunks, deadline = [], time.monotonic() + 5
@@ -269,8 +303,39 @@ class Searcher:
             ranked.append((coarse_score(filename, words, query), -path.count('/'), path, filename))
         ranked.sort(reverse=True)
         ranked = ranked[:max(limit, CANDIDATES)]
-        futures = {self.pool.submit(describe, path): (path, filename) for _score, _depth, path, filename in ranked}
-        done, _pending = wait(futures, timeout=STAT_TIMEOUT)
+        # Files on a drive that timed out recently are not touched again for a
+        # while; a pool whose workers all hang is replaced, so a stuck mount
+        # never blocks the searches that follow (its threads end on their own).
+        now = time.monotonic()
+        self.slow_mounts = {mount: until for mount, until in self.slow_mounts.items() if until > now}
+        self.stuck = {future for future in self.stuck if not future.done()}
+        if len(self.stuck) >= POOL_SIZE:
+            self.pool.shutdown(wait=False, cancel_futures=True)
+            self.pool, self.stuck = ThreadPoolExecutor(max_workers=POOL_SIZE), set()
+        mounts = mount_points()
+        ranked = [entry for entry in ranked if mount_of(entry[2], mounts) not in self.slow_mounts]
+        # One probe per drive first: a drive that does not answer costs one
+        # worker, not all of them, and its other files are not asked at all.
+        by_mount = {}
+        for entry in ranked:
+            by_mount.setdefault(mount_of(entry[2], mounts), []).append(entry)
+        deadline = time.monotonic() + STAT_TIMEOUT
+        futures = {self.pool.submit(describe, entries[0][2]): (entries[0][2], entries[0][3]) for entries in by_mount.values()}
+        done, pending = wait(futures, timeout=STAT_TIMEOUT / 2)
+        slow = set()
+        for future in pending:
+            mount = mount_of(futures[future][0], mounts)
+            slow.add(mount); self.stuck.add(future); self.slow_mounts[mount] = now + SLOW_MOUNT_TTL
+        for mount, entries in by_mount.items():
+            if mount not in slow:
+                futures.update({self.pool.submit(describe, path): (path, filename) for _score, _depth, path, filename in entries[1:]})
+        done, pending = wait(futures, timeout=max(0, deadline - time.monotonic()))
+        for future in pending:
+            self.stuck.add(future)
+            self.slow_mounts[mount_of(futures[future][0], mounts)] = now + SLOW_MOUNT_TTL
+        # Results keep the ranking order.
+        order = {path: i for i, (_s, _d, path, _f) in enumerate(ranked)}
+        futures = dict(sorted(futures.items(), key=lambda item: order.get(item[1][0], 0)))
         results = []
         for future in futures:
             if future not in done:
@@ -394,3 +459,7 @@ def serve(stdin=sys.stdin, stdout=sys.stdout):
 
 if __name__ == '__main__':
     serve()
+    # Leave at once: a check still hanging on a network drive would otherwise
+    # keep the interpreter waiting for its worker thread at exit.
+    sys.stdout.flush()
+    os._exit(0)

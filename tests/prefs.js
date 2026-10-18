@@ -17,11 +17,12 @@ app.connect('activate', () => {
     const all = widget => { const out = [widget]; for (let c = widget.get_first_child(); c; c = c.get_next_sibling()) out.push(...all(c)); return out; };
     GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
         const widgets = all(window), titles = widgets.filter(w => w instanceof Adw.PreferencesPage).map(w => w.title);
-        const missing = ['Darstellung', 'Thunderstorm', 'AirPods', 'Ablage', 'Tastenkürzel', 'Info'].filter(t => !titles.includes(t));
+        const missing = ['Darstellung', 'Thunderstorm', 'AirPods', 'Agenten', 'Ablage', 'Tastenkürzel', 'Info'].filter(t => !titles.includes(t));
         const quicklinks = widgets.filter(w => w instanceof Adw.ExpanderRow).map(w => w.title);
         if (missing.length) print(`NOTCHY_PREFS_TEST_FAILED: missing pages ${missing.join(', ')}`);
         else if (!['YouTube', 'GitHub', 'Wikipedia', 'Freundliche Grüsse'].every(t => quicklinks.includes(t))) print(`NOTCHY_PREFS_TEST_FAILED: quicklink and snippet editors (${quicklinks.join(', ')})`);
-        else { print('PASS: preferences offer Thunderstorm (quicklinks, snippets, file index) and AirPods pages'); print('NOTCHY_PREFS_TEST_OK'); }
+        else if (!['Claude Code', 'Codex', 'Antigravity'].every(t => quicklinks.includes(t))) print(`NOTCHY_PREFS_TEST_FAILED: agent integrations (${quicklinks.join(', ')})`);
+        else { print('PASS: preferences offer Thunderstorm (quicklinks, snippets, file index), AirPods and agent pages with each integration'); print('NOTCHY_PREFS_TEST_OK'); }
         window.close(); app.quit(); return GLib.SOURCE_REMOVE;
     });
 });

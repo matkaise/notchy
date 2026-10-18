@@ -29,7 +29,7 @@ Or install the built package: `gnome-extensions install --force dist/notchy@matt
 
 - **Clock and date:** GNOME's clock is the core of the island. A click opens the **Calendar („Kalender“)** tab; Settings → „Uhr öffnet den Kalender-Reiter“ switches back to GNOME's popup.
 - **Hover opens, leaving closes.** The island morphs like a spring. All tabs have the same height, so switching never makes the island jump. Tabs at the bottom by click or keys **1–4** (after Super + Ctrl + Space or a click on the clock). The pin keeps the island open; the gear opens the settings. Esc or a click elsewhere closes it.
-- **Live activities in the bar:** cover on the left, waveform on the right. Volume and brightness show inside the capsule instead of GNOME's OSD. **Scrolling over the closed island** changes the volume. Agent status and running file operations appear as text. Notchy's own confirmations („In Zwischenablage kopiert“, …) appear the same way inside the capsule — collapsed or opened.
+- **Live activities in the bar:** cover on the left, waveform on the right. Volume and brightness show inside the capsule instead of GNOME's OSD. **Scrolling over the closed island** changes the volume. Simple named activities (`notchyctl activity`, MCP `set_activity`) and running file operations appear as text. AI agents (Claude Code, Codex, Antigravity) and connected AirPods sit as small round indicators beside the notch (see [AI agents](#ai-agents)); the notch keeps one width for one content and stays in the middle of the bar however many indicators there are. Notchy's own confirmations („In Zwischenablage kopiert“, …) appear the same way inside the capsule — collapsed or opened.
 - **Notifications** grow out of the island as a banner below the clock (app, title, text, actions); Do Not Disturb and GNOME's per-app banner settings apply.
 - **Drag, drop, shake:** drag a file onto the island → „Ins Regal legen“ appears below the clock. Shake while dragging → the floating **basket („Korb“)** appears at the pointer; „Alles ins Regal“ hands its contents over.
 - **Window snap layouts:** drag a window by its title bar up to the clock → the notch offers layouts (halves, two-thirds, thirds, half + quarters, quarters, full). Hovering a zone shows GNOME's own translucent tile preview; release and the window takes it.
@@ -66,7 +66,7 @@ Super + Space opens the launcher in the island (in both styles). Everything runs
 | Emoji and characters | `:herz`, `emoji daumen`, `zeichen pfeil` | copy |
 | AirPods | `airpods transparenz`, `airpods trennen` | with a connected device |
 
-Results are labelled by category; ↑↓ choose, Enter runs, **Ctrl+K** opens the result's action panel (also a right click), Esc steps back (confirmation, panel, folder list) and then closes. The empty field shows recently used results, the dock's favourites and recently opened files. Ranking weighs exact, prefix, word-start, substring, initials and fuzzy matches, how often and how recently a result was used, and for files their age and depth.
+Results are labelled by category; ↑↓ choose, Enter runs, **Ctrl+K** opens the result's action panel (also a right click), Esc steps back (confirmation, panel, folder list) and then closes. The empty field shows recently used results, the dock's favourites and recently opened files. Ranking is type-aware: an ordinary query puts exactly matching apps first, then strongly matching apps (prefix, word start), then exactly matching system commands and quicklinks, then exactly matching files and folders, then the remaining apps, commands and files, then weak (fuzzy) matches — so „chrome“ finds Google Chrome above thirty files called chrome-something, while a barely matching app still yields to a file with exactly that name. Within these bands the match quality (exact, prefix, word start, substring, initials, fuzzy), how often and how recently a result was used (capped per type, so an often opened file never pushes an exactly matching app away), and for files their age, depth and recent use decide. Calculator, unit conversions, quicklink keywords and prefixed searches (`emoji …`, `ablage …`) always lead. **`datei …`, `file …` or `/…` searches files and folders only** („Nur Dateien und Ordner“ in the footer). File results that arrive late are merged without moving the selection once you moved it.
 
 **File search.** Thunderstorm queries the index GNOME LocalSearch already keeps (its Tracker 3 SPARQL endpoint on the session bus, `org.freedesktop.LocalSearch3`, or `org.freedesktop.Tracker3.Miner.Files` on older versions). The search term is a bound query parameter reduced to plain word prefixes, so it can never change the query. The work happens in `helper/filesearch.py`, a small process outside the Shell: typing waits 140 ms, an overtaken search is dropped, at most 30 candidates are checked on disk (missing files and unmounted drives drop out, unreadable files are marked), hidden files appear only for a query starting with `.`. Notchy never starts or configures the indexer by itself. Without LocalSearch it says so in the launcher and searches the personal folders instead (no hidden or linked folders, depth 5, at most 40 000 entries and 4 s, cached for 5 minutes). „Indizierte Ordner anzeigen“ lists what is indexed; Settings → Thunderstorm adds or removes indexed folders — this edits LocalSearch's own per-user settings (`org.freedesktop.Tracker3.Miner.Files`), never anything system-wide.
 
@@ -80,9 +80,39 @@ Results are labelled by category; ↑↓ choose, Enter runs, **Ctrl+K** opens th
 
 **In the island.** Connecting grows the island into the connection card: the name, the AirPods and the case drawn in white springing in, battery rings filling up with the percentages counting up, and „Verbunden“ with a check. Both buds share one ring while they are within 10 %, else each gets its own, as on an iPhone. With a tab open the card waits until the island closes; a notification arriving with it (the system announcing the same connection) waits until the card has been seen. The media tab stays the player's; the AirPods' controls are beside the notch: while the island is closed, connected AirPods sit beside the notch as a small round symbol inside a battery ring (the lower bud; orange when low), as Droppy and Apple show a connected accessory; a click opens their controls: the batteries (a bud out of the ear says so), noise control (ANC, transparency, adaptive, off), conversation awareness, the ear pause, disconnect and Bluetooth settings (Settings → AirPods → „Symbol neben der Notch“). Known but disconnected AirPods are connected from Thunderstorm („airpods verbinden“).
 
-What appears depends on the model: noise control with ANC models, adaptive mode and conversation awareness with AirPods Pro 2/3 and AirPods 4 with ANC, one battery for over-ear models. Batteries the AirPods do not report (e.g. the case closed or out of range) read „–“, never 0 %. A low-battery warning (default below 15 %) appears once per bud or case until it recovers or charges.
+What appears depends on the model: noise control with ANC models, adaptive mode and conversation awareness with AirPods Pro 2/3 and AirPods 4 with ANC, one battery for over-ear models.
+
+**The case battery.** AirPods report the case's level only while the case is connected to a bud — while at least one bud sits in it, lid open or just closed. With both buds in the ears, or the case out of reach, the AirPods themselves report the case as disconnected (AAP status 0x04; airpods-helper's `BatteryCase = -1`): its level is unknown at that moment, which is why it used to come and go. Notchy now keeps, per device (by its Bluetooth address) and per part, the last valid reading with its time and source (`src/services/batteries.js`, saved in `airpods-batteries.json`): a live reading shows normally; a remembered one shows greyed with its age („Case · vor 12 Min.“, a grey ring), never as live and never as charging; it expires after 12 hours. A part never read in this connection or before reads „–“, never 0 %; another pair's case is never used. An unknown value never erases a valid one; switching between the built-in reader and airpods-helper keeps the cache. When the case is still unknown after the buds reported, the built-in reader asks the AirPods once more after 15 s and 45 s — never more often, and never while airpods-helper owns the connection. Notchy cannot read a closed case far away: no AirPods model sends that. A low-battery warning (default below 15 %) appears once per bud or case until it recovers or charges.
 
 **Validation.** The AAP reader was run against real AirPods Pro 2 (USB-C) on this machine (batteries, noise control, conversation awareness, ear state); its packets are recorded in `tests/fixtures/aap-airpods-pro2.hex` and replayed by the tests. The daemon path was tested against a stand-in with airpods-helper's API (`tests/mock_airpodsd.py`), not the real daemon.
+
+## AI agents
+
+Active AI agents appear beside the notch, each as a small round indicator like the AirPods: Claude Code, Codex and Google Antigravity through their own hook systems, anything else through `notchyctl` or the MCP bridge. Each indicator is one agent; its sessions (one per conversation, so two Claude Code sessions are two rows) are listed in its popup.
+
+| State | Shown as |
+|---|---|
+| working — a task runs (also between tool calls) | a short arc turning around the icon; a real progress, if reported, as a filling ring |
+| waiting — needs your approval or an answer | an orange ring that pulses a few times, then stays orange; „?“ |
+| completed — a task just finished | a short bounce and a green ✓, then idle after 8 s (Settings → Agenten) |
+| error | a red ring with „!“ |
+| idle — ready, no task | a quiet static ring (can be hidden) |
+| disconnected | fades out |
+
+A started process alone never counts as working: only the agent's own events change a state. A click opens the popup: the agent, its state, and per session the project folder's name, state, running time, real progress if any, and „Wechseln“ when the agent's window can be named for sure (the nearest of its process ancestors owning exactly one window). The popup updates in place. A crashed agent is noticed by its process (its id and start time come with each event); a session without a process to check ends after missed heartbeats or a long quiet time (2 h idle, 8 h working) — never after a fixed hour while it works. Sessions survive disabling and enabling Notchy for 15 minutes if their process still runs.
+
+**Placement.** Indicators are placed by a layout manager (`src/ui/sideLayout.js`, `src/ui/sideIndicators.js`): both sides of the notch are kept equally wide, so the notch stays exactly in the middle and its own width never changes; a new indicator goes to the side with less in use; an indicator keeps its side on every status update; sides are only rebalanced when they drift two apart; what does not fit between the notch and GNOME's other panel items spills to the other side and then gathers in a „+N“ group whose popup lists the rest, keeping waiting and failed agents and the AirPods visible. AirPods stay right of the notch; each agent's side can be fixed (Settings → Agenten). While the island is open the indicators are hidden.
+
+**Setting up the hooks** (only when you ask for it: Settings → Agenten → „Einrichten“, or `scripts/notchyctl agent hooks install --provider claude|codex|antigravity`, `--dry-run` to see the result first). Notchy adds `helper/agent_hook.py` beside your existing hooks, never changes or removes them, keeps a dated copy of the file first and leaves a file that is not valid JSON alone; „Entfernen“ (`… hooks uninstall`) takes out exactly Notchy's entries. The adapter answers at once and talks to Notchy in a detached child, so it never slows the agent; it forwards only the event, the session id, a tool's name and the project folder's name — prompts, tool inputs, answers and transcripts are never read further or sent.
+
+| Agent | Configuration | Events used | Notes |
+|---|---|---|---|
+| Claude Code | `~/.claude/settings.json` | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, Notification (`permission_prompt`, `idle_prompt`, `elicitation_dialog`), Stop, StopFailure, SessionEnd | waiting is exact: a permission request or question |
+| Codex (CLI) | `~/.codex/hooks.json` | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PermissionRequest, Stop, Interrupt, SessionEnd | Codex runs new hooks only after you reviewed and trusted them with `/hooks` |
+| Antigravity | `~/.gemini/config/hooks.json` (hook „notchy“) | SessionStart, PreInvocation, PostInvocation, PostToolUse, Stop (`fullyIdle`, `error`) | no event for „needs approval“, so waiting is never shown; no session end (the process check ends it); Notchy takes no part in its PreToolUse permission decisions |
+| ChatGPT (browser, desktop app) | — | — | no status interface; Notchy reads nothing from them. Report manually with `notchyctl` or MCP if you like |
+
+The Codex desktop app and IDE extension share Codex's configuration directory, but whether they run hooks was not verified; ChatGPT's chat in the browser is deliberately not read.
 
 ## AirDrop
 
@@ -125,11 +155,11 @@ bash scripts/pack.sh
 bash scripts/test-shell.sh
 ```
 
-`check.sh` checks JavaScript syntax, the GSettings schema, Python syntax, and runs the domain, launcher (ranking, units, quicklinks), file-operation, file-search, context-menu, cover, spectrum and MCP tests. `test-shell.sh` starts GNOME Shell 50 headless with its own D-Bus and temporary XDG directories; log and screenshots end up in `tests/output`. Details: [docs/TESTING.md](docs/TESTING.md); current state: [docs/VALIDATION_STATE.md](docs/VALIDATION_STATE.md).
+`check.sh` checks JavaScript syntax, the GSettings schema, Python syntax, and runs the domain, launcher (ranking, units, quicklinks), AirPods battery cache, agent session and side-layout tests (Node) and the file-operation, file-search, AAP, agent hook adapter and setup, context-menu, cover, spectrum and MCP tests (Python). `test-shell.sh` starts GNOME Shell 50 headless with its own D-Bus and temporary XDG directories; log and screenshots end up in `tests/output`. Details: [docs/TESTING.md](docs/TESTING.md); current state: [docs/VALIDATION_STATE.md](docs/VALIDATION_STATE.md).
 
 The extension runs inside the GNOME Shell process. Shelf, basket and drop zone are native GTK windows (Python helpers) because only those can send and receive Wayland file drags; they sit exactly inside the Shell surface and are shown on top of the island's glass, so the two read as one surface. Their popups (the shelf's context menu, tooltips) are Wayland popup surfaces that Mutter stacks with the windows, below the Shell's chrome; Notchy shows them as clones on top of everything while the real popup keeps the input (the island's tab bar lets clicks through while a menu is open).
 
-Thunderstorm's providers live in `src/launcher/` (`providers.js`: one class per source; `logic.js`: pure ranking, units and quicklink code shared with the Node tests; `launcher.js`: debouncing, history, sessions). File search is `src/services/filesearch.js` with `helper/filesearch.py`; AirPods are `src/services/airpods.js`.
+Thunderstorm's providers live in `src/launcher/` (`providers.js`: one class per source; `logic.js`: pure ranking, units and quicklink code shared with the Node tests; `launcher.js`: debouncing, history, sessions). File search is `src/services/filesearch.js` with `helper/filesearch.py`; AirPods are `src/services/airpods.js` with `src/services/batteries.js`; agents are `src/services/agentModel.js` (sessions, states, hook mapping), `src/services/agents.js` (D-Bus, process checks), `src/ui/agentBubble.js`, and the placement beside the notch `src/ui/sideLayout.js` with `src/ui/sideIndicators.js`; the hook adapter is `helper/agent_hook.py`, its setup `helper/agent_setup.py`.
 
 ## Integrations
 
@@ -138,7 +168,19 @@ scripts/notchyctl add '/path/to/file.pdf'
 scripts/notchyctl list
 scripts/notchyctl activity 'My agent' 'Running tests' --progress 0.6
 scripts/notchyctl clear-activity 'My agent'
+
+# Structured agent sessions (one per session id; several per agent)
+scripts/notchyctl agent start --provider aider --session build-42 --project Notchy --pid "$PPID" --heartbeat 60
+scripts/notchyctl agent update --provider aider --session build-42 --state working --status 'Tests laufen' --progress 0.4
+scripts/notchyctl agent update --provider aider --session build-42 --state waiting
+scripts/notchyctl agent heartbeat --provider aider --session build-42
+scripts/notchyctl agent update --provider aider --session build-42 --state completed
+scripts/notchyctl agent stop --provider aider --session build-42
+scripts/notchyctl agent list
+scripts/notchyctl agent hooks status
 ```
+
+`--pid` names the agent's process (the session ends when it exits), `--heartbeat` the seconds between heartbeats (three missed ones end it). Over D-Bus the same is `org.gnome.Shell.Extensions.Notchy.AgentEvent(s json)` with `{provider, session, event: start|prompt|tool|waiting|resume|stop|idle|error|end|heartbeat|update, state, status, project, progress, pid, time}`; `GetAgents` lists the sessions and the `AgentsChanged` signal reports changes. Events with an older `time` than the newest one applied do not change a state. Everything goes over the user's session bus; Notchy opens no network port.
 
 MCP configuration for a local client:
 
@@ -153,4 +195,4 @@ MCP configuration for a local client:
 }
 ```
 
-The MCP bridge offers `list_shelf`, `add_files`, `set_activity` and `clear_activity`. It opens no network port and never returns clipboard history.
+The MCP bridge offers `list_shelf`, `add_files`, `set_activity`, `clear_activity`, and for agent sessions `agent_status` (agent, session, state, optional status, project and real progress) and `agent_end`. It opens no network port and never returns clipboard history.

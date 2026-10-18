@@ -2,6 +2,7 @@
 """MCP stdio bridge. No HTTP endpoint, network listener, or shell-execution tool."""
 import json
 import math
+import re
 from pathlib import Path
 import sys
 from gi.repository import Gio, GLib
@@ -24,7 +25,19 @@ TOOLS = [
     {'name': 'clear_activity', 'description': 'Remove a named activity from the local island.',
      'inputSchema': {'type': 'object', 'properties': {'name': {'type': 'string'}}, 'required': ['name'], 'additionalProperties': False},
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
+    {'name': 'agent_status', 'description': 'Report this agent session\'s state beside the notch: working, waiting (needs the user), idle, completed or error. '
+     'Use one session id per conversation. Progress only when it is real (0 to 1).',
+     'inputSchema': {'type': 'object', 'properties': {'agent': {'type': 'string', 'pattern': '^[a-z0-9][a-z0-9._-]{0,31}$'}, 'session': {'type': 'string', 'minLength': 1, 'maxLength': 128},
+                                                      'state': {'type': 'string', 'enum': ['working', 'waiting', 'idle', 'completed', 'error']},
+                                                      'status': {'type': 'string', 'maxLength': 140}, 'project': {'type': 'string', 'maxLength': 60},
+                                                      'progress': {'type': 'number', 'minimum': 0, 'maximum': 1}},
+                     'required': ['agent', 'session', 'state'], 'additionalProperties': False},
+     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
+    {'name': 'agent_end', 'description': 'End an agent session beside the notch.',
+     'inputSchema': {'type': 'object', 'properties': {'agent': {'type': 'string'}, 'session': {'type': 'string'}}, 'required': ['agent', 'session'], 'additionalProperties': False},
+     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
 ]
+AGENT_RE = re.compile(r'^[a-z0-9][a-z0-9._-]{0,31}$')
 
 
 class Bridge:
@@ -43,6 +56,8 @@ class Bridge:
         if not isinstance(arguments, dict):
             raise ValueError('Tool arguments must be an object.')
         fields = {'list_shelf': set(), 'add_files': {'paths'}, 'set_activity': {'name', 'status', 'progress'}, 'clear_activity': {'name'}}
+        if name in ('agent_status', 'agent_end'):
+            return self.agent(name, arguments)
         if name not in fields:
             raise ValueError('Unknown tool.')
         if set(arguments) != fields[name]:
@@ -68,6 +83,34 @@ class Bridge:
             raise ValueError('Invalid status or progress.')
         self.call('SetActivity', GLib.Variant('(ssd)', (title, status, progress)))
         return {'updated': title}
+
+
+    def agent(self, name, arguments):
+        required, optional = ({'agent', 'session', 'state'}, {'status', 'project', 'progress'}) if name == 'agent_status' else ({'agent', 'session'}, set())
+        if not required <= set(arguments) or set(arguments) - required - optional:
+            raise ValueError('Missing or unexpected arguments.')
+        agent, session = arguments['agent'], arguments['session']
+        if not isinstance(agent, str) or not AGENT_RE.match(agent) or not isinstance(session, str) or not 0 < len(session) <= 128:
+            raise ValueError('Invalid agent or session.')
+        event = {'provider': agent, 'session': session, 'source': 'mcp', 'event': 'end' if name == 'agent_end' else 'update'}
+        if name == 'agent_status':
+            if arguments['state'] not in ('working', 'waiting', 'idle', 'completed', 'error'):
+                raise ValueError('Invalid state.')
+            event['state'] = arguments['state']
+            for key, limit in (('status', 140), ('project', 60)):
+                if key in arguments:
+                    if not isinstance(arguments[key], str) or len(arguments[key]) > limit:
+                        raise ValueError(f'Invalid {key}.')
+                    event[key] = arguments[key]
+            if 'progress' in arguments:
+                progress = arguments['progress']
+                if not isinstance(progress, (int, float)) or isinstance(progress, bool) or not math.isfinite(progress) or not 0 <= progress <= 1:
+                    raise ValueError('Invalid progress.')
+                event['progress'] = progress
+        error = self.call('AgentEvent', GLib.Variant('(s)', (json.dumps(event),)))[0]
+        if error:
+            raise ValueError(error)
+        return {'reported': event['event'], 'session': session}
 
 
 class Server:

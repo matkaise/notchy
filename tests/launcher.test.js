@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fold, matchScore, bestScore, rank, frecency, recordUse, recentUses, formatNumber, convert, parseConversion, unitSymbol,
+import {fold, matchScore, bestScore, rank, rankScore, matchTier, fileQuery, frecency, recordUse, recentUses, formatNumber, convert, parseConversion, unitSymbol,
     expandTemplate, quicklinkTarget, matchQuicklink, parseList, expandSnippet} from '../src/launcher/logic.js';
 
 test('folding ignores case and diacritics', () => {
@@ -18,18 +18,71 @@ test('match weighting: exact > prefix > word start > substring > initials > fuzz
     assert.ok(matchScore('vs code', 'Visual Studio Code') === 0 || matchScore('studio code', 'Visual Studio Code') > 600);
     assert.ok(bestScore('term', ['Konsole', 'terminal emulator']) > 0 && bestScore('term', ['Terminal', 'x']) > bestScore('term', ['Konsole', 'terminal emulator']));
 });
-test('ranking merges providers by score and frecency, caps per kind and in total, drops duplicates', () => {
+test('ranking merges providers, caps per kind and in total, drops duplicates; frecency orders within a band', () => {
     const results = [
         {id: 'app:a', kind: 'App', score: 500}, {id: 'app:b', kind: 'App', score: 600}, {id: 'app:c', kind: 'App', score: 400},
-        {id: 'file:x', kind: 'Datei', score: 550}, {id: 'file:x', kind: 'Datei', score: 550}, {id: 'cmd:lock', kind: 'Befehl', score: 450},
+        {id: 'file:x', kind: 'Datei', score: 550}, {id: 'file:x', kind: 'Datei', score: 550}, {id: 'cmd:lock', kind: 'Befehl', score: 450}, {id: 'cmd:dark', kind: 'Befehl', score: 460},
     ];
     const now = Date.UTC(2026, 9, 17);
     const history = {'cmd:lock': {count: 20, last: now - 3600000}};
-    const out = rank(results, {history, limit: 4, perKind: {App: 2}, now});
-    assert.deepEqual(out.map(r => r.id), ['cmd:lock', 'app:b', 'file:x', 'app:a']);
+    const out = rank(results, {history, limit: 5, perKind: {App: 2}, now});
+    // The often used command passes an app of the same match quality, not a better one.
+    assert.deepEqual(out.map(r => r.id), ['app:b', 'cmd:lock', 'app:a', 'cmd:dark', 'file:x']);
     assert.ok(frecency(history['cmd:lock'], now) > frecency({count: 20, last: now - 40 * 86400000}, now), 'recent use counts more than old use');
     assert.equal(frecency(undefined, now), 0);
 });
+
+// A launcher with Google Chrome installed and 30 files named after it.
+const now = Date.UTC(2026, 9, 18);
+const app = (name, query) => ({id: `app:${name}`, kind: 'App', title: name, score: Math.min(1000, bestScore(query, [name]))});
+const files = (query, count = 30) => Array.from({length: count}, (_, i) => {
+    const name = i === 0 ? 'chrome' : i % 3 ? `chrome-export-${i}.json` : `Chrome Lesezeichen ${i}.html`;
+    return {id: `file:${i}`, kind: i % 7 ? 'Datei' : 'Ordner', title: name, score: matchScore(query, name), bonus: i % 4 ? 40 : 100};
+});
+test('a matching app leads over many files that contain its name', () => {
+    for (const query of ['chrome', 'Chrome', 'chro', 'google chrome', 'goo']) {
+        const out = rank([...files(query), app('Google Chrome', query)], {limit: 24, perKind: {Datei: 4, Ordner: 3, App: 4}, now});
+        assert.equal(out[0].title, 'Google Chrome', `${query}: ${out.slice(0, 3).map(r => r.title)}`);
+        assert.ok(out.some(r => r.kind === 'Datei'), 'files stay reachable');
+    }
+    const firefox = rank([app('Firefox', 'firefox'), {id: 'file:f', kind: 'Datei', title: 'firefox', score: 1000, bonus: 100}], {now});
+    assert.equal(firefox[0].title, 'Firefox');
+});
+test('an exactly matching app beats a frequently opened file; a fuzzy app yields to an exact file', () => {
+    const history = {'file:0': {count: 400, last: now - 60000}};
+    const out = rank([...files('chrome'), app('Google Chrome', 'chrome')], {history, now, limit: 24});
+    assert.equal(out[0].title, 'Google Chrome');
+    assert.equal(out[1].title, 'chrome', 'the frequently used, exactly named file comes right after the app');
+    const fuzzy = app('Character Map', 'chrmap');
+    assert.equal(matchTier(fuzzy.score), 'weak');
+    const weak = rank([fuzzy, {id: 'file:x', kind: 'Datei', title: 'chrmap', score: 1000}], {now});
+    assert.equal(weak[0].id, 'file:x');
+});
+test('exact commands and quicklinks come after strong apps and before exact files', () => {
+    const cmd = {id: 'cmd:lock', kind: 'Befehl', score: 1000}, link = {id: 'link:yt', kind: 'Link', score: 1000};
+    const strongApp = {id: 'app:x', kind: 'App', score: 700}, exactFile = {id: 'file:x', kind: 'Datei', score: 1000, bonus: 500};
+    const history = {'cmd:lock': {count: 999, last: now}, 'file:x': {count: 999, last: now}};
+    const out = rank([exactFile, link, cmd, strongApp], {history, now});
+    assert.deepEqual(out.map(r => r.id), ['app:x', 'cmd:lock', 'link:yt', 'file:x']);
+    assert.ok(rankScore({kind: 'Rechner', score: 2000}) > rankScore({kind: 'App', score: 1000}, {history: {}}), 'explicit intents (calculator, prefixes) still lead');
+    assert.ok(rankScore({kind: 'Web', score: 1}) < rankScore({kind: 'Datei', score: 1}), 'the web search stays last');
+});
+test('the explicit file mode puts files and folders first', () => {
+    assert.equal(fileQuery('datei bericht'), 'bericht');
+    assert.equal(fileQuery('File  Bericht 2026'), 'Bericht 2026');
+    assert.equal(fileQuery('/bericht'), 'bericht');
+    for (const text of ['bericht', 'dateien', '2/3', '/ bericht', '//x']) assert.equal(fileQuery(text), null, text);
+    const out = rank([app('Bericht-Generator', 'bericht'), {id: 'file:b', kind: 'Datei', title: 'Bericht Q3.pdf', score: matchScore('bericht', 'Bericht Q3.pdf')}], {mode: 'files', now});
+    assert.equal(out[0].id, 'file:b');
+});
+test('late file results keep the ranking of what was already shown', () => {
+    const early = [app('Google Chrome', 'chrome'), {id: 'cmd:x', kind: 'Befehl', score: 700}];
+    const before = rank(early, {now}).map(r => r.id);
+    const after = rank([...early, ...files('chrome')], {now, limit: 24, perKind: {Datei: 4, Ordner: 3}}).map(r => r.id);
+    assert.deepEqual(after.filter(id => before.includes(id)), before);
+    assert.equal(after[0], before[0]);
+});
+
 test('usage history records counts, keeps the newest entries and lists recent ones', () => {
     let history = {};
     history = recordUse(history, 'a', {title: 'A'}, 1); history = recordUse(history, 'b', {title: 'B'}, 2); history = recordUse(history, 'a', {title: 'A'}, 3);

@@ -103,7 +103,7 @@ export class QuicklinkProvider {
         if (!hit?.complete) for (const link of links) {
             if (link === hit?.link) continue;
             const score = Math.max(matchScore(query, link.name), matchScore(query, link.keyword) - 50);
-            if (score >= 500) out.push(this.result(link, '', score - 200, ctx));
+            if (score >= 500) out.push(this.result(link, '', score, ctx));
         }
         return out;
     }
@@ -370,7 +370,9 @@ export class FileProvider {
             // Recently changed files and shallow paths rank a little higher.
             const age = (Date.now() / 1000 - (file.mtime || 0)) / 86400, depth = file.path.split('/').length;
             const boost = (age < 2 ? 40 : age < 14 ? 20 : 0) + (recent?.has(file.uri) ? 80 : 0) - Math.min(60, Math.max(0, depth - 4) * 8) - (file.readable === false ? 200 : 0);
-            return fileResult(file, Math.max(1, Math.min(980, score + boost - 60)), this.extension, ctx);
+            // The match quality is the score; recency and depth only order files
+            // within their band (see rankScore), they never lift a file above an app.
+            return {...fileResult(file, Math.max(1, Math.min(1000, score)), this.extension, ctx), bonus: boost};
         }).filter(Boolean);
     }
     async recent(ctx) {

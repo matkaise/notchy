@@ -14,7 +14,7 @@ class BridgeTest(mcp.Bridge):
 
     def call(self, method, parameters=None):
         self.calls.append((method, parameters.unpack() if parameters else None))
-        return ('[]',) if method == 'GetItems' else ()
+        return ('[]',) if method == 'GetItems' else ('',) if method == 'AgentEvent' else ()
 
 
 class MCPTest(unittest.TestCase):
@@ -24,7 +24,7 @@ class MCPTest(unittest.TestCase):
         self.assertIn('error', before)
         response = server.handle({'jsonrpc':'2.0', 'id':2, 'method':'initialize', 'params':{'protocolVersion':'2025-11-25'}})
         self.assertEqual(response['result']['protocolVersion'], '2025-11-25')
-        self.assertEqual(len(server.handle({'jsonrpc':'2.0','id':3,'method':'tools/list'})['result']['tools']),4)
+        self.assertEqual(len(server.handle({'jsonrpc':'2.0','id':3,'method':'tools/list'})['result']['tools']),6)
         self.assertIn('error',server.handle({'jsonrpc':'2.0','id':4,'method':'arbitrary-command'}))
 
     def test_activity_validates_parameters_and_never_executes(self):
@@ -42,3 +42,18 @@ class MCPTest(unittest.TestCase):
         output = io.StringIO(); mcp.Server(BridgeTest()).serve(stream,output)
         replies = [json.loads(line) for line in output.getvalue().splitlines()]
         self.assertEqual(len(replies), 2); self.assertEqual(replies[0]['error']['code'],-32700); self.assertEqual(replies[1]['result'],{})
+
+
+class AgentToolTest(unittest.TestCase):
+    def test_agent_status_is_validated_and_sent_as_one_event(self):
+        bridge = BridgeTest()
+        self.assertEqual(bridge.tool('agent_status', {'agent': 'aider', 'session': 's1', 'state': 'working', 'progress': 0.5})['reported'], 'update')
+        method, (payload,) = bridge.calls[0]
+        self.assertEqual(method, 'AgentEvent')
+        self.assertEqual(json.loads(payload), {'provider': 'aider', 'session': 's1', 'source': 'mcp', 'event': 'update', 'state': 'working', 'progress': 0.5})
+        bridge.tool('agent_end', {'agent': 'aider', 'session': 's1'})
+        self.assertEqual(json.loads(bridge.calls[1][1][0])['event'], 'end')
+        for args in [{'agent': 'Aider!', 'session': 's', 'state': 'working'}, {'agent': 'a', 'session': '', 'state': 'working'}, {'agent': 'a', 'session': 's', 'state': 'busy'},
+                     {'agent': 'a', 'session': 's', 'state': 'working', 'progress': 3}, {'agent': 'a', 'session': 's', 'state': 'working', 'shell': 'x'}, {'agent': 'a', 'session': 's'}]:
+            with self.assertRaises(ValueError):
+                bridge.tool('agent_status', args)

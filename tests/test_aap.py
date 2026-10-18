@@ -43,6 +43,23 @@ class AapTest(unittest.TestCase):
         self.assertEqual(state['primary'], 'right')
         self.assertTrue(state['charging']['case'] and state['charging']['right'] is False)
 
+    def test_case_unknown_then_known_again(self):
+        # Both buds in the ears: the case is reported as disconnected (0x04), never as 0 %.
+        state = aap.new_state()
+        aap.parse(bytes.fromhex('040004000400030201620201040160020108015a0101'), state)
+        self.assertEqual(state['battery']['case'], 90)
+        aap.parse(bytes.fromhex('04000400040003020162020104016002010801000401'), state)
+        self.assertIsNone(state['battery']['case'])
+        self.assertFalse(state['charging']['case'])
+        # A packet without the case leaves what is known about it as it was.
+        aap.parse(bytes.fromhex('0400040004000202016202010401600201'), state)
+        self.assertIsNone(state['battery']['case'])
+        aap.parse(bytes.fromhex('040004000400030201620201040160020108014b0201'), state)
+        self.assertEqual((state['battery']['case'], state['charging']['case']), (75, False))
+        # An invalid level is unknown as well.
+        aap.parse(bytes.fromhex('04000400040001080190020101'), state)
+        self.assertIsNone(state['battery']['case'])
+
     def test_unknown_and_short_packets_change_nothing(self):
         state = aap.new_state()
         for packet in [b'', b'\x04\x00\x04', bytes.fromhex('0400040004000104'), bytes.fromhex('05000400040001'), bytes.fromhex('0400040009000d09000000')]:
