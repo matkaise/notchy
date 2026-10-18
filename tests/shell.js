@@ -1261,7 +1261,8 @@ async function layoutRegressions(ext, path, screenshot) {
     const waitFor = async (condition, ms = 3000) => { for (let i = 0; i < ms / 50 && !condition(); i++) await Scripting.sleep(50); return condition(); };
     const away = () => move(640, 600, 0);
     // The capsule at rest: in the bar, nothing animating, no stale morph state.
-    const settled = () => !island.panelAttached && !island.expanded && !island.morphing && !island.actor.visible && !island.panelSurface.get_transitions?.()?.length && island.sizeTarget === null;
+    // Identical content: no HUD or toast of the session (an audio device appearing shows GNOME's volume) in between.
+    const settled = () => !island.panelAttached && !island.expanded && !island.morphing && !island.actor.visible && !island.panelSurface.get_transitions?.()?.length && island.sizeTarget === null && !island.hudState && !island.toastState;
     const width = () => island.panelSurface.width, natural = () => Math.ceil(island.panelSurface.get_preferred_width(-1)[1]);
     const centred = () => { const [x] = island.panelSurface.get_transformed_position(); return Math.abs(x + island.panelSurface.width / 2 - (island.monitor.x + island.monitor.width / 2)) <= 1; };
     const hoverCycle = async () => {
@@ -1406,6 +1407,10 @@ async function agentRegressions(ext, path, screenshot) {
     });
     const item = id => island.sides.items.get(id);
     const shown = id => { const entry = item(id); return Boolean(entry?.actor.visible && entry.actor.mapped && island.sides.sideOf(id)); };
+    // Really drawn: placed, mapped, fully opaque and at full size once its animation is over
+    // (a placed indicator stuck at its start state — opacity 0, scale 0.6 — is invisible).
+    const contentOf = id => (id === 'airpods' ? island.airpodsBubble?.content : island.agentIndicators?.bubbles.get(id.replace('agent:', ''))?.content);
+    const drawn = id => { const content = contentOf(id); return shown(id) && Boolean(content) && content.get_paint_opacity() === 255 && content.scale_x === 1 && content.width >= Main.panel.height - 6; };
     const box = actor => { const [x, y] = actor.get_transformed_position(); return {x, y, w: actor.width, h: actor.height}; };
     const capsule = () => box(island.panelSurface);
     const centred = () => { const c = capsule(); return Math.abs(c.x + c.w / 2 - (island.monitor.x + island.monitor.width / 2)) <= 1; };
@@ -1428,9 +1433,9 @@ async function agentRegressions(ext, path, screenshot) {
         await waitFor(() => ext.agents.sessions.length === 1);
         assert(ext.agents.sessions[0]?.task === 'idle' && ext.agents.sessions[0].project === 'Notchy', 'SessionStart through the hook adapter: the session is there and idle, not working');
         await adapter('claude', {hook_event_name: 'UserPromptSubmit', session_id: 'claude-a', prompt: 'geheimer Prompt'});
-        await waitFor(() => ext.agents.sessions[0]?.task === 'working' && shown('agent:claude'));
+        await waitFor(() => ext.agents.sessions[0]?.task === 'working' && shown('agent:claude')); await Scripting.sleep(600);
         const claude = island.agentIndicators.bubbles.get('claude');
-        assert(shown('agent:claude') && claude.spinner.visible && claude.spinner.get_transition('rotation-angle-z') && !JSON.stringify(ext.agents.toJSON()).includes('geheim'),
+        assert(drawn('agent:claude') && claude.spinner.visible && claude.spinner.get_transition('rotation-angle-z') && !JSON.stringify(ext.agents.toJSON()).includes('geheim'),
             'a submitted prompt shows Claude as working with a turning ring; the prompt is not kept');
         assert(island.sides.sideOf('agent:claude') === 'left' && centred() && noOverlap(), 'the first agent goes beside the notch where there is room, the notch stays centred');
         await screenshot('agents-one');
@@ -1458,7 +1463,8 @@ async function agentRegressions(ext, path, screenshot) {
         await waitFor(() => shown('airpods'));
         await adapter('codex', {hook_event_name: 'UserPromptSubmit', session_id: 'codex-1', cwd: '/w/api', turn_id: 't'});
         await adapter('antigravity', {hookEventName: 'PreInvocation', conversationId: 'ag-1', workspacePaths: ['/w/site'], invocationNum: 1});
-        await waitFor(() => shown('agent:codex') && shown('agent:antigravity') && shown('airpods'));
+        await waitFor(() => shown('agent:codex') && shown('agent:antigravity') && shown('airpods')); await Scripting.sleep(700);
+        assert(['agent:claude', 'agent:codex', 'agent:antigravity', 'airpods'].every(drawn), `agents that appear while AirPods are shown are really drawn (${['agent:claude', 'agent:codex', 'agent:antigravity', 'airpods'].map(id => `${id}: ${contentOf(id)?.get_paint_opacity()}/${contentOf(id)?.scale_x}`).join(', ')})`);
         const sides = ['agent:claude', 'agent:codex', 'agent:antigravity', 'airpods'].map(id => island.sides.sideOf(id));
         assert(sides.filter(s => s === 'left').length === 2 && sides.filter(s => s === 'right').length === 2 && island.sides.sideOf('airpods') === 'right',
             `AirPods and three agents share both sides evenly (${sides.join(', ')})`);
@@ -1478,7 +1484,8 @@ async function agentRegressions(ext, path, screenshot) {
         island.open('media'); await Scripting.sleep(400);
         assert(!island.sides.left.visible && !island.sides.right.visible, 'while the island is open the indicators are hidden, no overlap');
         island.close(true); await Scripting.sleep(400);
-        assert(shown('agent:claude') && shown('airpods') && centred(), 'closing the island shows them again');
+        await Scripting.sleep(500);
+        assert(drawn('agent:claude') && drawn('airpods') && centred(), 'closing the island shows them again, fully drawn');
         // Events out of order: a late tool event does not undo a finished task.
         await send({provider: 'codex', session: 'codex-1', event: 'stop', time: Date.now()});
         await send({provider: 'codex', session: 'codex-1', event: 'tool', time: Date.now() - 5000});
@@ -1488,7 +1495,8 @@ async function agentRegressions(ext, path, screenshot) {
         for (let i = 0; i < 26; i++) await send({provider: `tool${i}`, session: 's', event: 'update', state: i === 25 ? 'waiting' : 'working'});
         await Scripting.sleep(500);
         const groups = Object.values(island.sides.groups).filter(g => g.button.container.visible);
-        assert(groups.length > 0 && groups.reduce((n, g) => n + g.ids.length, 0) > 0 && shown('agent:tool25') && shown('airpods') && noOverlap() && centred(),
+        await Scripting.sleep(600);
+        assert(groups.length > 0 && groups.reduce((n, g) => n + g.ids.length, 0) > 0 && drawn('agent:tool25') && drawn('airpods') && noOverlap() && centred(),
             `more agents than room: a +N group, the waiting agent and AirPods stay visible (${groups.map(g => g.count.text).join(' ')})`);
         await screenshot('agents-overflow');
         const group = groups[0];
@@ -1515,7 +1523,8 @@ async function agentRegressions(ext, path, screenshot) {
         ext.disable(); ext.enable(); await Scripting.sleep(800);
         island = ext.islands[0];
         await waitFor(() => shown('agent:claude'), 3000);
-        assert(ext.agents.registry.get('claude', 'claude-a')?.task === 'working' && shown('agent:claude'), 'a task running while Notchy was disabled and enabled is shown again');
+        await Scripting.sleep(600);
+        assert(ext.agents.registry.get('claude', 'claude-a')?.task === 'working' && drawn('agent:claude'), 'a task running while Notchy was disabled and enabled is shown again, fully drawn');
         ext.settings.set_boolean('hover-open', false);
         // Turning the indicators off hides them; the legacy activity text stays.
         ext.settings.set_boolean('agents-enabled', false); await Scripting.sleep(300);

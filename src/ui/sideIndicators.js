@@ -85,17 +85,26 @@ export class SideIndicators {
         const panel = Main.panel, center = panel._centerBox;
         const ours = new Set([this.left, this.right, this.island.panelButton.container]);
         const others = center.get_children().filter(child => !ours.has(child) && child.visible).reduce((sum, child) => sum + child.get_preferred_width(-1)[1], 0);
-        const sides = Math.max(panel._leftBox.get_preferred_width(-1)[1], panel._rightBox.get_preferred_width(-1)[1]);
         const capsule = this.island.panelAttached ? this.island.panelPlaceholder?.width ?? 0 : this.island.panelSurface.get_preferred_width(-1)[1];
-        return Math.max(0, Math.floor((panel.width - capsule - others) / 2 - sides - MARGIN - PAD));
+        // GNOME centres the clock in the work area (beside a dock), not on the
+        // monitor; the room on each side follows the same offset (panel.js).
+        const monitor = Main.layoutManager.findMonitorForActor(panel);
+        const area = monitor ? Main.layoutManager.getWorkAreaForMonitor(monitor.index) : null;
+        const offset = monitor && area ? 2 * (area.x - monitor.x) + area.width - monitor.width : 0;
+        const middle = (panel.width + offset) / 2, half = (capsule + others) / 2;
+        const left = middle - half - panel._leftBox.get_preferred_width(-1)[1];
+        const right = panel.width - (middle + half) - panel._rightBox.get_preferred_width(-1)[1];
+        return Math.max(0, Math.floor(Math.min(left, right) - MARGIN - PAD));
     }
     get shown() { return !this.island.actor.visible && !this.island.life.closed; }
     relayout() {
         if (this.life.closed) return;
         const shown = this.shown;
         const wanted = [...this.items.values()].filter(item => item.wanted());
+        // Measured where they are, without showing them: making an indicator
+        // visible in one row and then moving it to the other stopped its
+        // appear animation half-way and left it invisible (opacity 0).
         const measured = wanted.map(item => {
-            item.actor.visible = true;
             return {id: item.id, order: item.order, priority: item.priority(), preferred: item.preferred?.() ?? null, width: Math.ceil(item.actor.get_preferred_width(-1)[1])};
         });
         const plan = planSides(measured, this.capacity, this.sides, {auto: this.settings.get_boolean('agents-auto-layout'), spacing: SPACING, groupWidth: Math.max(26, Main.panel.height - 4)});

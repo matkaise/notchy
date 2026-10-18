@@ -80,15 +80,32 @@ export class AgentBubble {
             if (open) { this.updateRows(); this.clock = this.life.every(1000, () => this.updateRows()); }
         });
         this.life.connect(this.settings, 'changed', (_s, key) => { if (key === 'style' || key.startsWith('agents-')) this.style(); });
-        // Appearing: a short scale and fade.
+        this.life.connect(this.spinner, 'notify::mapped', () => this.spin());
+        // Appearing: a short scale and fade once it is on screen in its place.
         this.content.opacity = 0; this.content.scale_x = this.content.scale_y = 0.6;
-        this.whenMapped(() => this.content.ease({opacity: 255, scale_x: 1, scale_y: 1, duration: 260, mode: Clutter.AnimationMode.EASE_OUT_BACK}));
+        this.whenMapped(() => this.settle(this.content, {opacity: 255, scale_x: 1, scale_y: 1}, 260, Clutter.AnimationMode.EASE_OUT_BACK));
         this.style();
     }
     get preferredSide() {
         let sides = {};
         try { sides = JSON.parse(this.settings.get_string('agents-side')) ?? {}; } catch { sides = {}; }
         return ['left', 'right'].includes(sides[this.provider]) ? sides[this.provider] : null;
+    }
+    // An animation that always ends in its final state: should Clutter stop it
+    // half-way (the actor moved, unmapped, lost its frame clock), the values are
+    // set directly once it should have finished. An indicator never stays
+    // invisible or half-sized because of an animation.
+    settle(actor, values, duration, mode, onDone = null) {
+        let done = false;
+        const finish = () => {
+            if (done || this.life.closed) return;
+            done = true; this.life.cancel(guard);
+            if (this.leaving) return;
+            for (const key of Object.keys(values)) actor.remove_transition(key.replace(/_/g, '-'));
+            actor.set(values); onDone?.();
+        };
+        const guard = this.life.later(duration + 250, finish);
+        actor.ease({...values, duration, mode, onComplete: finish});
     }
     whenMapped(fn) {
         if (this.content.mapped) { fn(); return; }
@@ -112,7 +129,7 @@ export class AgentBubble {
         const spin = state === 'working' && progress === null;
         if (spin !== this.spinning) {
             this.spinning = spin; this.spinner.visible = spin; this.spinner.remove_all_transitions(); this.spinner.rotation_angle_z = 0;
-            if (spin) this.spinner.ease({rotation_angle_z: 360, duration: 1400, mode: Clutter.AnimationMode.LINEAR, repeatCount: -1});
+            this.spin();
         }
         // Waiting: a few gentle pulses, then a steady highlight.
         if (state === 'waiting' && previous !== 'waiting') {
@@ -127,12 +144,19 @@ export class AgentBubble {
         this.syncMenu();
         if (previous !== state) this.island.sides.queue();
     }
+    // The turning arc. Moving the indicator between rows can stop Clutter's
+    // transition, so it is started again whenever it is back on screen.
+    spin() {
+        if (!this.spinning || !this.spinner.mapped || this.spinner.get_transition('rotation-angle-z')) return;
+        this.spinner.rotation_angle_z = 0;
+        this.spinner.ease({rotation_angle_z: 360, duration: 1400, mode: Clutter.AnimationMode.LINEAR, repeatCount: -1});
+    }
     // A finished task: a short bounce (when enabled), then it turns idle by itself.
     transition(event) {
         if (event.type !== 'completed' || !this.settings.get_boolean('agents-completion-animation')) return;
         this.content.remove_transition('scale-x'); this.content.remove_transition('scale-y');
         this.content.scale_x = this.content.scale_y = 1.22;
-        this.content.ease({scale_x: 1, scale_y: 1, duration: 420, mode: Clutter.AnimationMode.EASE_OUT_BACK});
+        this.settle(this.content, {scale_x: 1, scale_y: 1}, 420, Clutter.AnimationMode.EASE_OUT_BACK);
     }
     paintRing() {
         const cr = this.ring.get_context(), [w, h] = this.ring.get_surface_size(), r = Math.min(w, h) / 2 - 2.2, state = this.group?.state ?? 'idle';
@@ -228,7 +252,11 @@ export class AgentBubble {
         // Destroyed only after the transition has finished with the actor.
         const finish = () => GLib.idle_add(GLib.PRIORITY_DEFAULT, () => { this.destroyNow(); done(); return GLib.SOURCE_REMOVE; });
         if (!this.content.mapped) { finish(); return; }
-        this.content.ease({opacity: 0, scale_x: 0.6, scale_y: 0.6, duration: 220, mode: Clutter.AnimationMode.EASE_IN_QUAD, onStopped: finish});
+        let left = false;
+        const once = () => { if (!left) { left = true; finish(); } };
+        this.content.ease({opacity: 0, scale_x: 0.6, scale_y: 0.6, duration: 220, mode: Clutter.AnimationMode.EASE_IN_QUAD, onStopped: once});
+        // Should Clutter never report the end, it leaves anyway.
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 600, () => { once(); return GLib.SOURCE_REMOVE; });
     }
     destroyNow() {
         if (this.life.closed) return;
