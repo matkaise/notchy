@@ -1,3 +1,4 @@
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Shell from 'gi://Shell';
 import {Emitter, Lifetime} from '../lifecycle.js';
@@ -9,6 +10,9 @@ const LIVENESS_MS = 10000;
 // A completed task, a fade-out and quiet sessions need a slower clock.
 const TICK_MS = 1000;
 const BUILTIN = Object.keys(PROVIDERS);
+// A closed app window counts after this long (a window being replaced is not a close).
+const AWAY_GRACE_MS = 3000;
+const SHELL_PID = new Gio.Credentials().get_unix_pid();
 // Sessions saved at disable come back within this time.
 const RESTORE_MS = 15 * 60 * 1000;
 
@@ -70,6 +74,7 @@ export class Agents extends Emitter {
     }
     apply(event) {
         const {changed, session, transition} = this.registry.apply(event);
+        if (session?.connected && !session.hadWindow && this.hostWindows(session).length) session.hadWindow = true;
         if (transition && session) this.emit({type: transition, session});
         if (changed) { this.schedule(); this.changed(); }
         return '';
@@ -77,7 +82,7 @@ export class Agents extends Emitter {
     end(provider, session) { if (this.registry.end(provider, session)) { this.emit({type: 'ended', session: this.registry.get(provider, session)}); this.schedule(); this.changed(); } }
     get sessions() { return this.registry.list(); }
     providers() {
-        return this.registry.providers({showIdle: this.settings.get_boolean('agents-show-idle'), enabled: provider => this.providerEnabled(provider)});
+        return this.registry.providers({showIdle: this.settings.get_boolean('agents-show-idle'), enabled: provider => this.providerEnabled(provider), present: session => !session.away});
     }
     toJSON() { return this.registry.toJSON(); }
     // The clocks run only while there is something to watch.
@@ -91,7 +96,8 @@ export class Agents extends Emitter {
     }
     tick(alive = () => null) {
         const before = new Set(this.registry.list().filter(s => s.connected).map(s => s));
-        const changed = this.registry.tick(Date.now(), alive, {completedMs: Math.max(2, this.settings.get_int('agents-completed-seconds')) * 1000 || COMPLETED_MS});
+        let changed = this.registry.tick(Date.now(), alive, {completedMs: Math.max(2, this.settings.get_int('agents-completed-seconds')) * 1000 || COMPLETED_MS});
+        changed = this.refreshPresence() || changed;
         for (const session of before) if (!session.connected) this.emit({type: 'ended', session});
         if (changed) this.changed();
         this.schedule();
@@ -99,21 +105,39 @@ export class Agents extends Emitter {
     // A session's agent process: gone, or a different process with the same
     // id (its start time differs), means the agent crashed or quit.
     checkProcesses() { this.tick(session => (session.pid ? processAlive(session.pid, session.pidStart) : null)); }
-    // The window that belongs to a session, when one can be named for sure:
-    // the nearest of its process ancestors that owns exactly one window.
-    window(session) {
+    // The windows of the app a session runs in: those of the nearest of its
+    // process ancestors that owns any (the terminal, Claude, the ChatGPT app).
+    hostWindows(session) {
         const byPid = new Map();
         for (const actor of global.get_window_actors()) {
             const window = actor.meta_window, pid = window?.get_pid?.();
-            if (!pid || pid <= 0 || window.skip_taskbar) continue;
+            if (!pid || pid <= 0 || pid === SHELL_PID || window.skip_taskbar) continue;
             if (!byPid.has(pid)) byPid.set(pid, []);
             byPid.get(pid).push(window);
         }
-        for (const pid of [session.pid, ...session.ancestors].filter(Boolean)) {
-            const windows = byPid.get(pid);
-            if (windows) return windows.length === 1 ? windows[0] : null;
+        for (const pid of [session.pid, ...session.ancestors].filter(Boolean)) if (byPid.has(pid)) return byPid.get(pid);
+        return [];
+    }
+    // The window that belongs to a session, when one can be named for sure:
+    // its app has exactly one window.
+    window(session) { const windows = this.hostWindows(session); return windows.length === 1 ? windows[0] : null; }
+    // Closing an app's window while it keeps running in the background (a
+    // desktop app in the tray) leaves its agent process alive and sends no
+    // session end. A session whose app had a window and has none for a few
+    // seconds counts as away: idle or finished, its indicator goes; working
+    // or waiting, it stays (the task really runs on). The window coming back
+    // brings it back. A session that never had a window (a CLI over SSH, in
+    // tmux) is never away.
+    refreshPresence(now = Date.now()) {
+        let changed = false;
+        for (const session of this.registry.list()) {
+            if (!session.connected) continue;
+            if (this.hostWindows(session).length) { session.hadWindow = true; session.awaySince = 0; }
+            else if (session.hadWindow && !session.awaySince) session.awaySince = now;
+            const away = Boolean(session.hadWindow && session.awaySince && now - session.awaySince >= AWAY_GRACE_MS);
+            if (away !== Boolean(session.away)) { session.away = away; changed = true; }
         }
-        return null;
+        return changed;
     }
     // The provider's application icon if it is installed, else Notchy's own glyph.
     appIcon(provider) {

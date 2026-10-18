@@ -169,3 +169,13 @@ test('fixed sides and automatic distribution off', () => {
     const off = planSides([item('claude', 1), item('codex', 2)], 400, new Map(), {auto: false});
     assert.deepEqual(off.visible, {left: [], right: ['claude', 'codex']});
 });
+test('an app closed to the background: idle and finished sessions go, working ones stay', () => {
+    const agents = new AgentRegistry();
+    agents.apply(ev({provider: 'codex', session: 'idle', event: 'stop'}), T);
+    agents.apply(ev({provider: 'codex', session: 'busy', event: 'prompt'}), T);
+    agents.apply(ev({provider: 'claude', session: 'waits', event: 'waiting'}), T);
+    const away = s => s.id !== 'nothing';
+    const shown = agents.providers({present: s => !away(s)});
+    assert.deepEqual(shown.map(g => [g.provider, g.sessions.map(s => s.id)]), [['codex', ['busy']], ['claude', ['waits']]]);
+    assert.equal(agents.providers({present: () => true}).find(g => g.provider === 'codex').count, 2, 'with the window back both return');
+});

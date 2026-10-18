@@ -1513,6 +1513,33 @@ async function agentRegressions(ext, path, screenshot) {
         sleeper.force_exit(); await new Promise(resolve => sleeper.wait_async(null, () => resolve())); sleeper = null;
         ext.agents.checkProcesses(); await waitFor(() => !ext.agents.registry.get('cli', 'crashy') && !item('agent:cli'), 4000);
         assert(!ext.agents.registry.get('cli', 'crashy') && !item('agent:cli'), 'an agent whose process crashed disappears');
+        // An app closed to the background: its process lives on, its window is gone.
+        // Idle sessions leave after a short grace, a working one stays.
+        const background = Gio.Subprocess.new(['/usr/bin/sleep', '60'], Gio.SubprocessFlags.NONE);
+        const appWindow = Gio.Subprocess.new(['/usr/bin/python3', here('mock_window.py')], Gio.SubprocessFlags.NONE);
+        try {
+            let fixture = null;
+            for (let i = 0; i < 50 && !fixture; i++) { await Scripting.sleep(100); fixture = global.get_window_actors().map(a => a.meta_window).find(w => w.get_title() === 'Notchy Layer Fixture'); }
+            const ancestors = [Number(background.get_identifier()), fixture.get_pid()];
+            await send({provider: 'cli', session: 'bg-idle', event: 'update', state: 'idle', pid: ancestors[0], ancestors});
+            await send({provider: 'cli', session: 'bg-busy', event: 'update', state: 'working', pid: ancestors[0], ancestors});
+            await waitFor(() => island.agentIndicators.bubbles.get('cli')?.group?.count === 2);
+            island.close(true); await Scripting.sleep(300);
+            assert(drawn('agent:cli') && ext.agents.registry.get('cli', 'bg-idle').hadWindow, 'sessions running inside an app window are shown');
+            fixture.delete(global.get_current_time());
+            await waitFor(() => island.agentIndicators.bubbles.get('cli')?.group?.count === 1, 6000);
+            const group = island.agentIndicators.bubbles.get('cli')?.group;
+            assert(group?.count === 1 && group.sessions.map(s => s.id).join() === 'bg-busy' && shown('agent:cli') && ext.agents.registry.get('cli', 'bg-idle')?.connected,
+                `closing the app's window hides its idle session but keeps the working one (${group?.sessions.map(s => s.id)})`);
+            await send({provider: 'cli', session: 'bg-busy', event: 'stop'});
+            await waitFor(() => !item('agent:cli'), 6000);
+            assert(!item('agent:cli'), 'once that task is finished too, the indicator of the closed app goes');
+        } finally {
+            try { background.force_exit(); } catch { /* Gone. */ }
+            try { appWindow.force_exit(); } catch { /* Gone. */ }
+            for (const id of ['bg-idle', 'bg-busy']) ext.agents.end('cli', id);
+            await Scripting.sleep(300);
+        }
         // Session end through the adapter.
         await adapter('claude', {hook_event_name: 'SessionEnd', session_id: 'claude-b', reason: 'prompt_input_exit'});
         await waitFor(() => claude.group?.count === 1, 4000);

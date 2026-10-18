@@ -170,12 +170,17 @@ export class AgentRegistry {
     }
     list() { return [...this.sessions.values()]; }
     // Per provider: its sessions, most urgent first, and the state its indicator shows.
-    providers({showIdle = true, enabled = () => true} = {}) {
+    // `present(session)`: false once the agent's app has closed its windows
+    // while its process lives on in the background (a desktop app in the tray).
+    // Such a session shows only while it works or waits; idle or finished, it
+    // has nothing to say and its indicator goes.
+    providers({showIdle = true, enabled = () => true, present = () => true} = {}) {
         const groups = new Map();
         for (const session of this.sessions.values()) {
             if (!enabled(session.provider)) continue;
             const state = shownState(session);
             if (state === 'idle' && !showIdle) continue;
+            if (!present(session) && (state === 'idle' || state === 'completed')) continue;
             if (!groups.has(session.provider)) groups.set(session.provider, []);
             groups.get(session.provider).push(session);
         }
