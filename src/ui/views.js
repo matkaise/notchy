@@ -677,7 +677,7 @@ export class Views {
         bar.add_child(entry); bar.add_child(label('Esc', 'notchy-keycap', {y_align: Clutter.ActorAlign.CENTER}));
         root.add_child(bar); this.focusEntry = entry;
         const list = box(true, {style_class: 'notchy-results'});
-        const view = new St.ScrollView({style_class: 'notchy-scroll notchy-results-scroll', x_expand: true, y_expand: true, overlay_scrollbars: true});
+        const view = new St.ScrollView({style_class: 'notchy-scroll notchy-results-scroll', x_expand: true, y_expand: true, overlay_scrollbars: false});
         view.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC); view.set_child(list); root.add_child(view);
         const footer = box(false, {style_class: 'notchy-search-footer'});
         const status = label('', 'notchy-search-footer-text', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});

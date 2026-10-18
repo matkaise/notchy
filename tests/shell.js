@@ -68,6 +68,7 @@ export async function run() {
     }
     if (GLib.getenv('NOTCHY_TEST_LAYOUT_ONLY')) {
         await layoutRegressions(ext, path, screenshot);
+        await scrollbarRegressions(ext, path, screenshot);
         await agentRegressions(ext, path, screenshot); ext.disable();
         print('NOTCHY_LAYOUT_TEST_OK'); return;
     }
@@ -289,6 +290,7 @@ export async function run() {
     await regalMenuRegressions(ext, path, screenshot);
     await launcherRegressions(ext, path, screenshot);
     await layoutRegressions(ext, path, screenshot);
+    await scrollbarRegressions(ext, path, screenshot);
     await agentRegressions(ext, path, screenshot);
     mock.force_exit(); for (let i = 0; i < 40 && (ext.media.state || ext.islands[0].toastState); i++) await Scripting.sleep(100); assert(ext.media.state === null && !ext.islands[0].panelSurface.has_style_class_name('notchy-wide'), `MPRIS player removal empties the capsule (${ext.media.state?.title ?? 'no state'}, ${ext.islands[0].panelSurface.get_style_class_name()})`);
     keyboard.run_dispose();
@@ -1530,4 +1532,45 @@ async function agentRegressions(ext, path, screenshot) {
         try { daemon?.force_exit(); } catch { /* Gone. */ }
         ext.settings?.set_boolean('airpods-animation', true); ext.settings?.set_boolean('hover-open', true);
     }
+}
+
+// Scroll bars beside, never over, the rows of a scrolling list: the
+// clipboard's times and actions, Thunderstorm's kind labels, the Regal's tiles.
+async function scrollbarRegressions(ext, path, screenshot) {
+    const island = ext.islands[0];
+    const all = actor => [actor, ...actor.get_children().flatMap(all)];
+    const scrollbar = view => all(view).find(child => child instanceof St.ScrollBar && child.height > child.width);
+    const check = (what, view, rows) => {
+        const bar = scrollbar(view), [bx] = bar?.get_transformed_position() ?? [NaN];
+        const right = Math.max(...rows.map(row => row.get_transformed_position()[0] + row.width));
+        const [vx] = view.get_transformed_position();
+        assert(view.vadjustment.upper > view.vadjustment.page_size && bar?.visible && bar.mapped && bx >= right + 2 && bx + bar.width <= vx + view.width + 0.5,
+            `${what}: the scroll bar lies beside the rows, not over them (rows end ${Math.round(right)}, bar ${Math.round(bx)}–${Math.round(bx + (bar?.width ?? 0))})`);
+    };
+    ext.settings.set_boolean('hover-open', false);
+    const recording = ext.settings.get_boolean('clipboard-enabled');
+    ext.settings.set_boolean('clipboard-enabled', true);
+    try {
+        for (let i = 0; i < 14; i++) { St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, `Scroll-Eintrag ${i} mit einem langen Text, der bis an den rechten Rand der Liste reicht und weiter`); await Scripting.sleep(120); }
+        island.open('clipboard'); await Scripting.sleep(600);
+        check('clipboard', styled(island.body, 'notchy-scroll')[0], styled(island.body, 'notchy-clip-row'));
+        const meta = styled(island.body, 'notchy-clip-meta').at(-1), bar = scrollbar(styled(island.body, 'notchy-scroll')[0]);
+        assert(meta.get_transformed_position()[0] + meta.width <= bar.get_transformed_position()[0], 'the clipboard rows\' time stays fully visible');
+        await screenshot('scroll-clipboard');
+        island.close(true); await Scripting.sleep(300);
+        island.toggle('search'); await Scripting.sleep(400); island.views.focusEntry.set_text('e'); await Scripting.sleep(900);
+        check('Thunderstorm', styled(island.body, 'notchy-results-scroll')[0], styled(island.body, 'notchy-result'));
+        island.views.focusEntry.set_text('2+3*4'); await Scripting.sleep(400);
+        assert(Math.abs(styled(island.body, 'notchy-result')[0].width - (620 - 20)) <= 2, 'without anything to scroll the rows keep their full width');
+        await screenshot('scroll-search');
+        island.close(true); await Scripting.sleep(300);
+        // The Regal is GTK: its scroll bar takes its own column (checked on the screenshot).
+        const added = [];
+        for (let i = 0; i < 16; i++) { const file = Gio.File.new_for_path(`${path}/regal scroll ${i}.txt`); file.replace_contents('x', null, false, Gio.FileCreateFlags.NONE, null); ext.shelf.add(file.get_uri()); added.push(file.get_uri()); }
+        island.open('shelf'); island.togglePin();
+        for (let i = 0; i < 60 && !(ext.companion.shelfWindow?.get_compositor_private()?.mapped && !island.morphing); i++) await Scripting.sleep(100);
+        await Scripting.sleep(1200); await screenshot('scroll-regal');
+        island.close(true); await Scripting.sleep(500);
+        for (const uri of added) ext.shelf.remove(uri);
+    } finally { ext.settings.set_boolean('clipboard-enabled', recording); ext.settings.set_boolean('hover-open', true); }
 }

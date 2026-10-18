@@ -51,6 +51,9 @@ flowboxchild:selected { background: rgba(255,179,138,0.16); box-shadow: inset 0 
 .thumb picture { border-radius: 10px; }
 .ext { font-family: monospace; font-size: 9.5px; color: rgba(255,255,255,0.9); margin-bottom: 6px; }
 .name { font-size: 11.5px; }
+scrolledwindow.shelf-scroll > scrollbar { background: transparent; border: none; margin-left: 4px; }
+scrolledwindow.shelf-scroll > scrollbar slider { min-width: 6px; border-radius: 6px; background: rgba(255,255,255,0.24); border: 2px solid transparent; }
+scrolledwindow.shelf-scroll > scrollbar slider:hover { background: rgba(255,255,255,0.36); }
 .basket .zone { min-height: 84px; border-radius: 16px; border: 1.5px dashed rgba(255,255,255,0.25); padding: 8px; }
 .basket .zone.active { border-color: rgba(255,200,170,0.7); background: rgba(255,179,138,0.08); }
 .basket .thumb { min-width: 38px; min-height: 48px; border-radius: 7px; }
@@ -176,7 +179,11 @@ class Tray(Gtk.Application):
         self.area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, css_classes=['drop-area'], vexpand=True)
         self.flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.MULTIPLE, max_children_per_line=5, min_children_per_line=5,
                                 column_spacing=6, row_spacing=6, homogeneous=True, valign=Gtk.Align.START)
-        scroll = Gtk.ScrolledWindow(vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER, min_content_height=150)
+        # A classic scroll bar beside the tiles (only while there is more to
+        # scroll): GTK's overlay indicator would cover the right column.
+        scroll = Gtk.ScrolledWindow(vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER, min_content_height=150,
+                                    overlay_scrolling=False, css_classes=['shelf-scroll'])
+        self.scroll = scroll
         scroll.set_child(self.flow)
         self.flow.set_hadjustment(scroll.get_hadjustment())
         self.flow.set_vadjustment(scroll.get_vadjustment())

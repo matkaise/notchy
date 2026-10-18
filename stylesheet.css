@@ -79,7 +79,11 @@
 .notchy-primary:hover, .notchy-button.notchy-pill-button:hover { background-color: rgba(255,255,255,0.2); }
 .notchy-empty { padding: 26px 12px 8px; spacing: 8px; }
 .notchy-empty-icon { color: rgba(255,255,255,0.45); padding-bottom: 4px; }
-.notchy-scroll { padding-right: 2px; }
+.notchy-scroll { padding-right: 0; }
+/* The scroll bar sits beside the rows with a small gap, thin and quiet. */
+.notchy-scroll StScrollBar { margin-left: 4px; padding: 0; }
+.notchy-scroll StScrollBar > .vhandle { border-radius: 8px; background-color: rgba(255,255,255,0.24); border: 3px solid transparent; }
+.notchy-scroll StScrollBar > .vhandle:hover { background-color: rgba(255,255,255,0.36); }
 .notchy-entry { background-color: rgba(255,255,255,0.07); color: #ffffff; border: 0; border-radius: 17px; padding: 8px 12px; selection-background-color: #E95420; }
 
 /* ── Media tab („Medien“) ───────────────────────────────────────────── */

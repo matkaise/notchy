@@ -29,8 +29,11 @@ export function emptyState(name, title, hint, action, callback) {
     if (action) { const b = textButton(action, callback, 'notchy-primary'); b.x_align = Clutter.ActorAlign.CENTER; root.add_child(b); }
     return root;
 }
+// A scrolling list. Its scroll bar takes its own room beside the rows (only
+// while there is something to scroll), so it never covers a row's end — the
+// clipboard's time and actions, Thunderstorm's kind labels.
 export function scroll(child, height = 220) {
-    const view = new St.ScrollView({style_class: 'notchy-scroll', height, x_expand: true, overlay_scrollbars: true});
+    const view = new St.ScrollView({style_class: 'notchy-scroll', height, x_expand: true, overlay_scrollbars: false});
     view.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC); view.set_child(child); return view;
 }
 export function entry(placeholder, onChange, onActivate) {
