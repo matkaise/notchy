@@ -67,10 +67,22 @@ class AdapterTest(unittest.TestCase):
             run = subprocess.run([sys.executable, str(HELPER / 'agent_hook.py'), *args], input=stdin, capture_output=True, text=True, env=env, timeout=10)
             self.assertEqual(run.returncode, 0, 'a broken payload never fails the agent')
         # Without NOTCHY_AGENT_HOOK_DRYRUN and without Notchy on the bus: still exit 0, quickly.
-        quiet = {k: v for k, v in os.environ.items() if k != 'NOTCHY_AGENT_HOOK_DRYRUN'}
-        quiet['DBUS_SESSION_BUS_ADDRESS'] = 'unix:path=/nonexistent/notchy-test-bus'
-        run = subprocess.run([sys.executable, str(HELPER / 'agent_hook.py'), 'codex'], input='{"hook_event_name":"Stop","session_id":"x"}', capture_output=True, text=True, env=quiet, timeout=10)
-        self.assertEqual((run.returncode, run.stdout), (0, ''))
+        with tempfile.TemporaryDirectory() as cache:
+            quiet = {k: v for k, v in os.environ.items() if k != 'NOTCHY_AGENT_HOOK_DRYRUN'}
+            quiet['DBUS_SESSION_BUS_ADDRESS'] = 'unix:path=/nonexistent/notchy-test-bus'
+            quiet['XDG_CACHE_HOME'] = cache
+            run = subprocess.run([sys.executable, str(HELPER / 'agent_hook.py'), 'codex'], input='{"hook_event_name":"Stop","session_id":"secret-session"}', capture_output=True, text=True, env=quiet, timeout=10)
+            self.assertEqual((run.returncode, run.stdout), (0, ''))
+            # The detached child notes why the event was dropped, without the payload.
+            note = Path(cache) / 'notchy' / 'agent-hook-error.json'
+            for _ in range(50):
+                if note.exists() and note.stat().st_size:
+                    break
+                time.sleep(0.1)
+            failure = json.loads(note.read_text())
+            self.assertEqual((failure['provider'], failure['bus']), ('codex', True))
+            self.assertTrue(failure['error'])
+            self.assertNotIn('secret-session', note.read_text())
 
 
 class SetupTest(unittest.TestCase):

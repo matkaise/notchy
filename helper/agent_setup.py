@@ -163,7 +163,17 @@ def status(provider, home=None):
     state = 'error' if error else 'installed' if wanted <= events else 'partial' if events else 'missing'
     note = 'Codex führt neue Hooks erst aus, nachdem du sie in Codex mit /hooks geprüft und freigegeben hast.' if provider == 'codex' else ''
     return {'provider': provider, 'name': LABELS[provider], 'state': state, 'config': str(path), 'program': program(provider),
-            'events': sorted(events), 'missing': sorted(wanted - events), 'error': error, 'note': note}
+            'events': sorted(events), 'missing': sorted(wanted - events), 'error': error, 'note': note, 'lastFailure': last_failure(provider)}
+
+
+def last_failure(provider, cache=None):
+    """The adapter's last delivery failure for this agent (agent_hook.note), if any."""
+    folder = Path(cache or os.environ.get('XDG_CACHE_HOME') or os.path.expanduser('~/.cache')) / 'notchy'
+    try:
+        failure = json.loads((folder / 'agent-hook-error.json').read_text())
+    except (OSError, ValueError):
+        return None
+    return failure if isinstance(failure, dict) and failure.get('provider') == provider else None
 
 
 def write(path, data):

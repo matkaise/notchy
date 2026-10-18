@@ -103,6 +103,19 @@ def message(provider, payload, now=None):
     return reduced
 
 
+def note(provider, error):
+    """The last delivery failure, for `notchyctl agent hooks status`: what went
+    wrong and in which environment — never the hook's payload."""
+    try:
+        folder = os.path.join(os.environ.get('XDG_CACHE_HOME') or os.path.expanduser('~/.cache'), 'notchy')
+        os.makedirs(folder, mode=0o700, exist_ok=True)
+        with open(os.path.join(folder, 'agent-hook-error.json'), 'w') as out:
+            json.dump({'time': int(time.time()), 'provider': provider, 'error': str(error)[:300],
+                       'bus': bool(os.environ.get('DBUS_SESSION_BUS_ADDRESS')), 'runtime_dir': bool(os.environ.get('XDG_RUNTIME_DIR'))}, out)
+    except OSError:
+        pass
+
+
 def send(provider, reduced):
     from gi.repository import Gio, GLib
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
@@ -144,8 +157,8 @@ def main(argv=sys.argv, stdin=sys.stdin, stdout=sys.stdout):
         for fd in (0, 1, 2):
             os.dup2(null, fd)
         send(provider, reduced)
-    except Exception:  # Notchy not running, no session bus: the event is dropped.
-        pass
+    except Exception as error:  # Notchy not running, no session bus: the event is dropped.
+        note(provider, error)
     finally:
         os._exit(0)
 

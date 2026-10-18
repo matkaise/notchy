@@ -78,6 +78,10 @@ def hooks(args):
             print(f"{name}: {result['state']} ({result['config']})" + (f" — {result['error']}" if result['error'] else '') + ('' if result['program'] else ' — Programm nicht gefunden'))
             if result['note']:
                 print(f"  {result['note']}")
+            if result.get('lastFailure'):
+                failure = result['lastFailure']
+                import time
+                print(f"  Letzter Zustellfehler ({time.strftime('%d.%m. %H:%M', time.localtime(failure['time']))}): {failure['error']}")
         elif not result.get('ok'):
             print(f"{name}: nicht geändert — {result['error']}")
         elif args.dry_run:
