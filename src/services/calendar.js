@@ -1,6 +1,7 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {Emitter, Lifetime} from '../lifecycle.js';
+import {_} from '../i18n/core.js';
 import {eventsForDay} from '../model.js';
 
 const BUS = 'org.gnome.Shell.CalendarServer';
@@ -42,7 +43,7 @@ export class Calendar extends Emitter {
                     this.life.connect(proxy, 'notify::g-name-owner', () => {
                         this.events.clear();
                         if (proxy.g_name_owner) this.load();
-                        else { this.loading = false; this.error = 'Kalenderdienst ist nicht verfügbar.'; this.changed(); }
+                        else { this.loading = false; this.error = _('The calendar service is not available.'); this.changed(); }
                     });
                     this.load();
                 } catch (e) { if (!this.life.closed) { this.loading = false; this.error = e.message; this.changed(); } }
@@ -55,7 +56,7 @@ export class Calendar extends Emitter {
         this.proxy.call('SetTimeRange', new GLib.Variant('(xxb)', [...range, true]), Gio.DBusCallFlags.NONE,
             10000, this.life.cancellable, (proxy, result) => {
                 try { proxy.call_finish(result); if (!this.life.closed && this.range === range) { this.loading = false; this.error = ''; this.changed(); } }
-                catch (e) { if (!this.life.closed && this.range === range) { this.loading = false; this.error = 'Termine konnten nicht geladen werden.'; console.warn(`Notchy calendar: ${e.message}`); this.changed(); } }
+                catch (e) { if (!this.life.closed && this.range === range) { this.loading = false; this.error = _('Events could not be loaded.'); console.warn(`Notchy calendar: ${e.message}`); this.changed(); } }
             });
     }
     removePrefix(prefix) { for (const id of this.events.keys()) if (id.startsWith(prefix)) this.events.delete(id); }

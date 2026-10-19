@@ -1,3 +1,5 @@
+import {_, fmt, ngettext, formatPercent} from '../i18n/core.js';
+
 // AirPods batteries per device and part (left, right, case, single), shared
 // by both backends (airpods-helper over D-Bus, Notchy's own AAP reader).
 // Pure logic without GNOME imports, so the Node test suite covers it.
@@ -92,16 +94,17 @@ export class BatteryCache {
     }
 }
 
-// "65 %", "Zuletzt 65 %" and "vor 5 Min." for a part as the UI shows it.
+// How old a remembered reading is ("just now", "5 min ago", "2 h ago") and a
+// part's level ("65 %" in German, "65%" in English), as the UI shows them.
 export function ageText(at, now = Date.now()) {
     const minutes = Math.max(0, Math.round((now - at) / 60000));
-    if (minutes < 1) return 'gerade eben';
-    if (minutes < 60) return `vor ${minutes} Min.`;
+    if (minutes < 1) return _('just now');
+    if (minutes < 60) return fmt(ngettext('%d min ago', '%d min ago', minutes), minutes);
     const hours = Math.round(minutes / 60);
-    return `vor ${hours} Std.`;
+    return fmt(ngettext('%d h ago', '%d h ago', hours), hours);
 }
 export function partText(info, now = Date.now()) {
-    if (info.status === 'live') return `${info.charging ? '⚡ ' : ''}${info.level} %`;
-    if (info.status === 'stale') return `${info.last} %`;
+    if (info.status === 'live') return `${info.charging ? '⚡ ' : ''}${formatPercent(info.level)}`;
+    if (info.status === 'stale') return formatPercent(info.last);
     return '–';
 }

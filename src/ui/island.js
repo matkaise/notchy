@@ -14,10 +14,11 @@ import {SideIndicators} from './sideIndicators.js';
 import {Waveform} from './waveform.js';
 import {box, label, icon, gicon, button} from './widgets.js';
 import {Lifetime} from '../lifecycle.js';
+import {_, N_, fmt, formatPercent} from '../i18n/core.js';
 
 // Bottom tab bar (Droppy for GNOME): page, icon, label.
-export const TABS = [['media', 'audio-x-generic-symbolic', 'Medien'], ['shelf', 'package-x-generic-symbolic', 'Regal'],
-    ['clipboard', 'edit-paste-symbolic', 'Ablage'], ['calendar', 'x-office-calendar-symbolic', 'Kalender']];
+export const TABS = [['media', 'audio-x-generic-symbolic', N_('Media')], ['shelf', 'package-x-generic-symbolic', N_('Shelf')],
+    ['clipboard', 'edit-paste-symbolic', N_('Clipboard')], ['calendar', 'x-office-calendar-symbolic', N_('Calendar')]];
 const TAB_INDEX = Object.fromEntries(TABS.map(([page], i) => [page, i]));
 // Content heights per tab; the surface morphs between them.
 // Every tab has the same height, so switching tabs never makes the island jump.
@@ -29,6 +30,8 @@ export const TAB_WIDTH = 46, TAB_HEIGHT = 30, TAB_INSET = 3, TABBAR_HEIGHT = 50;
 const TOP_GAP = 8, RADIUS = 30, SLIDE = 24;
 const WIDTH = {search: 620, drop: 460, notification: 440, snap: 560};
 const LIQUID_INSET = 3, FADE = 70;
+// Settings that change what an opened tab shows (see the settings handler).
+const PAGE_KEYS = new Set(['style', 'glass-level', 'width', 'media-enabled', 'media-waveform', 'airplay-enabled', 'clipboard-enabled', 'airpods-battery-threshold']);
 
 // An icon from a name, a Gio.Icon or a Gio.File, set only when it changed
 // (a new FileIcon for the same cover would make St load it again).
@@ -76,13 +79,13 @@ export class Island {
         // which Clutter would otherwise propagate up and stretch this row.
         this.headerRow = new St.Widget({style_class: 'notchy-header-row', layout_manager: new Clutter.BinLayout(), x_expand: true, y_expand: false});
         this.headerActions = box(false, {style_class: 'notchy-header-actions', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        this.pinButton = button('view-pin-symbolic', 'Offen halten', () => this.togglePin(), 'notchy-round-button');
+        this.pinButton = button('view-pin-symbolic', _('Keep Open'), () => this.togglePin(), 'notchy-round-button');
         this.headerActions.add_child(this.pinButton);
         this.headerActions.add_child(new St.Widget({x_expand: true}));
         // AirDrop: receiving on demand, only offered when its backend is installed.
-        this.airdropButton = button('notchy-airdrop-symbolic', 'AirDrop: für iPhones sichtbar werden', () => this.toggleAirDrop(), 'notchy-round-button notchy-airdrop-button');
+        this.airdropButton = button('notchy-airdrop-symbolic', _('AirDrop: become visible to iPhones'), () => this.toggleAirDrop(), 'notchy-round-button notchy-airdrop-button');
         this.headerActions.add_child(this.airdropButton);
-        this.headerActions.add_child(button('emblem-system-symbolic', 'Einstellungen', () => extension.openPreferences(), 'notchy-round-button'));
+        this.headerActions.add_child(button('emblem-system-symbolic', _('Settings'), () => extension.openPreferences(), 'notchy-round-button'));
         this.panelHeader = new St.Bin({style_class: 'notchy-panel-header-slot', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.FILL});
         this.headerRow.add_child(this.headerActions); this.headerRow.add_child(this.panelHeader);
         this.surface.add_child(this.headerRow);
@@ -96,7 +99,7 @@ export class Island {
         this.tabIndicator = new St.Widget({style_class: 'notchy-tab-indicator', width: TAB_WIDTH, height: TAB_HEIGHT, x: TAB_INSET, y: TAB_INSET}); this.tabTrack.add_child(this.tabIndicator);
         this.navButtons = TABS.map(([page, name, text], i) => {
             const content = new St.Icon({icon_name: name, icon_size: 17, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
-            const b = new St.Button({style_class: 'notchy-tab', child: content, can_focus: true, accessible_name: `${i + 1} · ${text}`, track_hover: true, width: TAB_WIDTH, height: TAB_HEIGHT, x: TAB_INSET + i * TAB_WIDTH, y: TAB_INSET});
+            const b = new St.Button({style_class: 'notchy-tab', child: content, can_focus: true, accessible_name: `${i + 1} · ${_(text)}`, track_hover: true, width: TAB_WIDTH, height: TAB_HEIGHT, x: TAB_INSET + i * TAB_WIDTH, y: TAB_INSET});
             b.connect('clicked', () => this.open(page)); this.tabTrack.add_child(b); return [page, b];
         });
         this.nav.add_child(this.tabTrack); this.surface.add_child(this.nav);
@@ -133,7 +136,13 @@ export class Island {
         this.life.connect(global.display, 'in-fullscreen-changed', () => this.syncVisibility());
         this.life.connect(this.settings, 'changed', (_s, key) => {
             this.applyStyle(); this.position(); this.syncVisibility(); this.updateCompact();
-            if (this.expanded && !['animation-duration', 'hover-delay', 'collapse-delay'].includes(key)) { this.sizeTarget = null; this.refresh(); }
+            if (!this.expanded || this.peeking) return;
+            // Thunderstorm keeps its field, query, selection and keyboard focus:
+            // a changed launcher setting (commands, quicklinks …) searches again.
+            if (this.page === 'search') { if (key.startsWith('launcher-') || key === 'clipboard-enabled') this.views.searchAgain?.(); return; }
+            // Only what a page shows rebuilds it (an agents or AirPods setting,
+            // a shortcut or a delay never takes the focus from an open page).
+            if (PAGE_KEYS.has(key)) { this.sizeTarget = null; this.refresh(); }
         });
         this.life.cleanups.push(this.media.subscribe(() => { this.updateCompact(); if (this.expanded && this.page === 'media') this.refresh(); }));
         this.life.cleanups.push(this.cover.subscribe(() => { this.updateCompact(); if (this.expanded && this.page === 'media') this.refresh(); }));
@@ -159,9 +168,9 @@ export class Island {
         this.panelButton.add_style_class_name('notchy-panel-button');
         // Reactive, so scroll (volume) and right click (radial menu) reach it.
         this.panelSurface = box(false, {y_expand: true, x_align: Clutter.ActorAlign.CENTER, reactive: true});
-        this.leftSlot = new St.Button({style_class: 'notchy-slot notchy-slot-left', can_focus: true, accessible_name: 'Notchy öffnen'});
+        this.leftSlot = new St.Button({style_class: 'notchy-slot notchy-slot-left', can_focus: true, accessible_name: _('Open Notchy')});
         this.leftRow = box(false, {style_class: 'notchy-slot-row', x_expand: true}); this.leftSlot.set_child(this.leftRow);
-        this.rightSlot = new St.Button({style_class: 'notchy-slot notchy-slot-right', can_focus: true, accessible_name: 'Notchy öffnen'});
+        this.rightSlot = new St.Button({style_class: 'notchy-slot notchy-slot-right', can_focus: true, accessible_name: _('Open Notchy')});
         this.rightRow = box(false, {style_class: 'notchy-slot-row', x_expand: true, x_align: Clutter.ActorAlign.END}); this.rightSlot.set_child(this.rightRow);
         for (const slot of [this.leftSlot, this.rightSlot]) slot.connect('clicked', () => this.toggle());
         this.panelSurface.add_child(this.leftSlot);
@@ -471,7 +480,7 @@ export class Island {
         if (!placed || !duration) { this.tabIndicator.remove_all_transitions(); this.tabIndicator.x = x; }
         else this.tabIndicator.ease({x, duration, mode: Clutter.AnimationMode.EASE_OUT_BACK});
     }
-    togglePin() { this.pinned = !this.pinned; this.pinned ? this.cancelCollapse() : this.scheduleCollapse(); this.syncPin(); this.toast('view-pin-symbolic', this.pinned ? 'Bleibt geöffnet' : 'Schließt beim Verlassen'); }
+    togglePin() { this.pinned = !this.pinned; this.pinned ? this.cancelCollapse() : this.scheduleCollapse(); this.syncPin(); this.toast('view-pin-symbolic', this.pinned ? _('Stays open') : _('Closes when the pointer leaves')); }
     syncPin() { if (this.pinned) this.pinButton.add_style_class_name('active'); else this.pinButton.remove_style_class_name('active'); }
     resize() {
         if (!this.expanded || this.peeking || this.dropActive || this.life.closed) return;
@@ -568,7 +577,7 @@ export class Island {
             wide = true;
         } else {
             if (state) { left = [glyph('art', 'notchy-mini-art', 20, this.cover.file ?? 'audio-x-generic-symbolic')]; wide = true; }
-            if (activity || this.operations.busy) right.push(text('activity', 'notchy-activity-text', activity ? activity.status : 'Verarbeitung …'));
+            if (activity || this.operations.busy) right.push(text('activity', 'notchy-activity-text', activity ? activity.status : _('Processing…')));
             if (state?.playing && this.settings.get_boolean('media-waveform')) right.push({key: 'waveform', make: () => new Waveform(this.spectrum, 22, 13)});
             else if (state) right.push(glyph('media-state', '', 14, state.playing ? 'audio-volume-high-symbolic' : 'media-playback-pause-symbolic'));
         }
@@ -579,24 +588,24 @@ export class Island {
     // AirDrop as a live activity: what the radio is doing right now.
     get airdropActivity() {
         const airdrop = this.airdrop; if (!airdrop) return null;
-        if (airdrop.sendProc) return {icon: 'notchy-airdrop-symbolic', text: airdrop.send?.peer ? `An ${airdrop.send.peer}` : 'Sucht iPhone …', progress: null};
+        if (airdrop.sendProc) return {icon: 'notchy-airdrop-symbolic', text: airdrop.send?.peer ? fmt(_('To %s'), airdrop.send.peer) : _('Looking for an iPhone…'), progress: null};
         if (airdrop.progress !== null) return {icon: 'notchy-airdrop-symbolic', progress: airdrop.progress};
-        if (airdrop.state === 'restoring') return {icon: 'network-wireless-acquiring-symbolic', text: 'WLAN verbindet …', progress: null};
-        if (airdrop.receiving || airdrop.active) return {icon: 'notchy-airdrop-symbolic', text: airdrop.state === 'waking' ? 'Startet …' : airdrop.state === 'unreachable' ? 'Kein iPhone' : 'Sichtbar', progress: null};
+        if (airdrop.state === 'restoring') return {icon: 'network-wireless-acquiring-symbolic', text: _('Wi-Fi reconnecting…'), progress: null};
+        if (airdrop.receiving || airdrop.active) return {icon: 'notchy-airdrop-symbolic', text: airdrop.state === 'waking' ? _('Starting…') : airdrop.state === 'unreachable' ? _('No iPhone') : _('Visible'), progress: null};
         return null;
     }
     toggleAirDrop() {
         const airdrop = this.airdrop;
         if (!airdrop?.available) return;
         const on = !airdrop.receiving;
-        if (airdrop.receive(on) && on) this.toast('notchy-airdrop-symbolic', 'AirDrop: sichtbar, WLAN pausiert');
+        if (airdrop.receive(on) && on) this.toast('notchy-airdrop-symbolic', _('AirDrop: visible, Wi-Fi paused'));
     }
     syncAirDrop() {
         if (this.life.closed) return;
         const airdrop = this.airdrop;
         this.airdropButton.visible = Boolean(airdrop?.available);
         airdrop?.receiving ? this.airdropButton.add_style_class_name('active') : this.airdropButton.remove_style_class_name('active');
-        this.airdropButton.accessible_name = airdrop?.receiving ? 'AirDrop: Empfang beenden' : 'AirDrop: für iPhones sichtbar werden';
+        this.airdropButton.accessible_name = airdrop?.receiving ? _('AirDrop: stop receiving') : _('AirDrop: become visible to iPhones');
         // A transfer asking for consent always gets the notch, even over an open tab.
         if (airdrop?.question && this.peekKind !== 'airdrop-ask') {
             if (this.expanded && !this.peeking) this.close(true);
@@ -608,7 +617,7 @@ export class Island {
             if (this.expanded && !this.peeking) this.close(true);
             this.peek('airdrop', 0, () => this.views.airdropSendView());
         }
-        if (airdrop?.state === 'error' && airdrop.detail && this.airdropErrorShown !== airdrop.detail) { this.airdropErrorShown = airdrop.detail; this.toast('dialog-warning-symbolic', 'AirDrop konnte nicht starten'); }
+        if (airdrop?.state === 'error' && airdrop.detail && this.airdropErrorShown !== airdrop.detail) { this.airdropErrorShown = airdrop.detail; this.toast('dialog-warning-symbolic', _('AirDrop could not start')); }
         this.updateCompact();
     }
     // AirPods: connecting grows the capsule into a short banner with the
@@ -617,16 +626,17 @@ export class Island {
         if (this.life.closed) return;
         const name = event.state?.name || 'AirPods';
         if (event.type === 'connected') {
-            if (!this.settings.get_boolean('airpods-animation')) { this.toast('notchy-airpods-symbolic', `${name} verbunden`); return; }
+            if (!this.settings.get_boolean('airpods-animation')) { this.toast('notchy-airpods-symbolic', fmt(_('%s connected'), name)); return; }
             // An open tab or a menu gets the card as soon as the island closes (within 10 s).
             if (!this.peek('airpods', 6500, () => this.views.airpodsPeekView())) this.airpodsPending = GLib.get_monotonic_time();
         } else if (event.type === 'disconnected') {
             this.airpodsPending = 0;
             if (this.peekKind === 'airpods') this.close();
-            this.toast('notchy-airpods-symbolic', `${name} getrennt`);
+            this.toast('notchy-airpods-symbolic', fmt(_('%s disconnected'), name));
         } else if (event.type === 'low') {
-            const part = {left: 'links', right: 'rechts', case: 'Case', single: ''}[event.part] ?? '';
-            this.toast('battery-caution-symbolic', `${name}${part ? ` ${part}` : ''}: ${event.level} %`);
+            // Translators: a low battery: "AirPods left: 10 %".
+            const part = {left: _('left'), right: _('right'), case: _('Case')}[event.part] ?? '';
+            this.toast('battery-caution-symbolic', fmt(_('%1$s: %2$s'), part ? `${name} ${part}` : name, formatPercent(event.level)));
         }
     }
     // Volume/brightness: inline in the closed capsule; GNOME's OSD otherwise.
@@ -652,7 +662,7 @@ export class Island {
         }
         if (!delta) return Clutter.EVENT_STOP;
         const level = this.system.stepVolume(delta * 0.04);
-        if (level !== null) this.hud(this.system.volumeIcon(level), 'Lautstärke', level, 1);
+        if (level !== null) this.hud(this.system.volumeIcon(level), _('Volume'), level, 1);
         return Clutter.EVENT_STOP;
     }
     radialClick(event) {
@@ -723,7 +733,7 @@ export class Island {
         for (const entry of entries) if (!entry.gone) { entry.gone = true; entry.notification.disconnect(entry.id); }
         this.waitingNotifications = (this.waitingNotifications ?? []).filter(entry => !entries.includes(entry));
     }
-    // Short confirmations ("In Zwischenablage kopiert") as a live activity in
+    // Short confirmations ("Copied to clipboard") as a live activity in
     // the capsule itself: the symbol left of the clock, the words right of it.
     // The capsule heads the opened surface too, so they show in both states.
     toast(iconName, text) {

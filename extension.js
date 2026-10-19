@@ -32,6 +32,8 @@ import {FileSearch} from './src/services/filesearch.js';
 import {Launcher} from './src/launcher/launcher.js';
 import {AirPods} from './src/services/airpods.js';
 import {Agents} from './src/services/agents.js';
+import {startTranslations} from './src/i18n/gnome.js';
+import {_, fmt, language} from './src/i18n/core.js';
 
 export default class Notchy extends Extension {
     openPreferences() {
@@ -49,13 +51,15 @@ export default class Notchy extends Extension {
                 try { connection.call_finish(result); }
                 catch (error) {
                     console.warn(`Notchy preferences: ${error.message}`);
-                    if (this.life && !this.life.closed) Main.notify('Notchy', `Einstellungen konnten nicht geöffnet werden: ${error.message}`);
+                    if (this.life && !this.life.closed) Main.notify('Notchy', fmt(_('The settings could not be opened: %s'), error.message));
                 }
             });
     }
     enable() {
         this.settings = this.getSettings(); this.life = new Lifetime(); this.islands = [];
         try {
+            // Notchy's language: the system's, or the one chosen in its preferences.
+            this.life.cleanups.push(startTranslations(this, this.settings));
             this.store = new Store(); this.shelf = new Shelf(this.store); this.clipboard = new Clipboard(this.settings, this.store);
             this.media = new Media(this.settings); this.system = new System();
             this.cover = new Cover(this, this.media, this.settings);
@@ -70,6 +74,14 @@ export default class Notchy extends Extension {
             this.airpods = new AirPods(this, this.settings);
             this._rebuild();
             this.life.connect(Main.layoutManager, 'monitors-changed', () => this._rebuild());
+            // A language chosen in the preferences: when the interface language
+            // really changes, the island is built anew in it (open pages, menus,
+            // tab names) and the native panes restart in it.
+            this.language = language();
+            this.life.connect(this.settings, 'changed::language', () => {
+                if (language() === this.language) return;
+                this.language = language(); this._rebuild(); this.companion?.restartHelpers(); this.drops?.restartReceivers();
+            });
             const binds = {
                 'toggle-search': () => this.activeIsland()?.toggle('search'),
                 'toggle-ring': () => this.radial.toggle(),
@@ -99,7 +111,7 @@ export default class Notchy extends Extension {
             // Shown as a Notchy live activity; GNOME's OSD only when Notchy cannot show it.
             const island = extension.islands.find(i => i.monitor.index === index);
             const name = icon?.get_names?.()[0] ?? 'audio-volume-high-symbolic';
-            const caption = text || (name.includes('brightness') ? 'Helligkeit' : name.includes('mic') ? 'Mikrofon' : 'Lautstärke');
+            const caption = text || (name.includes('brightness') ? _('Brightness') : name.includes('mic') ? _('Microphone') : _('Volume'));
             if (!extension.settings.get_boolean('hud-enabled') || level === null || level === undefined || !island?.hud(icon ?? name, caption, level, maxLevel ?? 1))
                 return original.call(this, index, icon, text, level, maxLevel);
         });
@@ -110,7 +122,7 @@ export default class Notchy extends Extension {
         this.life.connect(keymap, 'state-changed', () => {
             const state = keymap.get_caps_lock_state(); if (state === capsLock) return; capsLock = state;
             if (!this.settings.get_boolean('hud-enabled')) return;
-            const island = this.activeIsland(), text = state ? 'Feststelltaste an' : 'Feststelltaste aus';
+            const island = this.activeIsland(), text = state ? _('Caps Lock on') : _('Caps Lock off');
             if (!island?.hud('input-keyboard-symbolic', text, null)) island?.toast('input-keyboard-symbolic', text);
         });
     }

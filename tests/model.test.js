@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseUris, classify, History, calculate, normalizeTags, combineCopies, eventsForDay, relativeTime, mprisActive, isoWeek, weekDays, groupBy, SNAP_LAYOUTS, zoneRect, normalizeAccelerator} from '../src/model.js';
+import {parseUris, classify, History, calculate, normalizeTags, combineCopies, eventsForDay, relativeTime, mprisActive, isoWeek, weekDays, groupBy, SNAP_LAYOUTS, zoneRect, normalizeAccelerator, clipTitle} from '../src/model.js';
+import {useLanguage} from './i18n-helper.js';
+
+useLanguage('de');
 
 test('file drops parse URI lists, deduplicate and reject unsafe/nonlocal data', () => {
     assert.deepEqual(parseUris('# Comment\r\nfile:///tmp/a%20b\r\nfile:///tmp/a%20b\nhttps://example.com\nfile:///tmp/%ZZ\nfile:///tmp/%00'), ['file:///tmp/a%20b']);

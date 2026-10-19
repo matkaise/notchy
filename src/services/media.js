@@ -2,6 +2,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Shell from 'gi://Shell';
 import {Emitter, Lifetime} from '../lifecycle.js';
+import {_} from '../i18n/core.js';
 import {mprisMetadata, mprisActive} from '../model.js';
 
 export function busCall(name, path, iface, method, parameters, cancellable = null) {
@@ -127,7 +128,7 @@ export class Media extends Emitter {
                 queue.push(...metadata.map(mprisMetadata));
             }
             if (current()) { this.queue = queue; this.queueLoading = false; this.changed(); }
-        } catch (e) { if (current()) { this.queueLoading = false; this.queueError = 'Dieser Player stellt keine Wiedergabeliste bereit.'; this.changed(); } }
+        } catch (e) { if (current()) { this.queueLoading = false; this.queueError = _('This player offers no playlist.'); this.changed(); } }
     }
     trackCall(method, args) {
         if (!this.queueSupported || !this.name || this.life.closed) return;

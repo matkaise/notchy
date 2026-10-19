@@ -1,5 +1,8 @@
+import {_, N_} from '../i18n/core.js';
+
 // Emoji and special characters for Thunderstorm, searchable offline by German
-// and English names. One entry per line: character | names | category.
+// and English names. One entry per line: character | names | category (the
+// category's German name in the data; `category` in an entry is its id).
 const DATA = `
 😀|grinsen lachen fröhlich grinning happy smile|Smileys
 😃|lachen freude grosse augen smiley happy|Smileys
@@ -519,7 +522,27 @@ $|dollar|Zeichen
 ⎋|escape taste esc key|Zeichen
 `;
 
+// Category ids, their names for display, and the words that find them in
+// either language.
+const CATEGORIES = {
+    Smileys: ['smileys', N_('Smileys'), ['smileys', 'smiley', 'gesichter', 'faces']],
+    Gesten: ['gestures', N_('Gestures'), ['gesten', 'gestures', 'hände', 'hands']],
+    Herzen: ['hearts', N_('Hearts'), ['herzen', 'hearts', 'liebe', 'love']],
+    Tiere: ['animals', N_('Animals'), ['tiere', 'animals']],
+    Natur: ['nature', N_('Nature'), ['natur', 'nature', 'wetter', 'weather']],
+    Essen: ['food', N_('Food'), ['essen', 'food', 'trinken', 'drinks']],
+    Reisen: ['travel', N_('Travel'), ['reisen', 'travel', 'orte', 'places']],
+    Aktivitäten: ['activities', N_('Activities'), ['aktivitäten', 'activities', 'sport']],
+    Objekte: ['objects', N_('Objects'), ['objekte', 'objects', 'dinge', 'things']],
+    Symbole: ['symbols', N_('Symbols'), ['symbole', 'symbols']],
+    Flaggen: ['flags', N_('Flags'), ['flaggen', 'flags', 'fahnen']],
+    Zeichen: ['chars', N_('Characters'), ['zeichen', 'characters', 'sonderzeichen', 'special characters']],
+};
+const BY_ID = Object.fromEntries(Object.values(CATEGORIES).map(([id, title, terms]) => [id, {title, terms}]));
+export const emojiCategoryLabel = id => (BY_ID[id] ? _(BY_ID[id].title) : id);
+export const emojiCategoryTerms = id => BY_ID[id]?.terms ?? [id];
+
 export const EMOJI = DATA.trim().split('\n').map(line => {
     const [char, names, category] = line.split('|');
-    return {char, names, category};
+    return {char, names, category: CATEGORIES[category]?.[0] ?? 'symbols'};
 });

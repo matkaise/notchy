@@ -87,5 +87,5 @@ if __name__ == '__main__':
         print(cache_cover(sys.argv[1], sys.argv[2]))
     except Exception:
         # URLs can contain temporary authentication tokens. Do not log them.
-        print('Albumcover nicht verfügbar', file=sys.stderr)
+        print('cover not available', file=sys.stderr)
         sys.exit(1)

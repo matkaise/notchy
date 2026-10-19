@@ -1,8 +1,29 @@
-# Validation state, 18 October 2026
+# Validation state, 19 October 2026
 
-This build passes the complete isolated GNOME Shell test with **406 assertions** plus `NOTCHY_SHELL_TEST_OK`, `NOTCHY_PREFS_TEST_OK` and `NOTCHY_TRAY_TEST_OK` (5 min 26 s); `NOTCHY_TEST_LAYOUT_ONLY`, `NOTCHY_TEST_LAUNCHER_ONLY` and `NOTCHY_TEST_AIRPODS_ONLY` pass on their own as well. The run now also fails on `St-CRITICAL` and `Clutter-CRITICAL`; the log has none, and no GJS/GObject/GTK/Mutter criticals, script failures or Python tracebacks.
+This build passes the complete isolated GNOME Shell test with **444 assertions** plus `NOTCHY_SHELL_TEST_OK`, `NOTCHY_PREFS_TEST_OK` and `NOTCHY_TRAY_TEST_OK` (5 min 49 s), with no GJS/GObject/GTK/St/Clutter/Mutter criticals, script failures or Python tracebacks; `NOTCHY_TEST_LAUNCHER_ONLY` passes on its own (88 assertions). The suite now runs Notchy in German chosen in its settings (the override path) after checking automatic mode, and switches to English and back.
 
-`scripts/check.sh` passes: syntax, strict schema, **48 Node tests** (domain, launcher ranking, AirPods battery cache, agent sessions, side layout) and **42 Python tests** (file operations, file search including descriptor and hanging-drive regressions, AAP reader, agent hook adapter and setup, context menu entries, cover, spectrum, MCP). `scripts/pack.sh` builds the package.
+`scripts/check.sh` passes: syntax, strict schema, the translation catalogs (654 messages, German complete, placeholders checked), **84 Node tests** (domain, launcher, system commands, translations and locale formatting, AirPods battery cache, agent sessions and lifecycle, side layout) and **48 Python tests** (now including the helpers in both languages). `scripts/pack.sh` builds the package and asserts it carries `locale/de/LC_MESSAGES/notchy.mo`.
+
+## New on 19 October 2026
+
+- **German and English, automatic.** gettext throughout (domain `notchy`, English source strings, `po/de.po`, compiled into the package): the island, Thunderstorm, the preferences, the Regal and drop zone (GTK), file operations, the hook setup and `notchyctl`. The system language decides (de/de_DE/de_CH/de_AT → German, everything else English); Settings → Appearance → Language picks one for Notchy alone, without touching any locale (Notchy reads its own `.mo`; helpers get `NOTCHY_LANGUAGE`). Numbers, percentages, dates, times, relative times, durations and plurals follow the language/region. Search terms work in both languages whatever the interface speaks. No GNU gettext tools are installed here; `scripts/i18n.py` extracts, merges, checks and compiles (the `.mo` was checked against Python's and GJS's gettext).
+- **Stable ids instead of German labels.** Result kinds, sections, command and action ids (`file.copyPath` for Ctrl+Shift+C, which looked for the action titled „Pfad kopieren“), emoji categories, agent statuses (stored as notes, shown translated), clipboard titles of files and pictures (made at display time; the picture key „Bild …“ became `image:…`), the usage history (no titles; `cmd:lock` migrated to `cmd:system.lock` with its counts).
+- **Configurable system commands.** A catalog of 37 commands (src/launcher/commands.js) with per-command on/off, shown or only by shortcut, own search terms, favourite, priority and shortcut, validated JSON per command id, reset, collision hints, and a preferences subpage. Confirmations of log out, restart and shut down are not a setting and apply on every path (search, shortcut, action panel, history). New safe catalog actions: screenshot and recording through Notchy's capture, open Notchy/Regal/clipboard/audio outputs. No free shell commands.
+- **Bugs found and fixed:**
+  - Agents: a late hook (PostToolUse, Stop …) after SessionEnd revived the session — during the fade if its timestamp was not older, and after the fade always (it created the session anew). Ended ids are now remembered for two minutes; only a start or an explicit notchyctl/MCP report reopens one, as a new generation. Events of the same millisecond could reorder (a Stop undone by its PostToolUse, a PermissionRequest by its PreToolUse); a SessionEnd stamped before a step that arrived first was ignored and the agent never ended.
+  - Beside the notch: the „+N“ group was drawn even where it did not fit (over GNOME's or other extensions' panel items), and it was planned narrower than it was drawn.
+  - Indicators fading out kept unowned GLib sources that survived disable.
+  - Any settings change while a tab was open rebuilt it: Thunderstorm lost its query and keyboard focus (and Clutter logged input-focus criticals) — e.g. while editing commands in the preferences or when an agents/AirPods setting changed. Only settings a page shows rebuild it now; Thunderstorm searches again keeping field, query and focus.
+  - Preferences rows rendered user data as Pango markup (a quicklink named „Q&A“).
+  - The AirPods reader's replay file was never closed.
+- Not changed: the fixes of 18 October (compact width, Thunderstorm height, ranking, AirPods case, popups, indicators, scroll bars, file search resources) — their tests ran again and pass.
+
+## Not validated on 19 October 2026
+
+- The preferences in English and the System Commands subpage were checked structurally (headless GTK) but not looked at on screen; long German/English labels there may wrap.
+- A language switch on the real desktop: the Regal and drop zone processes restart in the new language; an open Regal does so the next time it opens (headless only the island part was exercised).
+- English with a real `en_*` system locale (this machine has only German locales generated; English was tested through Notchy's override and in Node/Python with `LANG=en_*`, which gettext treats as English without a catalog).
+- The new catalog actions (screenshot, recording) with GNOME's real screenshot UI; the test records the calls.
 
 ## New on 18 October 2026
 

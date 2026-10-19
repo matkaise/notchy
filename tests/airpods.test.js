@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {BatteryCache, STALE_MAX, FORGET_AFTER, partText, ageText} from '../src/services/batteries.js';
+import {useLanguage} from './i18n-helper.js';
+
+useLanguage('de');
 
 const BUDS = {parts: ['left', 'right', 'case']};
 const at = minutes => Date.UTC(2026, 9, 18, 9) + minutes * 60000;

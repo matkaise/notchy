@@ -25,6 +25,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / 'helper'))
+from i18n import _  # noqa: E402
 
 BUS = 'org.gnome.Shell.Extensions.Notchy'
 PATH = '/org/gnome/Shell/Extensions/Notchy'
@@ -34,7 +35,7 @@ def proxy():
     from gi.repository import Gio
     bus = Gio.DBusProxy.new_for_bus_sync(Gio.BusType.SESSION, Gio.DBusProxyFlags.DO_NOT_AUTO_START, None, BUS, PATH, BUS, None)
     if not bus.get_name_owner():
-        sys.exit('Notchy is not enabled.')
+        sys.exit(_('Notchy is not enabled.'))
     return bus
 
 
@@ -50,7 +51,7 @@ def agent_event(args, kind, **extra):
         import agent_hook
         info = agent_hook.stat(extra['pid'])
         if not info:
-            sys.exit(f"No process {extra['pid']}.")
+            sys.exit(_('No process %d.') % extra['pid'])
         extra['pidStart'] = info[2]
     event = {'provider': args.provider, 'session': args.session, 'event': kind, 'source': 'cli', **{k: v for k, v in extra.items() if v is not None}}
     error = call('AgentEvent', '(s)', (json.dumps(event),))[0]
@@ -60,6 +61,7 @@ def agent_event(args, kind, **extra):
 
 def hooks(args):
     import agent_setup
+    STATES = {'installed': _('set up'), 'partial': _('partly set up'), 'missing': _('not set up'), 'error': _('configuration broken')}
     providers = [args.provider] if args.provider else list(agent_setup.EVENTS)
     results = []
     for provider in providers:
@@ -75,20 +77,21 @@ def hooks(args):
     for result in results:
         name = agent_setup.LABELS[result['provider']]
         if args.action == 'status':
-            print(f"{name}: {result['state']} ({result['config']})" + (f" — {result['error']}" if result['error'] else '') + ('' if result['program'] else ' — Programm nicht gefunden'))
+            print(f"{name}: {STATES.get(result['state'], result['state'])} ({result['config']})" + (f" — {result['error']}" if result['error'] else '') + ('' if result['program'] else ' — ' + _('program not found')))
             if result['note']:
                 print(f"  {result['note']}")
             if result.get('lastFailure'):
                 failure = result['lastFailure']
                 import time
-                print(f"  Letzter Zustellfehler ({time.strftime('%d.%m. %H:%M', time.localtime(failure['time']))}): {failure['error']}")
+                print('  ' + _('Last delivery failure (%(time)s): %(error)s') % {'time': time.strftime('%Y-%m-%d %H:%M', time.localtime(failure['time'])), 'error': failure['error']})
         elif not result.get('ok'):
-            print(f"{name}: nicht geändert — {result['error']}")
+            print(_('%(name)s: not changed — %(error)s') % {'name': name, 'error': result['error']})
         elif args.dry_run:
-            print(f"{name}: würde {result['config']} {'ändern' if result['changed'] else 'nicht ändern'}:")
+            print((_('%(name)s: would change %(config)s:') if result['changed'] else _('%(name)s: would leave %(config)s unchanged:')) % {'name': name, 'config': result['config']})
             print(json.dumps(result['preview'], ensure_ascii=False, indent=2))
         else:
-            print(f"{name}: {result['config']} {'geändert' if result['changed'] else 'unverändert'}" + (f", Sicherung: {result['backup']}" if result.get('backup') else ''))
+            print((_('%(name)s: %(config)s changed') if result['changed'] else _('%(name)s: %(config)s unchanged')) % {'name': name, 'config': result['config']}
+                  + (', ' + _('backup: %s') % result['backup'] if result.get('backup') else ''))
     return 0 if all(r.get('ok', True) for r in results) else 1
 
 
@@ -125,7 +128,7 @@ def main():
         from gi.repository import GLib
         files = [Path(path).expanduser().resolve() for path in args.files]
         if not all(path.exists() for path in files):
-            parser.exit(1, 'One or more files do not exist.\n')
+            parser.exit(1, _('One or more files do not exist.') + '\n')
         print(call('AddUris', '(s)', ('\r\n'.join(p.as_uri() for p in files),))[0])
     elif args.command in ('list', 'activities'):
         print(json.dumps(json.loads(call('GetItems' if args.command == 'list' else 'GetActivities')[0]), ensure_ascii=False, indent=2))
@@ -142,7 +145,7 @@ def main():
             agent_event(args, 'start', project=args.project, status=args.status, pid=args.pid, heartbeat=args.heartbeat)
         elif args.verb == 'update':
             if args.state is None and args.status is None and args.progress is None and args.project is None:
-                parser.exit(2, 'agent update needs --state, --status, --progress or --project\n')
+                parser.exit(2, _('agent update needs --state, --status, --progress or --project') + '\n')
             agent_event(args, 'update', state=args.state, status=args.status, progress=args.progress, project=args.project, pid=args.pid, heartbeat=args.heartbeat)
         elif args.verb == 'heartbeat':
             agent_event(args, 'heartbeat')

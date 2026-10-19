@@ -4,6 +4,7 @@ import Mtk from 'gi://Mtk';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {TilePreview} from 'resource:///org/gnome/shell/ui/windowManager.js';
 import {Lifetime} from '../lifecycle.js';
+import {_} from '../i18n/core.js';
 import {zoneRect} from '../model.js';
 
 // Snap layouts in the notch: dragging a window up to the clock opens the
@@ -74,7 +75,7 @@ export class Snap {
         if (window.is_maximized()) window.unmaximize();
         const rect = zoneRect(Main.layoutManager.getWorkAreaForMonitor(monitor), zone);
         window.move_resize_frame(true, rect.x, rect.y, rect.width, rect.height);
-        island?.toast('view-grid-symbolic', 'Fenster angeordnet');
+        island?.toast('view-grid-symbolic', _('Window arranged'));
     }
     dispose() { this.life.dispose(); this.preview?.destroy(); this.preview = null; this.window = null; this.view = null; }
 }

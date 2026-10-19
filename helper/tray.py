@@ -11,6 +11,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
 gi.require_version('Graphene', '1.0')
 from gi.repository import Gdk, Gio, GLib, Graphene, Gtk
+from i18n import _, ngettext
 
 BUS = 'org.gnome.Shell.Extensions.Notchy'
 PATH = '/org/gnome/Shell/Extensions/Notchy'
@@ -158,20 +159,20 @@ class Tray(Gtk.Application):
         self.count = Gtk.Label(xalign=0, hexpand=True, ellipsize=3, css_classes=['count'])
         header.append(self.count)
         self.actions = Gtk.Box(spacing=4, visible=False)
-        self.zip_button = self.action('package-x-generic-symbolic', 'Als ZIP packen', self.zip_selected)
+        self.zip_button = self.action('package-x-generic-symbolic', _('Compress as ZIP'), self.zip_selected)
         can_convert = bool(shutil.which('magick') or shutil.which('convert'))
-        self.convert_button = self.action('emblem-synchronizing-symbolic', 'Bilder nach WebP konvertieren' if can_convert else 'Bildkonvertierung braucht ImageMagick', self.convert_selected)
+        self.convert_button = self.action('emblem-synchronizing-symbolic', _('Convert Pictures to WebP') if can_convert else _('Converting pictures needs ImageMagick'), self.convert_selected)
         self.convert_button.can_convert = can_convert
         # AirDrop appears once Notchy reports its backend installed (ShelfConfig / AirDrop signal).
         self.airdrop_available = False
-        self.airdrop_button = Gtk.Button(child=airdrop_image(), tooltip_text='Per AirDrop senden', css_classes=['round'], visible=False)
+        self.airdrop_button = Gtk.Button(child=airdrop_image(), tooltip_text=_('Send with AirDrop'), css_classes=['round'], visible=False)
         self.airdrop_button.connect('clicked', lambda *_: self.airdrop_selected())
         self.actions.append(self.airdrop_button)
-        self.action('user-trash-symbolic', 'Aus dem Regal entfernen · Originale bleiben', self.remove_selected)
+        self.action('user-trash-symbolic', _('Remove from the Shelf · originals stay'), self.remove_selected)
         header.append(self.actions)
         # Icons instead of words; tooltips name each action.
         self.idle = Gtk.Box(spacing=8)
-        add = Gtk.Button(icon_name='list-add-symbolic', tooltip_text='Dateien hinzufügen · Klicken wählt aus, Doppelklick öffnet', css_classes=['round'])
+        add = Gtk.Button(icon_name='list-add-symbolic', tooltip_text=_('Add Files · a click selects, a double click opens'), css_classes=['round'])
         add.connect('clicked', self.choose)
         self.idle.append(add)
         header.append(self.idle)
@@ -190,7 +191,7 @@ class Tray(Gtk.Application):
         self.area.append(scroll)
         self.empty = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, css_classes=['empty'], visible=False, valign=Gtk.Align.START)
         self.empty.append(Gtk.Image.new_from_icon_name('document-save-symbolic'))
-        self.empty.append(Gtk.Label(label='Dateien auf die Island ziehen'))
+        self.empty.append(Gtk.Label(label=_('Drag files onto the island')))
         self.area.append(self.empty)
         root.append(self.area)
         # A file's actions open as a real context menu: a GTK popover, which is
@@ -236,8 +237,8 @@ class Tray(Gtk.Application):
 
     def build_basket(self, root):
         header = Gtk.Box(spacing=8)
-        header.append(Gtk.Label(label='Korb', xalign=0, hexpand=True, css_classes=['title']))
-        close = Gtk.Button(icon_name='window-close-symbolic', tooltip_text='Korb schließen', css_classes=['round'])
+        header.append(Gtk.Label(label=_('Basket'), xalign=0, hexpand=True, css_classes=['title']))
+        close = Gtk.Button(icon_name='window-close-symbolic', tooltip_text=_('Close Basket'), css_classes=['round'])
         close.connect('clicked', lambda *_: self.quit())
         header.append(close)
         root.append(header)
@@ -247,7 +248,7 @@ class Tray(Gtk.Application):
         self.flow.set_activate_on_single_click(False)
         self.area.append(self.flow)
         root.append(self.area)
-        self.to_shelf = Gtk.Button(label='Alles ins Regal', css_classes=['wide'])
+        self.to_shelf = Gtk.Button(label=_('Everything to the Shelf'), css_classes=['wide'])
         self.to_shelf.connect('clicked', lambda *_: self.basket_to_shelf())
         root.append(self.to_shelf)
 
@@ -276,7 +277,7 @@ class Tray(Gtk.Application):
             return True
         return False
 
-    def close(self, *_):
+    def close(self, *_args):
         if self.kind == 'shelf':
             self.call('CloseShelf')
         else:
@@ -369,9 +370,9 @@ class Tray(Gtk.Application):
         uris = '\r\n'.join(item['uri'] for item in self.basket_items)
         self.call('AddUris', GLib.Variant('(s)', (uris,)), done=lambda *_: self.quit())
 
-    def choose(self, *_):
+    def choose(self, *_args):
         self.hold_interaction(True)
-        dialog = Gtk.FileDialog(title='Dateien zum Regal hinzufügen')
+        dialog = Gtk.FileDialog(title=_('Add Files to the Shelf'))
         def selected(d, result):
             try:
                 files = d.open_multiple_finish(result)
@@ -454,7 +455,7 @@ class Tray(Gtk.Application):
         for item in self.basket_items:
             self.tile(item, small=True)
         if not self.basket_items:
-            self.flow.insert(Gtk.Label(label='Hier loslassen', css_classes=['zone-hint']), -1)
+            self.flow.insert(Gtk.Label(label=_('Drop here'), css_classes=['zone-hint']), -1)
         self.to_shelf.set_sensitive(bool(self.basket_items))
 
     def tile_pressed(self, gesture, presses, x, y, item, card):
@@ -519,7 +520,8 @@ class Tray(Gtk.Application):
         self.actions.set_visible(bool(selected))
         self.idle.set_visible(not selected)
         total = getattr(self, 'total', 0)
-        self.count.set_text(f'{len(selected)} von {total} ausgewählt' if selected else f"{total} {'Datei' if total == 1 else 'Dateien'}")
+        self.count.set_text((ngettext('%(selected)d of %(total)d selected', '%(selected)d of %(total)d selected', total) % {'selected': len(selected), 'total': total}) if selected
+                           else ngettext('%d file', '%d files', total) % total)
         if selected:
             images = [child for child in selected if Path(child.notchy_name).suffix.lower() in IMAGES]
             self.convert_button.set_sensitive(bool(images) and self.convert_button.can_convert)
@@ -560,7 +562,7 @@ class Tray(Gtk.Application):
 
     def save(self, item):
         self.hold_interaction(True)
-        dialog = Gtk.FileDialog(title='Kopie speichern', initial_name=item['name'])
+        dialog = Gtk.FileDialog(title=_('Save a Copy'), initial_name=item['name'])
         def selected(d, result):
             try:
                 target = d.save_finish(result)
@@ -580,7 +582,7 @@ class Tray(Gtk.Application):
     def save_many(self, items):
         # Several files: one folder, a copy of each.
         self.hold_interaction(True)
-        dialog = Gtk.FileDialog(title=f'{len(items)} Kopien speichern in')
+        dialog = Gtk.FileDialog(title=ngettext('Save %d Copy In', 'Save %d Copies In', len(items)) % len(items))
         def selected(d, result):
             try:
                 folder = d.select_folder_finish(result)
@@ -623,40 +625,41 @@ class Tray(Gtk.Application):
         images, pdfs = kind(IMAGES), kind(('.pdf',))
         documents = kind(('.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp', '.rtf'))
         videos = kind(('.mp4', '.mkv', '.mov', '.webm'))
-        def count(subset, noun):
+        def count(subset, label):
             # A partial selection names how many files the action reaches.
-            return '' if len(subset) == len(items) else f' ({len(subset)} {noun})'
+            return '' if len(subset) == len(items) else f' ({label})'
+        pictures = ngettext('%d picture', '%d pictures', len(images)) % len(images)
         def each(subset, action, extra=''):
             return lambda: [self.call('Action', GLib.Variant('(sss)', (action, item['uri'], extra))) for item in subset]
         entries = [
-            ('document-open-symbolic', 'Öffnen' if single else f'{len(items)} Dateien öffnen', lambda: [self.open(uri) for uri in uris]),
-            ('folder-open-symbolic', 'Im Ordner zeigen', lambda: self.show_in_folder(uris)),
-            ('edit-copy-symbolic', 'Kopieren', lambda: Gdk.Display.get_default().get_clipboard().set_content(self.content(uris))),
-            ('document-save-as-symbolic', 'Kopie speichern …' if single else 'Kopien speichern …', (lambda: self.save(items[0])) if single else (lambda: self.save_many(items))),
+            ('document-open-symbolic', _('Open') if single else ngettext('Open %d File', 'Open %d Files', len(items)) % len(items), lambda: [self.open(uri) for uri in uris]),
+            ('folder-open-symbolic', _('Show in Folder'), lambda: self.show_in_folder(uris)),
+            ('edit-copy-symbolic', _('Copy'), lambda: Gdk.Display.get_default().get_clipboard().set_content(self.content(uris))),
+            ('document-save-as-symbolic', _('Save a Copy…') if single else _('Save Copies…'), (lambda: self.save(items[0])) if single else (lambda: self.save_many(items))),
             None,
-            ('package-x-generic-symbolic', 'Als ZIP packen', lambda: self.call('Action', GLib.Variant('(sss)', ('zip', uris[0], ''))) if single
+            ('package-x-generic-symbolic', _('Compress as ZIP'), lambda: self.call('Action', GLib.Variant('(sss)', ('zip', uris[0], ''))) if single
              else self.call('Action', GLib.Variant('(sss)', ('zip-many', uris[0], json.dumps(uris))))),
         ]
         if self.airdrop_available:
-            entries.append(('notchy-airdrop', 'Per AirDrop senden', lambda: self.call('AirDropSend', GLib.Variant('(s)', ('\n'.join(uris),)))))
+            entries.append(('notchy-airdrop', _('Send with AirDrop'), lambda: self.call('AirDropSend', GLib.Variant('(s)', ('\n'.join(uris),)))))
         tools = []
         if images and shutil.which('tesseract'):
-            tools.append(('edit-select-all-symbolic', 'Text erkennen' + count(images, 'Bilder'), each(images, 'ocr')))
+            tools.append(('edit-select-all-symbolic', _('Recognize Text') + count(images, pictures), each(images, 'ocr')))
         if images and (shutil.which('magick') or shutil.which('convert')):
-            tools.append({'icon': 'emblem-synchronizing-symbolic', 'label': 'Konvertieren in' + count(images, 'Bilder'),
+            tools.append({'icon': 'emblem-synchronizing-symbolic', 'label': _('Convert To') + count(images, pictures),
                           'entries': [('image-x-generic-symbolic', fmt.upper(), each(images, 'image', fmt)) for fmt in ('png', 'jpg', 'webp', 'tiff', 'bmp', 'gif')]})
         if images and shutil.which('rembg'):
-            tools.append(('edit-cut-symbolic', 'Hintergrund entfernen' + count(images, 'Bilder'), each(images, 'background')))
+            tools.append(('edit-cut-symbolic', _('Remove Background') + count(images, pictures), each(images, 'background')))
         if pdfs and shutil.which('gs'):
-            tools.append(('document-save-symbolic', 'PDF verkleinern' + count(pdfs, 'PDFs'), each(pdfs, 'pdf-compress')))
+            tools.append(('document-save-symbolic', _('Shrink PDF') + count(pdfs, ngettext('%d PDF', '%d PDFs', len(pdfs)) % len(pdfs)), each(pdfs, 'pdf-compress')))
         if documents and (shutil.which('libreoffice') or shutil.which('soffice')):
-            tools.append(('x-office-document-symbolic', 'Als PDF speichern' + count(documents, 'Dokumente'), each(documents, 'document-pdf')))
+            tools.append(('x-office-document-symbolic', _('Save as PDF') + count(documents, ngettext('%d document', '%d documents', len(documents)) % len(documents)), each(documents, 'document-pdf')))
         if videos and shutil.which('ffmpeg') and shutil.which('ffprobe'):
-            tools.append({'icon': 'video-x-generic-symbolic', 'label': 'Video verkleinern' + count(videos, 'Videos'),
-                          'entries': [('video-x-generic-symbolic', f'Auf {mb} MB', each(videos, 'video', mb)) for mb in ('10', '25', '50', '100')]})
+            tools.append({'icon': 'video-x-generic-symbolic', 'label': _('Shrink Video') + count(videos, ngettext('%d video', '%d videos', len(videos)) % len(videos)),
+                          'entries': [('video-x-generic-symbolic', _('To %s MB') % mb, each(videos, 'video', mb)) for mb in ('10', '25', '50', '100')]})
         if tools:
             entries += [None, *tools]
-        entries += [None, ('user-trash-symbolic', 'Aus Regal entfernen', lambda: [self.call('RemoveUri', GLib.Variant('(s)', (uri,))) for uri in uris], 'danger')]
+        entries += [None, ('user-trash-symbolic', _('Remove from Shelf'), lambda: [self.call('RemoveUri', GLib.Variant('(s)', (uri,))) for uri in uris], 'danger')]
         return entries
 
     def menu_page(self, title, entries, back=False):
@@ -691,7 +694,7 @@ class Tray(Gtk.Application):
         button.update_property([Gtk.AccessibleProperty.LABEL], [label])
         button.notchy_label, button.notchy_submenu = label, submenu
         self.menu_items.append(button)
-        def activate(*_):
+        def activate(*_args):
             if keep:
                 callback()
                 return
@@ -748,7 +751,7 @@ class Tray(Gtk.Application):
             self.menu_stack.remove(child)
             child = following
         self.menu_items = []
-        title = items[0]['name'] if len(items) == 1 else f'{len(items)} Dateien ausgewählt'
+        title = items[0]['name'] if len(items) == 1 else ngettext('%d file selected', '%d files selected', len(items)) % len(items)
         self.menu_stack.add_named(self.menu_page(title, self.menu_entries(items)), 'main')
         self.menu_stack.set_visible_child_name('main')
         rect = Gdk.Rectangle()

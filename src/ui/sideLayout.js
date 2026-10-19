@@ -14,6 +14,9 @@
 //   GNOME's other panel items, less a margin). What does not fit spills to the
 //   other side if there is room, else gathers in one "+N" group per side; the
 //   most urgent (waiting, error, AirPods) stay visible.
+// - Nothing is ever drawn beyond `capacity`, not even the group: a side too
+//   narrow for the group shows nothing at all (groups.side is false), rather
+//   than covering GNOME's or another extension's panel items.
 
 export function planSides(items, capacity, previous = new Map(), {auto = true, spacing = 6, groupWidth = 30} = {}) {
     const ordered = [...items].sort((a, b) => a.order - b.order);
@@ -49,23 +52,28 @@ export function planSides(items, capacity, previous = new Map(), {auto = true, s
         while (used[side] > room[side] && auto) {
             const candidates = onSide(side).filter(i => !(i.preferred === 'left' || i.preferred === 'right'));
             const item = candidates.sort((a, b) => a.priority - b.priority || b.order - a.order)[0];
-            if (!item || used[other] + spacing + item.width > room[other]) break;
+            if (!item || used[other] + (count[other] ? spacing : 0) + item.width > room[other]) break;
             take(side, item); add(other, item);
         }
     }
+    const groups = {left: false, right: false};
     for (const side of ['left', 'right']) {
         const members = onSide(side);
         if (used[side] <= room[side]) continue;
         // Keep the most urgent that fit beside a "+N" group.
         const keep = [...members].sort((a, b) => b.priority - a.priority || a.order - b.order);
-        let width = groupWidth;
         const visible = new Set();
-        for (const item of keep) {
-            if (width + spacing + item.width <= room[side]) { width += spacing + item.width; visible.add(item.id); }
+        let width = 0;
+        if (groupWidth <= room[side]) {
+            width = groupWidth;
+            for (const item of keep) {
+                if (width + spacing + item.width <= room[side]) { width += spacing + item.width; visible.add(item.id); }
+            }
+            groups[side] = true;
         }
         hidden[side] = members.filter(i => !visible.has(i.id)).map(i => i.id);
         used[side] = width;
     }
     const show = side => onSide(side).filter(i => !hidden[side].includes(i.id)).map(i => i.id);
-    return {sides, visible: {left: show('left'), right: show('right')}, hidden, used, width: Math.max(used.left, used.right)};
+    return {sides, visible: {left: show('left'), right: show('right')}, hidden, groups, used, width: Math.max(used.left, used.right)};
 }

@@ -205,7 +205,7 @@ class Searcher:
             while True:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0 or not select.select([read], [], [], remaining)[0]:
-                    raise OSError('LocalSearch antwortet nicht')
+                    raise OSError('LocalSearch does not answer')
                 chunk = os.read(read, 65536)
                 if not chunk:
                     break

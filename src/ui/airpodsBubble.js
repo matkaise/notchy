@@ -4,7 +4,9 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {box, label, gicon} from './widgets.js';
-import {ANC_ICON, ANC_NAME, airpodsParts, productCell, partReading} from './views.js';
+import {ANC_ICON, ancName, airpodsParts, productCell, partReading} from './views.js';
+import {settingsPanel} from '../launcher/providers.js';
+import {_, fmt, formatPercent} from '../i18n/core.js';
 import {Lifetime} from '../lifecycle.js';
 
 // AirPods keep their place right of the notch and stay visible before agents.
@@ -52,7 +54,7 @@ export class AirPodsBubble {
     summary() {
         const state = this.airpods.state; if (!state) return [];
         const level = this.level;
-        return [{title: state.name, subtitle: level === null ? 'Verbunden' : `Verbunden · ${level} %`, icon: gicon('notchy-airpods-symbolic'), activate: () => this.button.menu.open()}];
+        return [{title: state.name, subtitle: level === null ? _('Connected') : fmt(_('Connected · %s'), formatPercent(level)), icon: gicon('notchy-airpods-symbolic'), activate: () => this.button.menu.open()}];
     }
     sync() {
         if (this.life.closed) return;
@@ -61,7 +63,7 @@ export class AirPodsBubble {
         const size = Math.max(22, Main.panel.height - (this.settings.get_string('style') === 'liquid' ? 6 : 4));
         this.content.set_size(size, size);
         const level = this.level;
-        this.button.accessible_name = level === null ? 'AirPods verbunden' : `AirPods: ${level} %`;
+        this.button.accessible_name = level === null ? _('AirPods connected') : fmt(_('AirPods: %s'), formatPercent(level));
         this.ring.queue_repaint();
         this.island.sides.queue();
     }
@@ -104,7 +106,7 @@ export class AirPodsBubble {
         const row = box(false, {style_class: 'notchy-airpods-products', x_expand: true, x_align: Clutter.ActorAlign.CENTER});
         this.parts = airpodsParts(state).map(part => {
             const kind = part.key === 'single' ? (state.headphones ? 'headphones' : 'buds') : part.key;
-            const cell = productCell(kind, part.key === 'single' ? 'Akku' : part.name);
+            const cell = productCell(kind, part.key === 'single' ? _('Battery') : part.name);
             cell.instant = true; cell.progress = 1; cell.picture.opacity = 255; cell.picture.scale_x = cell.picture.scale_y = 1; cell.picture.rotation_angle_z = 0;
             row.add_child(cell.actor);
             return {part, cell};
@@ -118,8 +120,9 @@ export class AirPodsBubble {
             for (const mode of modes) {
                 const inner = box(true, {x_align: Clutter.ActorAlign.CENTER});
                 inner.add_child(new St.Icon({gicon: gicon(ANC_ICON[mode]), icon_size: 18, x_align: Clutter.ActorAlign.CENTER}));
-                inner.add_child(label({noise: 'ANC', transparency: 'Transparenz', adaptive: 'Adaptiv', off: 'Aus'}[mode], 'notchy-airpods-mode-label', {x_align: Clutter.ActorAlign.CENTER}));
-                const b = new St.Button({style_class: 'notchy-airpods-mode', child: inner, can_focus: true, x_expand: true, accessible_name: ANC_NAME[mode]});
+                // Translators: short labels of the AirPods noise control buttons.
+                inner.add_child(label({noise: _('ANC'), transparency: _('Transparency'), adaptive: _('Adaptive'), off: _('Off')}[mode], 'notchy-airpods-mode-label', {x_align: Clutter.ActorAlign.CENTER}));
+                const b = new St.Button({style_class: 'notchy-airpods-mode', child: inner, can_focus: true, x_expand: true, accessible_name: ancName(mode)});
                 b.connect('clicked', () => airpods.setAnc(mode).catch(failed));
                 segment.add_child(b); this.modeButtons.set(mode, b);
             }
@@ -127,35 +130,35 @@ export class AirPodsBubble {
         }
         this.talk = null;
         if (state.conversation !== null) {
-            this.talk = new PopupMenu.PopupSwitchMenuItem('Gesprächserkennung', Boolean(state.conversation));
+            this.talk = new PopupMenu.PopupSwitchMenuItem(_('Conversation Awareness'), Boolean(state.conversation));
             this.talk.connect('toggled', (_i, on) => airpods.setConversationAwareness(on).catch(failed));
             menu.addMenuItem(this.talk);
         }
         // The ear pause: the daemon's setting with airpods-helper, Notchy's own otherwise.
         this.pause = null;
         if (pause === 'helper') {
-            this.pause = new PopupMenu.PopupSwitchMenuItem('Pause beim Herausnehmen', Boolean(state.pauseOnRemoval));
+            this.pause = new PopupMenu.PopupSwitchMenuItem(_('Pause When Taken Out'), Boolean(state.pauseOnRemoval));
             this.pause.connect('toggled', (_i, on) => airpods.setPauseOnRemoval(on).catch(failed));
             menu.addMenuItem(this.pause);
         } else if (pause === 'aap') {
-            this.pause = new PopupMenu.PopupSwitchMenuItem('Pause beim Herausnehmen', this.settings.get_boolean('airpods-ear-pause'));
+            this.pause = new PopupMenu.PopupSwitchMenuItem(_('Pause When Taken Out'), this.settings.get_boolean('airpods-ear-pause'));
             this.pause.connect('toggled', (_i, on) => this.settings.set_boolean('airpods-ear-pause', on));
             menu.addMenuItem(this.pause);
         }
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        menu.addAction('Trennen', () => airpods.disconnect().catch(failed));
-        menu.addAction('Bluetooth-Einstellungen …', () => this.island.extension.launcher?.providers.cmd.commands.find(c => c.id === 'settings-bluetooth')?.run());
+        menu.addAction(_('Disconnect'), () => airpods.disconnect().catch(failed));
+        menu.addAction(_('Bluetooth Settings…'), () => settingsPanel('bluetooth'));
         // A rebuilt menu keeps the keyboard inside it.
         if (hadFocus) menu.box.navigate_focus(null, St.DirectionType.TAB_FORWARD, false);
     }
     update(state) {
         this.title.text = state.name;
-        this.subtitle.text = state.connected ? (state.anc ? `Verbunden · ${ANC_NAME[state.anc]}` : 'Verbunden') : 'Getrennt';
+        this.subtitle.text = state.connected ? (state.anc ? fmt(_('Connected · %s'), ancName(state.anc)) : _('Connected')) : _('Disconnected');
         const threshold = this.settings.get_int('airpods-battery-threshold');
         for (const {part, cell} of this.parts ?? []) {
             // A bud out of the ear says so.
             const out = state.ear && ['left', 'right'].includes(part.key) && !state.ear[part.key];
-            cell.setCaption(`${part.key === 'single' ? 'Akku' : part.name}${out ? ' · nicht im Ohr' : ''}`);
+            cell.setCaption(out ? fmt(_('%s · not in ear'), part.name) : part.key === 'single' ? _('Battery') : part.name);
             const {level, charging, stale} = partReading(state, part.key);
             cell.set(level, charging, level !== null && level < threshold && !charging, stale);
         }

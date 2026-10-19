@@ -2,6 +2,8 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {Emitter, Lifetime} from '../lifecycle.js';
 import {BleWake} from './blewake.js';
+import {helperLauncher} from '../i18n/gnome.js';
+import {_, fmt} from '../i18n/core.js';
 
 // AirDrop through the airdrop-mt7921 backend (github.com/jedbillyb/airdrop-mt7921):
 // OWL speaks AWDL on the MediaTek card and a patched OpenDrop speaks AirDrop.
@@ -19,11 +21,8 @@ const HOME = GLib.get_home_dir();
 const CANDIDATES = ['airdrop-mt7921', 'src/airdrop-mt7921', 'Projekte/airdrop-mt7921', 'Schreibtisch/airdrop-mt7921', 'Desktop/airdrop-mt7921', 'git/airdrop-mt7921']
     .map(dir => GLib.build_filenamev([HOME, dir, 'daemon', 'airdropd']));
 
-// The backend's states (airdropd status), as Notchy describes them.
-export const AIRDROP_STATES = {
-    off: 'Aus', idle: 'Bereit', waking: 'Startet …', armed: 'Empfangsbereit', switching: 'Wechselt Kanal …',
-    unreachable: 'Kein iPhone in Reichweite', sending: 'Sendet …', receiving: 'Empfängt …', restoring: 'WLAN verbindet …', error: 'Fehler',
-};
+// The backend's states (airdropd status); the island and the panes describe them.
+export const AIRDROP_STATES = new Set(['off', 'idle', 'waking', 'armed', 'switching', 'unreachable', 'sending', 'receiving', 'restoring', 'error']);
 
 export class AirDrop extends Emitter {
     constructor(extension, shelf, settings) {
@@ -67,7 +66,8 @@ export class AirDrop extends Emitter {
         return configured || GLib.build_filenamev([GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD) || HOME, 'AirDrop']);
     }
     launcher() {
-        const launcher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE});
+        // The backend runs Notchy's confirm hook, which speaks Notchy's language.
+        const launcher = helperLauncher(this.settings, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE);
         const helper = name => `${this.extension.path}/helper/${name}`;
         // Exclusive: the card is only taken on demand and given back by itself.
         launcher.setenv('AIRDROP_MODE', 'exclusive', true);
@@ -103,7 +103,7 @@ export class AirDrop extends Emitter {
                 if (this.runProc !== p) return;
                 this.runProc = null; this.folderLife?.dispose(); this.folderLife = null;
                 // A run that ends at once never got the card: say why instead of failing silently.
-                if (!p.get_successful() && this.state === 'waking') { this.state = 'error'; this.detail = this.output.slice(-2).join(' ') || 'AirDrop konnte nicht starten.'; }
+                if (!p.get_successful() && this.state === 'waking') { this.state = 'error'; this.detail = this.output.slice(-2).join(' ') || 'airdropd ended while starting'; }
                 this.refresh(); this.changed();
             });
             return true;
@@ -179,7 +179,7 @@ export class AirDrop extends Emitter {
                     // A start Notchy just asked for may not have written its state yet.
                     if (status.state === 'off' && this.runProc && this.state === 'waking') return;
                     if (status.state === this.state && (status.detail ?? '') === this.detail) return;
-                    this.state = AIRDROP_STATES[status.state] ? status.state : 'off'; this.detail = String(status.detail ?? '');
+                    this.state = AIRDROP_STATES.has(status.state) ? status.state : 'off'; this.detail = String(status.detail ?? '');
                     this.changed();
                 } catch { /* Unreadable status: keep the last one. */ }
             });
@@ -216,7 +216,7 @@ export class AirDrop extends Emitter {
                 if (this.received.has(target.get_uri()) || !GLib.file_test(target.get_path(), GLib.FileTest.IS_REGULAR)) return;
                 this.received.add(target.get_uri()); this.shelf.add(target.get_uri());
                 this.lastReceived = name; this.changed();
-                this.extension.activeIsland()?.toast('notchy-airdrop-symbolic', `${name} im Regal`);
+                this.extension.activeIsland()?.toast('notchy-airdrop-symbolic', fmt(_('%s is in the Shelf'), name));
             }));
         });
     }
@@ -227,13 +227,14 @@ export class AirDrop extends Emitter {
     }
 }
 
-// The backend's own words for the common failures, as one short German line.
+// The backend's own words for the common failures, as one short line in the
+// interface language.
 export function describeFailure(lines) {
     const text = lines.join('\n');
-    if (/without a password|sudo/.test(text)) return 'AirDrop ist noch nicht eingerichtet (sudo-Regel fehlt).';
-    if (/jq is required/.test(text)) return 'Dem AirDrop-Backend fehlt jq.';
-    if (/no receiver|not found|No receiver/i.test(text)) return 'Kein iPhone gefunden. AirDrop auf „Für alle“ stellen und das Teilen-Menü schließen.';
-    if (/declin/i.test(text)) return 'Auf dem iPhone abgelehnt.';
-    if (/could not bring the stack up/.test(text)) return 'Die WLAN-Karte ließ sich nicht für AirDrop umschalten.';
-    return lines.filter(Boolean).at(-1)?.slice(0, 120) || 'Senden fehlgeschlagen.';
+    if (/without a password|sudo/.test(text)) return _('AirDrop is not set up yet (the sudo rule is missing).');
+    if (/jq is required/.test(text)) return _('The AirDrop backend needs jq.');
+    if (/no receiver|not found|No receiver/i.test(text)) return _('No iPhone found. Set AirDrop to “Everyone” and close the share menu.');
+    if (/declin/i.test(text)) return _('Declined on the iPhone.');
+    if (/could not bring the stack up/.test(text)) return _('The Wi-Fi card could not be switched to AirDrop.');
+    return lines.filter(Boolean).at(-1)?.slice(0, 120) || _('Sending failed.');
 }

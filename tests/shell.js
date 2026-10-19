@@ -25,6 +25,17 @@ export async function run() {
     const record = Main.extensionManager.lookup('notchy@matthias.local');
     assert(record && record.stateObj, 'extension loaded');
     const ext = record.stateObj;
+    // Translations: the installed package carries the compiled catalog, and
+    // gettext finds it for the Shell's own language (automatic mode).
+    const i18n = await import(`${ext.dir.get_uri()}/src/i18n/core.js`);
+    assert(ext.dir.get_child('locale/de/LC_MESSAGES/notchy.mo').query_exists(null), 'the installed extension carries the German catalog');
+    const systemGerman = i18n.resolveLanguage({names: GLib.get_language_names()}).language === 'de';
+    assert(ext.settings.get_string('language') === 'auto' && i18n.language() === (systemGerman ? 'de' : 'en') && (systemGerman ? ext.gettext('Lock Screen') === 'Bildschirm sperren' : i18n._('Lock Screen') === 'Lock Screen'),
+        `automatic: Notchy speaks the Shell's language through GNOME's gettext (${i18n.language()}, ${GLib.get_language_names().join(':')})`);
+    // The suite checks German texts: German is chosen for Notchy alone, as in
+    // its preferences (Notchy's own catalog; the Shell's locale stays).
+    ext.settings.set_string('language', 'de'); await Scripting.sleep(systemGerman ? 100 : 1500);
+    assert(i18n.language() === 'de' && i18n._('Lock Screen') === 'Bildschirm sperren' && GLib.get_language_names()[0] === GLib.get_language_names()[0], 'a language chosen for Notchy applies to Notchy');
     // Never touch the real network's AirPlay receivers from a test.
     ext.settings.set_boolean('airplay-enabled', false);
     // Nor a real AirDrop backend: only the stand-in is ever configured.
@@ -158,7 +169,7 @@ export async function run() {
     island.toggle('search'); await Scripting.sleep(400);
     island.views.focusEntry.set_text('einstellungen'); await Scripting.sleep(400);
     island.views.focusEntry.set_text('xyz-no-match'); await Scripting.sleep(400);
-    assert(styled(island.body, 'notchy-result').length === 1 && island.views.searchState.results[0]?.kind === 'Web', 'search without matches offers only the web search'); await key(Clutter.KEY_Escape);
+    assert(styled(island.body, 'notchy-result').length === 1 && island.views.searchState.results[0]?.kind === 'web', 'search without matches offers only the web search'); await key(Clutter.KEY_Escape);
 
     // Radial capture menu; a full-screen shot lands in the Regal.
     await Scripting.sleep(400); ext.radial.open(); await Scripting.sleep(600);
@@ -266,7 +277,8 @@ export async function run() {
     assert(!island.expanded && await clipboardText() === 'Notchy integration sample', 'Enter copies the selected entry and closes');
     const clipFile = Gio.File.new_for_path(`${path}/clipboard-file.txt`); clipFile.replace_contents('clipboard fixture', null, false, Gio.FileCreateFlags.PRIVATE, null);
     St.Clipboard.get_default().set_content(St.ClipboardType.CLIPBOARD, 'text/uri-list', new TextEncoder().encode(clipFile.get_uri() + '\r\n')); await Scripting.sleep(250);
-    assert(ext.clipboard.history.items[0]?.kind === 'files' && ext.clipboard.history.items[0].title === '1 Datei', 'file clipboard captured with a singular title');
+    const {clipTitle} = await import(`${ext.dir.get_uri()}/src/model.js`);
+    assert(ext.clipboard.history.items[0]?.kind === 'files' && clipTitle(ext.clipboard.history.items[0]) === '1 Datei' && !ext.clipboard.history.items[0].title, 'file clipboard captured with a singular title, made at display time');
     const [imgOk, png] = Gio.File.new_for_path(`${path}/collapsed.png`).load_contents(null);
     if (!imgOk) throw Error('No PNG fixture');
     St.Clipboard.get_default().set_content(St.ClipboardType.CLIPBOARD, 'image/png', png); await Scripting.sleep(400);
@@ -909,7 +921,7 @@ async function launcherRegressions(ext, path, screenshot) {
         await type('quartal');
         await waitFor(() => titles().includes('Bericht Quartal.pdf'));
         const report = state().results.find(r => r.title === 'Bericht Quartal.pdf');
-        assert(report && report.kind === 'Datei' && report.subtitle.endsWith('tests/output/thunderstorm') && state().backend === 'localsearch', `files come from the LocalSearch index with name, kind and folder (${titles().join(', ')})`);
+        assert(report && report.kind === 'file' && report.subtitle.endsWith('tests/output/thunderstorm') && state().backend === 'localsearch', `files come from the LocalSearch index with name, kind and folder (${titles().join(', ')})`);
         assert(state().selected === 0 && titles()[0] === 'Bericht Quartal.pdf', 'file results arriving late take the top and the selection, above the web search');
         await Scripting.sleep(400); await screenshot('thunderstorm-files');
         // Apps before files: "Chrome" with Google Chrome installed (a stand-in app) and 30 chrome files.
@@ -917,7 +929,7 @@ async function launcherRegressions(ext, path, screenshot) {
         const apps = ext.launcher.providers.app, realApps = apps.search;
         apps.search = query => {
             const s = Math.max(score(query, 'Google Chrome'), score(query, 'google-chrome-stable') - 40);
-            return s >= 300 ? [{id: 'app:google-chrome.desktop', kind: 'App', title: 'Google Chrome', subtitle: 'Webbrowser', icon: 'web-browser-symbolic', score: s, actions: [{title: 'Öffnen', icon: 'go-next-symbolic', run: () => opened.push('app:chrome')}]}] : [];
+            return s >= 300 ? [{id: 'app:google-chrome.desktop', kind: 'app', title: 'Google Chrome', subtitle: 'Webbrowser', icon: 'web-browser-symbolic', score: s, actions: [{id: 'app.open', title: 'Öffnen', icon: 'go-next-symbolic', run: () => opened.push('app:chrome')}]}] : [];
         };
         try {
             for (const text of ['chrome', 'Chrome', 'chro']) {
@@ -934,14 +946,14 @@ async function launcherRegressions(ext, path, screenshot) {
             assert(state().results[state().selected]?.id === chosen && chosen, `a late file answer does not move the selection the user chose (${chosen})`);
             // The explicit file mode.
             await type('datei chrome'); await waitFor(() => !state().pending && titles().length > 3, 4000);
-            assert(titles()[0] === 'chrome' && !titles().includes('Google Chrome') && state().results.every(r => ['Datei', 'Ordner', 'Regal'].includes(r.kind)) && titles().length > 8,
+            assert(titles()[0] === 'chrome' && !titles().includes('Google Chrome') && state().results.every(r => ['file', 'folder', 'shelf'].includes(r.kind)) && titles().length > 8,
                 `„datei chrome“ lists files and folders only, the exact name first (${titles().slice(0, 4).join(', ')} … ${titles().length})`);
             assert(styled(island.body, 'notchy-search-footer-text')[0]?.text.startsWith('Nur Dateien und Ordner'), 'the footer says the search is limited to files');
             await type('/chrome'); await waitFor(() => !state().pending, 4000);
             assert(titles()[0] === 'chrome', 'a leading slash searches files too');
         } finally { apps.search = realApps; }
         await type('berichte'); await waitFor(() => titles().includes('Berichte') && !state().pending, 3000);
-        assert(state().results.find(r => r.title === 'Berichte')?.kind === 'Ordner', 'folders are listed as folders');
+        assert(state().results.find(r => r.title === 'Berichte')?.kind === 'folder', 'folders are listed as folders');
         await type('bericht'); await waitFor(() => !state().pending && titles().includes('Notizen zum bericht.txt'), 4000);
         const order = titles();
         assert(!order.includes('bericht privat.txt') && !order.includes('bericht alt.txt'), 'hidden files and files no longer on disk are left out');
@@ -976,14 +988,14 @@ async function launcherRegressions(ext, path, screenshot) {
         await open(); await type('2+3*4');
         assert(titles()[0] === '= 14', 'the calculator still answers first');
         await type('10 km in mi');
-        assert(titles()[0] === '= 6,2137119 mi' && state().results[0].kind === 'Umrechnung', `units convert (${titles()[0]})`);
+        assert(titles()[0] === '= 6,2137119 mi' && state().results[0].kind === 'unit', `units convert (${titles()[0]})`);
         await press(Clutter.KEY_Return, 300);
         assert(await clipboardText() === '6,2137119', 'Enter copies the converted value');
         await open(); await type('72 °F');
         assert(titles()[0] === '= 22,222222 °C', `temperatures convert without a target (${titles()[0]})`);
         // Quicklinks with a URL-encoded argument; the web search row comes last.
         await type('yt lofi & chill');
-        assert(titles()[0] === 'YouTube: lofi & chill' && state().results.at(-1).kind === 'Web', `a quicklink takes its argument (${titles().join(', ')})`);
+        assert(titles()[0] === 'YouTube: lofi & chill' && state().results.at(-1).kind === 'web', `a quicklink takes its argument (${titles().join(', ')})`);
         await press(Clutter.KEY_Return, 300);
         assert(opened.at(-1) === 'https://www.youtube.com/results?search_query=lofi%20%26%20chill', `the quicklink opens with the argument encoded (${opened.at(-1)})`);
         await open(); await type('gh');
@@ -1001,24 +1013,24 @@ async function launcherRegressions(ext, path, screenshot) {
         await open(); await type('ausschalten');
         const before = calls.length;
         await press(Clutter.KEY_Return, 300);
-        assert(calls.length === before && island.expanded && state().confirm === 'cmd:shutdown', 'shutting down asks for confirmation first');
+        assert(calls.length === before && island.expanded && state().confirm === 'cmd:system.shutdown', 'shutting down asks for confirmation first');
         await screenshot('thunderstorm-confirm');
         await press(Clutter.KEY_Escape, 250);
         assert(island.expanded && !state().confirm && calls.length === before, 'Escape cancels the confirmation');
         await press(Clutter.KEY_Return, 200); await press(Clutter.KEY_Return, 300);
         assert(calls.at(-1)?.method === 'RequestShutdown' && calls.at(-1).name === 'org.gnome.SessionManager', 'a second Enter shuts down through the session manager');
         await open(); await type('neu starten'); await press(Clutter.KEY_Return, 200);
-        assert(state().confirm === 'cmd:restart', 'restarting asks too'); await press(Clutter.KEY_Escape);
+        assert(state().confirm === 'cmd:system.restart', 'restarting asks too'); await press(Clutter.KEY_Escape);
         // The empty field lists recently used results.
         await type('');
-        assert(state().results.some(r => r.section === 'Zuletzt verwendet' && r.title === 'Bildschirm sperren'), 'recently used results return on the empty field');
+        assert(state().results.some(r => r.section === 'recent' && r.title === 'Bildschirm sperren') && styled(island.body, 'notchy-results-section').some(l => l.text === 'Zuletzt verwendet'), 'recently used results return on the empty field');
         await Scripting.sleep(400); await screenshot('thunderstorm-empty');
         const scroller = styled(island.body, 'notchy-results-scroll')[0], content = scroller.get_child();
         assert(Math.abs(island.surface.height - island.body.height) <= 2 && scroller.height >= Math.min(content.height, scroller.height) && scroller.vadjustment.upper - scroller.vadjustment.page_size <= 1, `the island fits the start list without scrolling (${scroller.height} of ${content.height})`);
         // Emoji and special characters.
         await type(':herz');
-        const emoji = state().results.filter(r => r.kind !== 'Web');
-        assert(emoji.length >= 5 && emoji.every(r => ['Emoji', 'Zeichen'].includes(r.kind)) && emoji[0].glyph === '❤️', `emoji are found by German names (${emoji.slice(0, 4).map(r => r.glyph).join(' ')})`);
+        const emoji = state().results.filter(r => r.kind !== 'web');
+        assert(emoji.length >= 5 && emoji.every(r => ['emoji', 'char'].includes(r.kind)) && emoji[0].glyph === '❤️', `emoji are found by German names (${emoji.slice(0, 4).map(r => r.glyph).join(' ')})`);
         await screenshot('thunderstorm-emoji');
         await type('emoji daumen hoch'); await press(Clutter.KEY_Return, 300);
         assert(await clipboardText() === '👍', 'Enter copies an emoji');
@@ -1029,12 +1041,12 @@ async function launcherRegressions(ext, path, screenshot) {
         St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, 'Bestellnummer 4711-ABC'); await Scripting.sleep(400);
         St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, 'anderes'); await Scripting.sleep(400);
         await open(); await type('ablage 4711');
-        assert(titles()[0] === 'Bestellnummer 4711-ABC' && state().results[0].kind === 'Ablage', 'the clipboard history is searchable');
+        assert(titles()[0] === 'Bestellnummer 4711-ABC' && state().results[0].kind === 'clipboard', 'the clipboard history is searchable');
         await press(Clutter.KEY_Return, 300);
         assert(await clipboardText() === 'Bestellnummer 4711-ABC', 'Enter copies the history entry back');
         ext.settings.set_boolean('clipboard-enabled', false);
         await open(); await type('ablage 4711');
-        assert(!state().results.some(r => r.kind === 'Ablage'), 'without recording, the history stays out of the launcher');
+        assert(!state().results.some(r => r.kind === 'clipboard'), 'without recording, the history stays out of the launcher');
         // Window commands for the window focused before the launcher opened.
         const windowFixture = Gio.Subprocess.new(['/usr/bin/python3', here('mock_window.py')], Gio.SubprocessFlags.NONE);
         let fixture = null;
@@ -1051,7 +1063,7 @@ async function launcherRegressions(ext, path, screenshot) {
         } finally { windowFixture.force_exit(); await Scripting.sleep(300); }
         // Indexed folders on request.
         await open(); await type('indizierte ordner'); await press(Clutter.KEY_Return, 800);
-        assert(island.expanded && state().drill === 'indexed' && state().results.some(r => r.section?.startsWith('Von GNOME LocalSearch')), `the indexed folders are listed transparently (${island.expanded} ${state().drill} ${state().results.map(r => `${r.section}: ${r.title}`).join(', ')})`);
+        assert(island.expanded && state().drill === 'indexed' && state().results.some(r => r.section === 'indexed') && styled(island.body, 'notchy-results-section').some(l => l.text.startsWith('Von GNOME LocalSearch')), `the indexed folders are listed transparently (${island.expanded} ${state().drill} ${state().results.map(r => `${r.section}: ${r.title}`).join(', ')})`);
         await press(Clutter.KEY_Escape, 300);
         assert(island.expanded && !state().drill, 'Escape leaves the folder list');
         // Without the indexer: a clear message and the bounded simple search.
@@ -1061,6 +1073,8 @@ async function launcherRegressions(ext, path, screenshot) {
         await screenshot('thunderstorm-fallback');
         await press(Clutter.KEY_Escape);
         assert(!island.expanded, 'Escape closes Thunderstorm');
+        await commandRegressions(ext, island, {open, type, press, state, titles, calls});
+        await languageRegressions(ext, path, screenshot, {open, type, press, chord, state, titles, calls, waitFor, files});
     } finally {
         system.open = realSystem.open; system.call = realSystem.call;
         try { mock.force_exit(); } catch { /* Already ended. */ }
@@ -1072,6 +1086,125 @@ async function launcherRegressions(ext, path, screenshot) {
 // missing backend, connecting with its banner, batteries that arrive later,
 // noise control by model, low battery, ear state, disconnecting, and the
 // daemon going away. Notchy never pauses media itself (the daemon does).
+// Thunderstorm's built-in commands from the settings: switched off, hidden
+// with a shortcut, own search terms, favourites, the history of older
+// versions — each change takes effect without restarting the extension, and
+// shutting down keeps asking first.
+async function commandRegressions(ext, island, {open, type, press, state, titles, calls}) {
+    const settings = ext.settings, before = settings.get_string('launcher-commands');
+    try {
+        await open(); await type('bereitschaft');
+        assert(titles()[0] === 'Bereitschaft', 'suspend is offered by default');
+        settings.set_string('launcher-commands', JSON.stringify({'system.suspend': {enabled: false}}));
+        await type('bereitschaft x'); await type('bereitschaft');
+        assert(!state().results.some(r => r.id === 'cmd:system.suspend'), 'a command switched off in the settings is gone at once');
+        // Hidden, but its shortcut still finds it — and it still asks first.
+        settings.set_string('launcher-commands', JSON.stringify({'system.shutdown': {visible: false, shortcut: 'feierabend'}, 'system.lock': {aliases: ['tschüss']}, 'settings.wifi': {favorite: true}}));
+        await type('ausschalten');
+        assert(!state().results.some(r => r.id === 'cmd:system.shutdown'), 'a hidden command is not in the results');
+        await type('feierabend');
+        assert(state().results[0]?.id === 'cmd:system.shutdown', `its shortcut finds it first (${titles().join(', ')})`);
+        const count = calls.length;
+        await press(Clutter.KEY_Return, 300);
+        assert(state().confirm === 'cmd:system.shutdown' && calls.length === count, 'a shortcut never skips the confirmation');
+        await press(Clutter.KEY_Escape, 250);
+        await type('tschüss');
+        assert(state().results[0]?.id === 'cmd:system.lock', 'an own search term finds its command');
+        await type('');
+        assert(state().results.some(r => r.id === 'cmd:settings.wifi' && r.section === 'favorites') && state().results.filter(r => r.id === 'cmd:system.lock').length <= 1, 'a favourite command waits on the empty field, a used one is listed once');
+        // The action panel's run asks first too.
+        await type('neu starten');
+        state().selected = state().results.findIndex(r => r.id === 'cmd:system.restart');
+        await chordPanel(press, ext); await press(Clutter.KEY_Return, 300);
+        assert(state().confirm === 'cmd:system.restart' && !state().panel, 'running from the action panel asks for confirmation as well');
+        await press(Clutter.KEY_Escape, 250);
+        // The usage history of an older version, keyed 'cmd:lock', still revives.
+        const history = ext.launcher.history;
+        ext.launcher.history = {'cmd:dnd': {provider: 'cmd', command: 'dnd', count: 1, last: Date.now(), title: 'Nicht stören', kind: 'Befehl'}};
+        const {migrateHistory} = await import(`${ext.dir.get_uri()}/src/launcher/commands.js`);
+        ext.launcher.history = migrateHistory(ext.launcher.history);
+        await type('x'); await type('');
+        assert(state().results.some(r => r.id === 'cmd:system.dnd' && r.section === 'recent'), 'a history entry with an old id comes back under its new one');
+        settings.set_string('launcher-commands', JSON.stringify({'system.dnd': {enabled: false}}));
+        await type('x'); await type('');
+        assert(!state().results.some(r => r.id === 'cmd:system.dnd'), 'a command switched off since is not revived from the history');
+        ext.launcher.history = history;
+        // Rubbish in the setting changes nothing.
+        settings.set_string('launcher-commands', '{"system.shutdown": {"requiresConfirmation": false}, "x": 1');
+        await type('ausschalten'); await press(Clutter.KEY_Return, 300);
+        assert(state().confirm === 'cmd:system.shutdown', 'an invalid setting never turns off a confirmation');
+        await press(Clutter.KEY_Escape, 250);
+    } finally { settings.set_string('launcher-commands', before); island.close(true); }
+}
+async function chordPanel(press, ext) {
+    const keyboard = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+    keyboard.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Control_L, Clutter.KeyState.PRESSED);
+    await press(Clutter.KEY_k, 60);
+    keyboard.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Control_L, Clutter.KeyState.RELEASED); await Scripting.sleep(250);
+    keyboard.run_dispose();
+}
+// English for Notchy alone, then back: the island is rebuilt in the new
+// language, Thunderstorm's labels and shortcuts follow, German search terms
+// keep working, long English labels are not cut off, and nothing the user
+// saved changes.
+async function languageRegressions(ext, path, screenshot, {press, chord, waitFor, files}) {
+    const settings = ext.settings, i18n = await import(`${ext.dir.get_uri()}/src/i18n/core.js`);
+    const saved = () => ['launcher-quicklinks', 'launcher-snippets', 'launcher-commands', 'agents-side'].map(key => settings.get_string(key)).join('\n') + JSON.stringify(Object.keys(ext.launcher.history).sort());
+    const before = saved(), oldIsland = ext.islands[0];
+    settings.set_string('language', 'en'); await Scripting.sleep(1200);
+    // The rebuilt island: everything below asks it, not the one from before.
+    const island = ext.islands[0], state = () => island.views.searchState, titles = () => state().results.map(r => r.title);
+    try {
+        assert(i18n.language() === 'en' && island !== oldIsland && oldIsland.life.closed, 'switching to English rebuilds the island in English');
+        assert(island.navButtons.map(([, b]) => b.accessible_name).join('|') === '1 · Media|2 · Shelf|3 · Clipboard|4 · Calendar', `the tabs are named in English (${island.navButtons.map(([, b]) => b.accessible_name)})`);
+        island.toggle('search'); await Scripting.sleep(400);
+        const entry = island.views.focusEntry;
+        assert(entry.hint_text.startsWith('Apps, commands'), `the search field speaks English (${entry.hint_text})`);
+        entry.set_text('ausschalten'); await Scripting.sleep(200);
+        assert(state().results[0]?.id === 'cmd:system.shutdown' && titles()[0] === 'Shut Down', 'German search terms still find commands, shown with English titles');
+        await press(Clutter.KEY_Return, 300);
+        assert(state().confirm === 'cmd:system.shutdown' && styled(island.body, 'notchy-result-title').some(l => l.text === 'Really shut down? ↵ to confirm'), 'the confirmation speaks English');
+        await press(Clutter.KEY_Escape, 250);
+        entry.set_text('lock screen'); await Scripting.sleep(200);
+        assert(state().results[0]?.id === 'cmd:system.lock', 'English search terms find the same command');
+        entry.set_text('2,5*2'); await Scripting.sleep(200);
+        assert(titles()[0] === '= 5', 'the calculator still takes a decimal comma');
+        entry.set_text('1.5 km in m'); await Scripting.sleep(200);
+        assert(titles()[0] === '= 1500 m' && state().results[0].subtitle === '1.5 km', `numbers are written the English way (${titles()[0]} / ${state().results[0].subtitle})`);
+        entry.set_text('file quartal'); await waitFor(() => !state().pending && titles().includes('Bericht Quartal.pdf'), 6000);
+        assert(state().results.every(r => ['file', 'folder', 'shelf'].includes(r.kind)) && styled(island.body, 'notchy-search-footer-text')[0]?.text.startsWith('Files and folders only'), 'the file mode works in English');
+        const kinds = styled(island.body, 'notchy-result-kind');
+        assert(kinds.length && kinds.every(l => l.text === 'File' || l.text === 'Folder' || l.text === 'Shelf') && kinds.every(l => !l.clutter_text.get_layout().is_ellipsized()), `kind labels are English and not cut off (${kinds.map(l => l.text)})`);
+        // Ctrl+Shift+C copies the path by the action's id, whatever its title says.
+        state().selected = state().results.findIndex(r => r.title === 'Bericht Quartal.pdf');
+        await chord([Clutter.KEY_Control_L, Clutter.KEY_Shift_L], Clutter.KEY_C, 400);
+        assert(await clipboardText() === files[0], 'Ctrl+Shift+C copies the path in English as well');
+        island.toggle('search'); await Scripting.sleep(400);
+        island.views.focusEntry.set_text('file quartal'); await waitFor(() => titles().includes('Bericht Quartal.pdf'), 6000);
+        state().selected = state().results.findIndex(r => r.title === 'Bericht Quartal.pdf');
+        await chord([Clutter.KEY_Control_L], Clutter.KEY_k);
+        assert(state().panel?.actions.map(a => a.title).join('|') === 'Open|Show in File Manager|Copy Path|Add to Shelf' && state().panel.actions.map(a => a.id).join('|') === 'file.open|file.showInFolder|file.copyPath|file.addToShelf',
+            `the action panel is English, its ids unchanged (${state().panel?.actions.map(a => a.title)})`);
+        const hints = styled(island.body, 'notchy-search-footer-key').concat(styled(island.body, 'notchy-result-subtitle'));
+        assert(hints.every(l => !l.clutter_text.get_layout().is_ellipsized() || l.has_style_class_name('notchy-result-subtitle')), 'the footer hints fit');
+        await screenshot('thunderstorm-english');
+        await press(Clutter.KEY_Escape, 200); island.close(true); await Scripting.sleep(300);
+        // A toast in English in the closed capsule: wider, not cut off.
+        island.toast('edit-copy-symbolic', i18n._('Copied to clipboard')); await Scripting.sleep(400);
+        const toast = styled(island.panelSurface, 'notchy-toast-text')[0];
+        assert(toast?.text === 'Copied to clipboard' && !toast.clutter_text.get_layout().is_ellipsized(), 'an English toast fits the capsule');
+        await screenshot('toast-english');
+        await Scripting.sleep(2200);
+        // The calendar tab in English: today's title and the week label.
+        island.open('calendar'); await Scripting.sleep(500);
+        const title = styled(island.body, 'notchy-cal-title')[0]?.text ?? '';
+        assert(title.startsWith('Today, ') && styled(island.body, 'notchy-cal-meta').some(l => /^Week \d+$/.test(l.text)), `the calendar speaks English (${title})`);
+        island.close(true); await Scripting.sleep(300);
+    } finally {
+        settings.set_string('language', 'de'); await Scripting.sleep(1200);
+    }
+    assert(i18n.language() === 'de' && ext.islands[0] !== island && saved() === before, 'back in German; quicklinks, snippets, commands, sides and the history are unchanged');
+}
 async function airpodsRegressions(ext, path, screenshot) {
     const island = ext.islands[0], airpods = ext.airpods;
     const name = GLib.getenv('NOTCHY_AIRPODS_NAME'), log = `${path}/airpods-calls.log`; GLib.unlink(log);

@@ -3,9 +3,11 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {box, label, icon} from './widgets.js';
 import {Lifetime} from '../lifecycle.js';
+import {_, N_} from '../i18n/core.js';
 
-export const CAPTURES = [['area', 'Bereich', 'screenshot-ui-area-symbolic'], ['window', 'Fenster', 'screenshot-ui-window-symbolic'],
-    ['screen', 'Bildschirm', 'screenshot-ui-display-symbolic'], ['record', 'Aufnahme', 'media-record-symbolic'], ['text', 'Text (OCR)', 'scanner-symbolic']];
+// Translators: the radial capture menu: a selected area, a window, the whole screen, a recording, text recognition.
+export const CAPTURES = [['area', N_('Area'), 'screenshot-ui-area-symbolic'], ['window', N_('Window'), 'screenshot-ui-window-symbolic'],
+    ['screen', N_('Screen'), 'screenshot-ui-display-symbolic'], ['record', N_('Record'), 'media-record-symbolic'], ['text', N_('Text (OCR)'), 'scanner-symbolic']];
 const RADIUS = 120, SIZE = 64;
 
 // Glass ring of capture actions that springs out below the island (right
@@ -23,8 +25,8 @@ export class RadialMenu {
         this.actor = new St.Widget({name: 'notchy-radial', style_class: 'notchy-radial-backdrop', reactive: true, x: monitor.x, y: monitor.y, width: monitor.width, height: monitor.height, opacity: 0});
         this.buttons = CAPTURES.map(([kind, title, iconName], i) => {
             const content = box(true, {style_class: 'notchy-radial-content', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
-            content.add_child(icon(iconName, 22)); content.add_child(label(title, 'notchy-radial-label', {x_align: Clutter.ActorAlign.CENTER}));
-            const b = new St.Button({style_class: 'notchy-radial-button', child: content, width: SIZE, height: SIZE, can_focus: true, accessible_name: `${i + 1} · ${title}`, track_hover: true});
+            content.add_child(icon(iconName, 22)); content.add_child(label(_(title), 'notchy-radial-label', {x_align: Clutter.ActorAlign.CENTER}));
+            const b = new St.Button({style_class: 'notchy-radial-button', child: content, width: SIZE, height: SIZE, can_focus: true, accessible_name: `${i + 1} · ${_(title)}`, track_hover: true});
             b.connect('clicked', () => this.run(kind));
             const angle = (160 - i * 35) * Math.PI / 180, x = cx + RADIUS * Math.cos(angle), y = cy + RADIUS * Math.sin(angle);
             b.set_position(Math.round(x - SIZE / 2), Math.round(y - SIZE / 2)); b.set_pivot_point(0.5, 0.5);

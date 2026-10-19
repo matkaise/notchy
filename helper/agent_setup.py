@@ -21,6 +21,8 @@ import shutil
 import tempfile
 import time
 
+from i18n import _
+
 ADAPTER = Path(__file__).resolve().parent / 'agent_hook.py'
 MARKER = 'agent_hook.py'
 NAME = 'notchy'
@@ -72,9 +74,9 @@ def load(path):
     try:
         data = json.loads(text)
     except ValueError as error:
-        return None, f'{path} ist kein gültiges JSON ({error})'
+        return None, _('%(path)s is not valid JSON (%(error)s)') % {'path': path, 'error': error}
     if not isinstance(data, dict):
-        return None, f'{path} enthält kein JSON-Objekt'
+        return None, _('%s holds no JSON object') % path
     return data, ''
 
 
@@ -119,11 +121,11 @@ def add(provider, data, adapter=ADAPTER):
         return data
     hooks = data.setdefault('hooks', {})
     if not isinstance(hooks, dict):
-        raise ValueError('"hooks" ist kein Objekt; Notchy ändert die Datei nicht')
+        raise ValueError(_('"hooks" is not an object; Notchy leaves the file unchanged'))
     for event in EVENTS[provider]:
         groups = hooks.setdefault(event, [])
         if not isinstance(groups, list):
-            raise ValueError(f'"hooks.{event}" ist keine Liste; Notchy ändert die Datei nicht')
+            raise ValueError(_('"hooks.%s" is not a list; Notchy leaves the file unchanged') % event)
         groups.append({'hooks': [handler(provider, event, adapter)]})
     return data
 
@@ -161,7 +163,7 @@ def status(provider, home=None):
     events = installed_events(provider, data) if data is not None else set()
     wanted = set(EVENTS[provider])
     state = 'error' if error else 'installed' if wanted <= events else 'partial' if events else 'missing'
-    note = 'Codex führt neue Hooks erst aus, nachdem du sie in Codex mit /hooks geprüft und freigegeben hast.' if provider == 'codex' else ''
+    note = _('Codex runs new hooks only after you have reviewed and trusted them in Codex with /hooks.') if provider == 'codex' else ''
     return {'provider': provider, 'name': LABELS[provider], 'state': state, 'config': str(path), 'program': program(provider),
             'events': sorted(events), 'missing': sorted(wanted - events), 'error': error, 'note': note, 'lastFailure': last_failure(provider)}
 

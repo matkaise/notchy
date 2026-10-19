@@ -3,8 +3,11 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import sys
 import zipfile
 
+# The helpers import their siblings (i18n) as scripts do: from their own folder.
+sys.path.insert(0, str(Path(__file__).parent.parent / 'helper'))
 spec = importlib.util.spec_from_file_location('operations', Path(__file__).parent.parent / 'helper/operations.py')
 operations = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(operations)

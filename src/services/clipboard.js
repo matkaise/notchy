@@ -14,6 +14,8 @@ export class Clipboard extends Emitter {
         const saved = settings.get_boolean('clipboard-persist') ? store.read('clipboard', []) : [];
         this.history = new History(Array.isArray(saved) ? saved : [], settings.get_int('clipboard-limit'));
         this.history.items = this.history.items.filter(x => !x.asset || x.asset.startsWith(`${this.assets}/`));
+        // Pictures saved by older versions were keyed by a German word.
+        for (const item of this.history.items) if (item.kind === 'image' && /^Bild [0-9a-f]{12}$/.test(item.text)) item.text = `image:${item.text.slice(5)}`;
         this.life.connect(settings, 'changed', (_s, key) => {
             if (!key.startsWith('clipboard-')) return;
             this.history.limit = settings.get_int('clipboard-limit'); this.prune();
@@ -55,11 +57,12 @@ export class Clipboard extends Emitter {
                         try { f.replace_contents_finish(res); resolve(); } catch (e) { reject(e); }
                     })); } finally { this.pendingAssets.delete(file.get_path()); }
                 if (this.life.closed || token !== this.generation || !this.settings.get_boolean('clipboard-enabled')) { this._cleanAssets(null); return; }
-                item = this.history.add(`Bild ${digest.slice(0, 12)}`, source); if (item) { item.kind = 'image'; item.asset = file.get_path(); item.title = 'Bild'; }
+                // The text is the picture's identity for deduplication, never shown (see clipTitle).
+                item = this.history.add(`image:${digest.slice(0, 12)}`, source); if (item) { item.kind = 'image'; item.asset = file.get_path(); item.title = ''; }
             } else {
                 const text = new TextDecoder().decode(bytes);
                 item = this.history.add(text, source);
-                if (item && mime === 'text/uri-list') { item.kind = 'files'; item.uris = parseUris(text); item.title = `${item.uris.length} ${item.uris.length === 1 ? 'Datei' : 'Dateien'}`; }
+                if (item && mime === 'text/uri-list') { item.kind = 'files'; item.uris = parseUris(text); item.title = ''; }
             }
             if (item) { this.save(); this._cleanAssets(); this.changed(); }
         } catch (e) { if (!this.life.closed) console.warn(`Notchy clipboard: ${e.message}`); }

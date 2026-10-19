@@ -3,6 +3,7 @@ import GLib from 'gi://GLib';
 import Shell from 'gi://Shell';
 import {Emitter, Lifetime} from '../lifecycle.js';
 import {AgentRegistry, parseEvent, hookEvent, PROVIDERS, COMPLETED_MS} from './agentModel.js';
+import {_} from '../i18n/core.js';
 
 // How often running agent processes are checked while sessions with a
 // process exist. No timer runs without sessions.
@@ -53,7 +54,7 @@ export class Agents extends Emitter {
     emit(event) { for (const fn of [...this.events]) { try { fn(event); } catch (e) { console.error(e); } } }
     // One structured event (JSON text or object). Returns '' or an error message.
     report(input, source = null) {
-        if (this.life.closed) return 'Notchy wird beendet';
+        if (this.life.closed) return _('Notchy is shutting down');
         const {event, error} = parseEvent(input);
         if (error) return error;
         if (source) event.source = source;
@@ -62,9 +63,9 @@ export class Agents extends Emitter {
     }
     // A hook payload already reduced by helper/agent_hook.py.
     hook(provider, payload) {
-        if (this.life.closed) return 'Notchy wird beendet';
+        if (this.life.closed) return _('Notchy is shutting down');
         let data = payload;
-        if (typeof data === 'string') { try { data = JSON.parse(data); } catch { return 'Kein gültiges JSON'; } }
+        if (typeof data === 'string') { try { data = JSON.parse(data); } catch { return _('Not valid JSON'); } }
         const mapped = hookEvent(String(provider), data);
         if (!mapped) return '';
         const {event, error} = parseEvent({...mapped, time: data.time, pid: data.pid, pidStart: data.pidStart, ancestors: data.ancestors});

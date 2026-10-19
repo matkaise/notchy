@@ -5,6 +5,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'helper'))
+import i18n  # noqa: E402
 import tray  # noqa: E402
 
 
@@ -21,7 +22,10 @@ def labels(entries):
 
 
 class MenuEntries(unittest.TestCase):
+    # The labels are checked in German; test_i18n covers English.
     def setUp(self):
+        i18n.set_language('de')
+        self.addCleanup(i18n.set_language, None)
         self.app = tray.Tray('shelf')
         self.app.airdrop_available = False
         self.calls = []
