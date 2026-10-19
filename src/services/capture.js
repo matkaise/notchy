@@ -4,6 +4,7 @@ import Shell from 'gi://Shell';
 import Gettext from 'gettext';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Lifetime} from '../lifecycle.js';
+import {_, fmt} from '../i18n/core.js';
 
 const UI_SCREENSHOT = 0, UI_SCREENCAST = 1;
 
@@ -21,10 +22,10 @@ export class Capture {
         if (kind === 'area') this.openUI(UI_SCREENSHOT, 'shelf');
         else if (kind === 'text') {
             if (this.ocrAvailable) this.openUI(UI_SCREENSHOT, 'ocr');
-            else this.toast('dialog-warning-symbolic', 'Texterkennung braucht Tesseract');
+            else this.toast('dialog-warning-symbolic', _('Text recognition needs Tesseract'));
         } else if (kind === 'record') { this.pending = null; Main.screenshotUI.open(UI_SCREENCAST).catch(e => console.warn(`Notchy capture: ${e.message}`)); }
         else if (kind === 'window') {
-            if (!global.display.focus_window) { this.toast('dialog-information-symbolic', 'Kein Fenster im Fokus'); return; }
+            if (!global.display.focus_window) { this.toast('dialog-information-symbolic', _('No window has focus')); return; }
             this.save((shooter, stream) => shooter.screenshot_window(true, false, stream));
         } else if (kind === 'screen') this.save((shooter, stream) => shooter.screenshot(false, stream));
     }
@@ -51,15 +52,15 @@ export class Capture {
             const file = this.newFile(), stream = file.create(Gio.FileCreateFlags.NONE, null);
             try { await capture(new Shell.Screenshot(), stream); } finally { stream.close(null); }
             if (this.life.closed) return;
-            global.display.get_sound_player().play_from_theme('screen-capture', 'Bildschirmfoto', null);
+            global.display.get_sound_player().play_from_theme('screen-capture', _('Screenshot'), null);
             this.taken(file, 'shelf');
-        } catch (e) { if (!this.life.closed) this.toast('dialog-warning-symbolic', `Aufnahme fehlgeschlagen: ${e.message}`); }
+        } catch (e) { if (!this.life.closed) this.toast('dialog-warning-symbolic', fmt(_('Capture failed: %s'), e.message)); }
     }
     taken(file, kind) {
         this.pending = null; this.life.cancel(this.pendingTimeout); this.pendingTimeout = 0;
         if (kind === 'ocr') { this.extension.operations.run('ocr', file.get_uri()); return; }
         this.extension.shelf.add(file.get_uri());
-        this.toast('screenshot-ui-area-symbolic', 'Bildschirmfoto im Regal');
+        this.toast('screenshot-ui-area-symbolic', _('Screenshot added to the Shelf'));
     }
     toast(iconName, text) { this.extension.activeIsland()?.toast(iconName, text); }
     dispose() { this.life.dispose(); }

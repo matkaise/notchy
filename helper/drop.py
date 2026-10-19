@@ -8,6 +8,7 @@ import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
 from gi.repository import Gdk, Gio, GLib, Gtk
+from i18n import _
 
 BACKEND = sys.argv[1] if len(sys.argv) > 1 else 'wayland'
 
@@ -53,9 +54,9 @@ class DropReceiver(Gtk.Application):
         zones = Gtk.Box(spacing=10)
         self.root = Gtk.Frame(child=zones, css_classes=['notchy-drop'], overflow=Gtk.Overflow.HIDDEN)
         self.window.set_child(self.root)
-        self.area = self.zone(zones, 'shelf', Gtk.Image.new_from_icon_name('document-save-symbolic'), 'Ins Regal legen', 'Original bleibt, wo es ist')
+        self.area = self.zone(zones, 'shelf', Gtk.Image.new_from_icon_name('document-save-symbolic'), _('Add to Shelf'), _('The original stays where it is'))
         icon = Gio.FileIcon.new(Gio.File.new_for_path(str(Path(__file__).resolve().parent.parent / 'src' / 'icons' / 'notchy-airdrop-symbolic.svg')))
-        self.airdrop_zone = self.zone(zones, 'airdrop', Gtk.Image(gicon=icon), 'AirDrop', 'An ein iPhone senden')
+        self.airdrop_zone = self.zone(zones, 'airdrop', Gtk.Image(gicon=icon), 'AirDrop', _('Send to an iPhone'))
         self.airdrop_zone.set_hexpand(False)
         self.airdrop_zone.set_size_request(150, -1)
         self.airdrop_zone.set_visible(False)

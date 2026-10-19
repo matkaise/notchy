@@ -1,5 +1,6 @@
 import Gio from 'gi://Gio';
 import {Emitter, Lifetime} from '../lifecycle.js';
+import {_} from '../i18n/core.js';
 
 export class Spectrum extends Emitter {
     constructor(extension, media, system, settings) {
@@ -35,12 +36,12 @@ export class Spectrum extends Emitter {
                     if (line.length <= 4096) {
                         const frame = JSON.parse(line);
                         if (Array.isArray(frame.levels) && frame.levels.length === 12 && frame.levels.every(x => Number.isFinite(x) && x >= 0 && x <= 1)) { this.levels = frame.levels; this.haveFrame = true; this.changed(); }
-                        if (frame.error) { this.error = 'Audio-Monitor nicht verfügbar.'; this.levels = Array(12).fill(0); this.changed(); }
+                        if (frame.error) { this.error = _('Audio monitor not available.'); this.levels = Array(12).fill(0); this.changed(); }
                     }
                     read();
                 } catch (e) { if (!capture.closed) { this.error = e.message; this.levels = Array(12).fill(0); this.changed(); } close(); }
             }); }; read();
-            proc.wait_async(null, (p, result) => { try { p.wait_finish(result); if (this.proc === p) this.proc = null; if (!capture.closed && !p.get_successful()) { this.error = 'Audioanalyse konnte nicht gestartet werden.'; this.haveFrame = false; this.levels = Array(12).fill(0); this.changed(); } } catch { /* Already ended. */ } });
+            proc.wait_async(null, (p, result) => { try { p.wait_finish(result); if (this.proc === p) this.proc = null; if (!capture.closed && !p.get_successful()) { this.error = _('Audio analysis could not be started.'); this.haveFrame = false; this.levels = Array(12).fill(0); this.changed(); } } catch { /* Already ended. */ } });
             capture.cleanups.push(() => { try { if (proc.get_identifier()) proc.send_signal(15); } catch { /* Already exited. */ } if (!reading) close(); });
         } catch (e) { this.error = e.message; this.capture.dispose(); this.capture = null; }
     }

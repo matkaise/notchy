@@ -5,6 +5,7 @@ import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Lifetime} from '../lifecycle.js';
 import {DROP_HEIGHT} from '../ui/island.js';
+import {helperLauncher} from '../i18n/gnome.js';
 
 const TYPE = Meta.SelectionType.SELECTION_DND;
 
@@ -38,12 +39,13 @@ export class Drops {
         if (this.life.closed || this.receivers.get(backend)?.proc) return;
         const receiver = {ready: false, proc: null}; this.receivers.set(backend, receiver);
         try {
-            const launcher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.NONE});
+            const launcher = helperLauncher(this.extension.settings);
             launcher.setenv('GDK_BACKEND', backend, true);
             receiver.proc = launcher.spawnv(['/usr/bin/python3', `${this.extension.path}/helper/drop.py`, backend]);
             receiver.proc.wait_async(this.life.cancellable, (proc, result) => {
                 try { proc.wait_finish(result); } catch { /* Disabled. */ }
-                if (!this.life.closed) { receiver.ready = false; receiver.proc = null; if (backend === this.backend) this.hide(); }
+                if (this.life.closed || this.receivers.get(backend) !== receiver) return;
+                receiver.ready = false; receiver.proc = null; if (backend === this.backend) this.hide();
             });
         } catch (error) { console.warn(`Notchy drop target: ${error.message}`); }
     }
@@ -115,6 +117,16 @@ export class Drops {
         this.setDragging(false); const serial = this.serial;
         this.life.later(120, () => { if (serial === this.serial) this.hide(); airdrop.sendFiles(paths); });
         return true;
+    }
+    // A new interface language: the idle receivers start again in it (one in a
+    // drag keeps running; the next drag gets the new one).
+    restartReceivers() {
+        if (this.life.closed || this.dragging) return;
+        for (const [backend, receiver] of [...this.receivers]) {
+            this.receivers.delete(backend);
+            try { receiver.proc?.force_exit(); } catch { /* Gone. */ }
+            this.startReceiver(backend);
+        }
     }
     receiverReady(backend) { const receiver = this.receivers.get(backend); if (receiver) receiver.ready = true; if (backend === this.backend && this.dragging) this.motion(...global.get_pointer()); }
     dispose() { this.hide(); this.life.dispose(); for (const receiver of this.receivers.values()) receiver.proc?.force_exit(); this.receivers.clear(); }

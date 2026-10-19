@@ -1,6 +1,24 @@
 // Thunderstorm's platform-independent logic, shared by GJS and the Node test
 // suite: matching and ranking, unit conversion, quicklink templates, frecency.
 // Nothing here evaluates code or runs commands.
+//
+// Results carry a stable `kind` ('app', 'file', 'command', …); kindLabel()
+// translates it only for display. Ranking, caps and the usage history work on
+// the ids, so the interface language never changes an order or a saved entry.
+import {_, N_, pgettext, ngettext, language, formatNumber as localeNumber, formatDate, formatTime} from '../i18n/core.js';
+
+const KIND_LABELS = {
+    app: N_('App'), command: N_('Command'), link: N_('Link'), window: N_('Window'), file: N_('File'), folder: N_('Folder'), shelf: N_('Shelf'),
+    recent: N_('Recent'), emoji: N_('Emoji'), char: N_('Character'), clipboard: N_('Clipboard'), snippet: N_('Snippet'), unit: N_('Conversion'),
+    calc: N_('Calculator'), web: N_('Web'), indexed: N_('Indexed'), basic: N_('Basic search'),
+};
+// The kind of a result as its row shows it.
+export const kindLabel = kind => (KIND_LABELS[kind] ? _(KIND_LABELS[kind]) : String(kind ?? ''));
+const SECTION_LABELS = {
+    recent: N_('Recently Used'), favorites: N_('Favorites'), 'recent-files': N_('Recently Opened'), indexed: N_('Indexed by GNOME LocalSearch'),
+    basic: N_('LocalSearch is not running · basic search in'), settings: N_('Settings'),
+};
+export const sectionLabel = section => (SECTION_LABELS[section] ? _(SECTION_LABELS[section]) : String(section ?? ''));
 
 // Lower case without diacritics, so "muller" finds "Müller" and "strasse" "Straße".
 export function fold(text) {
@@ -75,7 +93,7 @@ export function recentUses(history, limit = 5) {
 // shallow, recently opened) and frecency — capped per family, so a frequently
 // opened file never pushes an exactly matching app down — order the results.
 // In the explicit file mode ("datei …", "file …", "/…") files lead instead.
-export const FAMILY = {App: 'app', Befehl: 'command', Link: 'command', Fenster: 'command', Datei: 'file', Ordner: 'file', Regal: 'file', 'Zuletzt geöffnet': 'file'};
+export const FAMILY = {app: 'app', command: 'command', link: 'command', window: 'command', file: 'file', folder: 'file', shelf: 'file', recent: 'file'};
 export function matchTier(score) { return score >= 1000 ? 'exact' : score >= 680 ? 'strong' : score >= 450 ? 'medium' : 'weak'; }
 const TIER_FLOOR = {exact: 1000, strong: 680, medium: 450, weak: 0};
 const BANDS = {
@@ -90,13 +108,18 @@ const BONUS_LIMIT = [-200, 100];
 export function rankScore(result, {history = {}, now = Date.now(), mode = 'all'} = {}) {
     if (result.score > 1000) return 5000 + result.score;
     // The web search is the way out, always the last row.
-    if (result.kind === 'Web') return Math.min(100, result.score);
+    if (result.kind === 'web') return Math.min(100, result.score);
     const family = FAMILY[result.kind] ?? 'other', match = Math.max(0, Math.min(1000, result.score)), tier = matchTier(match);
     const band = mode === 'files' && family === 'file' ? FILE_MODE_BANDS[tier] : BANDS[family][tier];
     const within = tier === 'exact' ? 0 : Math.min(160, (match - TIER_FLOOR[tier]) / (tier === 'weak' ? 3 : 2));
     const bonus = Math.max(BONUS_LIMIT[0], Math.min(BONUS_LIMIT[1], result.bonus ?? 0));
     return band + within + bonus + Math.min(FRECENCY_CAP[family], frecency(history[result.id], now));
 }
+
+// Prefixes that ask for one kind, in German and English whatever the interface speaks.
+export const EMOJI_PREFIX = /^(emoji|zeichen|symbol|symbole|char|chars|character|characters)\s+|^:/i;
+export const CLIPBOARD_PREFIX = /^(ablage|clip|clipboard|zwischenablage)\s/i;
+export const SNIPPET_PREFIX = /^(snippet|snip|text|textbaustein)\s/i;
 
 // The file mode: "datei bericht", "file bericht", "/bericht". Returns the
 // search text without its prefix, or null for a normal query.
@@ -121,15 +144,10 @@ export function rank(results, {history = {}, limit = 8, perKind = {}, now = Date
     return out;
 }
 
-// A German number for display and copying: decimal comma, no grouping,
-// at most `digits` significant digits, exponent only for extreme values.
-export function formatNumber(value, digits = 10) {
-    if (!Number.isFinite(value)) return '';
-    if (value === 0) return '0';
-    const abs = Math.abs(value);
-    if (abs >= 1e15 || abs < 1e-6) return value.toExponential(4).replace('.', ',').replace('e+', 'e');
-    return String(Number(value.toPrecision(digits))).replace('.', ',');
-}
+// A number for display and copying in the interface language (German:
+// decimal comma), no grouping, at most `digits` significant digits, an
+// exponent only for extreme values.
+export function formatNumber(value, digits = 10, lang = language()) { return localeNumber(value, digits, lang); }
 
 // Unit conversion. Each unit: factor to its category's base unit (temperature
 // has its own formulas). Aliases are lower case, German and English.
@@ -158,9 +176,18 @@ const UNITS = {
     data: {b: [1, ['byte', 'bytes']], kb: [1e3, ['kilobyte', 'kilobytes']], mb: [1e6, ['megabyte', 'megabytes']], gb: [1e9, ['gigabyte', 'gigabytes']],
         tb: [1e12, ['terabyte', 'terabytes']], kib: [1024, ['kibibyte']], mib: [1048576, ['mebibyte']], gib: [1073741824, ['gibibyte']], tib: [1099511627776, ['tebibyte']]},
 };
-// The symbol each unit is shown with.
+// The symbol each unit is shown with; words are translated, with the plural
+// for every value but exactly one.
 const SYMBOL = {m2: 'm²', mm2: 'mm²', cm2: 'cm²', km2: 'km²', in2: 'in²', ft2: 'ft²', yd2: 'yd²', mi2: 'mi²', m3: 'm³', cm3: 'cm³',
-    c: '°C', f: '°F', k: 'K', floz: 'fl oz', ac: 'acre', wk: 'Wochen', mo: 'Monate', yr: 'Jahre', d: 'Tage', tl: 'TL', el: 'EL', kib: 'KiB', mib: 'MiB', gib: 'GiB', tib: 'TiB', kb: 'kB', mb: 'MB', gb: 'GB', tb: 'TB', b: 'B', pfund: 'Pfund'};
+    c: '°C', f: '°F', k: 'K', floz: 'fl oz', kib: 'KiB', mib: 'MiB', gib: 'GiB', tib: 'TiB', kb: 'kB', mb: 'MB', gb: 'GB', tb: 'TB', b: 'B'};
+const WORDS = {
+    ac: n => ngettext('acre', 'acres', n), wk: n => ngettext('week', 'weeks', n), mo: n => ngettext('month', 'months', n),
+    yr: n => ngettext('year', 'years', n), d: n => ngettext('day', 'days', n),
+    // Translators: abbreviations of teaspoon and tablespoon.
+    tl: () => _('tsp'), el: () => _('tbsp'),
+    // Translators: the German pound of 500 g.
+    pfund: () => _('Pfund'),
+};
 // Without a target, a unit converts to these.
 const DEFAULT_TARGETS = {mm: ['in'], cm: ['in'], m: ['ft'], km: ['mi'], in: ['cm'], ft: ['m'], yd: ['m'], mi: ['km'], nmi: ['km'],
     m2: ['ft2'], ha: ['ac', 'km2'], km2: ['mi2'], ft2: ['m2'], ac: ['ha'], mi2: ['km2'],
@@ -177,7 +204,7 @@ function unitOf(text) {
     const name = String(text).trim().toLowerCase().replace(/²/g, '2').replace(/³/g, '3').replace(/^°\s*/, '').replace(/\.$/, '').replace(/\s+/g, ' ');
     return LOOKUP.get(name) ?? null;
 }
-export const unitSymbol = unit => SYMBOL[unit] ?? unit;
+export const unitSymbol = (unit, value = 2) => WORDS[unit]?.(Math.abs(value) === 1 ? 1 : 2) ?? SYMBOL[unit] ?? unit;
 
 export function convert(value, from, to) {
     const a = LOOKUP.get(from) ?? {unit: from}, b = LOOKUP.get(to) ?? {unit: to};
@@ -246,9 +273,35 @@ export function parseList(json, fields) {
         return Array.isArray(list) ? list.filter(x => x && fields.every(f => typeof x[f] === 'string' && x[f].length <= 4000)).slice(0, 200) : [];
     } catch { return []; }
 }
-// Snippet placeholders: {date}, {time}, {datetime} in German format.
+// Snippet placeholders: {date}, {time}, {datetime} in the interface's locale
+// ("19.10.2026" in German, "Oct 19, 2026" in English).
 export function expandSnippet(text, now = new Date()) {
-    const pad = n => String(n).padStart(2, '0');
-    const date = `${pad(now.getDate())}.${pad(now.getMonth() + 1)}.${now.getFullYear()}`, time = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const date = formatDate(now, {dateStyle: 'medium'}), time = formatTime(now);
     return String(text).replace(/\{date\}/g, date).replace(/\{time\}/g, time).replace(/\{datetime\}/g, `${date} ${time}`);
+}
+
+// Quicklinks and snippets a new installation starts with, in the interface
+// language. They apply while the user has not edited the lists; an edited
+// list is the user's and stays exactly as saved, whatever the language.
+export function defaultQuicklinks(lang = language()) {
+    return [
+        {keyword: 'yt', name: 'YouTube', url: 'https://www.youtube.com/results?search_query={query}'},
+        {keyword: 'gh', name: 'GitHub', url: 'https://github.com/search?q={query}&type=repositories', alt: {pattern: '^[\\w.-]+/[\\w.-]+$', url: 'https://github.com/{path}'}},
+        {keyword: 'wiki', name: 'Wikipedia', url: `https://${lang === 'de' ? 'de' : 'en'}.wikipedia.org/w/index.php?search={query}`},
+        {keyword: 'ddg', name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q={query}'},
+        {keyword: 'maps', name: 'OpenStreetMap', url: 'https://www.openstreetmap.org/search?query={query}'},
+        {keyword: 'dl', name: _('Downloads'), url: 'xdg:DOWNLOAD'},
+        {keyword: 'docs', name: _('Documents'), url: 'xdg:DOCUMENTS'},
+    ];
+}
+export function defaultSnippets() {
+    return [
+        // Translators: a snippet that copies a closing greeting for letters and mails.
+        {name: _('Kind regards'), keyword: pgettext('snippet keyword', 'kr'), text: `${_('Kind regards')}\n`},
+        {name: _('Today’s date'), keyword: pgettext('snippet keyword', 'today'), text: '{date}'},
+    ];
+}
+// A saved list, or the defaults while the setting is empty (never edited).
+export function savedOrDefault(json, fields, defaults) {
+    return String(json ?? '').trim() ? parseList(json, fields) : defaults();
 }

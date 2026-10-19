@@ -1,6 +1,8 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {Emitter, Lifetime} from '../lifecycle.js';
+import {helperLauncher} from '../i18n/gnome.js';
+import {_} from '../i18n/core.js';
 
 // The helper stays up between searches and ends after this much quiet.
 const IDLE_EXIT = 5 * 60 * 1000;
@@ -19,7 +21,7 @@ export class FileSearch extends Emitter {
     start() {
         if (this.proc || this.life.closed) return true;
         try {
-            const launcher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE});
+            const launcher = helperLauncher(this.settings, Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
             // Tests point the helper at a stand-in index and their own folders; it never starts a real indexer.
             for (const name of ['NOTCHY_LOCALSEARCH_NAME', 'NOTCHY_FALLBACK_ROOTS']) { const value = GLib.getenv(name); if (value) launcher.setenv(name, value, true); }
             const proc = launcher.spawnv(['/usr/bin/python3', `${this.extension.path}/helper/filesearch.py`]);
@@ -28,7 +30,7 @@ export class FileSearch extends Emitter {
             this.read(proc);
             proc.wait_async(null, () => {
                 if (this.proc !== proc) return;
-                this.proc = null; this.stdin = null; this.stdout = null; this.fail('Dateisuche wurde beendet.');
+                this.proc = null; this.stdin = null; this.stdout = null; this.fail(_('The file search has ended.'));
             });
             return true;
         } catch (e) { console.warn(`Notchy file search: ${e.message}`); this.proc = null; return false; }
@@ -49,7 +51,7 @@ export class FileSearch extends Emitter {
     }
     fail(error) { for (const resolve of this.pending.values()) resolve({error, results: []}); this.pending.clear(); }
     request(message) {
-        if (this.life.closed || !this.start()) return Promise.resolve({error: 'Dateisuche nicht verfügbar', results: []});
+        if (this.life.closed || !this.start()) return Promise.resolve({error: _('File search is not available'), results: []});
         this.life.cancel(this.idle);
         this.idle = this.life.later(IDLE_EXIT, () => { this.idle = 0; this.stop(); });
         const id = this.nextId++;
@@ -67,7 +69,7 @@ export class FileSearch extends Emitter {
     recent(limit = 6) { return this.request({op: 'recent', limit}); }
     stop() {
         const proc = this.proc; this.proc = null; this.stdin = null; this.stdout = null;
-        this.fail('Dateisuche beendet.');
+        this.fail(_('File search stopped.'));
         try { proc?.force_exit(); } catch { /* Already gone. */ }
     }
     dispose() { this.life.dispose(); this.stop(); this.listeners.clear(); }

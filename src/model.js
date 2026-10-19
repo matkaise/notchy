@@ -1,4 +1,5 @@
 // Platform-independent domain logic, shared by GJS and the Node test suite.
+import {_, N_, fmt, ngettext, relativeTime as localRelativeTime} from './i18n/core.js';
 export function parseUris(text) {
     return [...new Set(String(text).split(/\r?\n/).map(s => s.trim())
         .filter(s => s && !s.startsWith('#') && /^file:\/\//i.test(s)))]
@@ -27,7 +28,7 @@ export function eventsForDay(events, day) {
 export function mprisMetadata(meta) {
     const get = (name, fallback) => meta[name]?.deep_unpack?.() ?? meta[name] ?? fallback;
     const artist = get('xesam:artist', []);
-    return {title: String(get('xesam:title', 'Unbekannter Titel')), artist: Array.isArray(artist) ? artist.join(', ') : String(artist),
+    return {title: String(get('xesam:title', _('Unknown Title'))), artist: Array.isArray(artist) ? artist.join(', ') : String(artist),
         album: String(get('xesam:album', '')), art: String(get('mpris:artUrl', '')), url: String(get('xesam:url', '')),
         length: Number(get('mpris:length', 0)), trackId: String(get('mpris:trackid', '/'))};
 }
@@ -53,6 +54,18 @@ export function combineCopies(items) {
         return text.length <= 1024 * 1024 ? {mime: 'text/plain', text} : null;
     }
     return null;
+}
+
+// What a clipboard entry is called in lists: the user's own title, or for
+// files and pictures a description in the interface language (older
+// versions stored those in German; they are recognised and shown anew).
+const AUTO_TITLE = /^(\d+ Dateie?n?|Bild)$/;
+export function clipTitle(item) {
+    const own = item?.title && !(AUTO_TITLE.test(item.title) && ['files', 'image'].includes(item.kind)) ? item.title : '';
+    if (own) return own;
+    if (item?.kind === 'files') { const n = item.uris?.length ?? 0; return fmt(ngettext('%d file', '%d files', n), n); }
+    if (item?.kind === 'image') return _('Picture');
+    return '';
 }
 
 export class History {
@@ -85,7 +98,7 @@ export class History {
         query = query.toLocaleLowerCase();
         return this.items.filter(x => (!favorites || x.favorite) && (kind === 'all' || x.kind === kind)
             && (!tag || x.tags.includes(tag))
-            && `${x.title}\n${x.text}\n${x.source}\n${x.tags.join(' ')}`.toLocaleLowerCase().includes(query));
+            && `${clipTitle(x)}\n${x.text}\n${x.source}\n${x.tags.join(' ')}`.toLocaleLowerCase().includes(query));
     }
     remove(id) { this.items = this.items.filter(x => x.id !== id); }
     clear(keepFavorites = true) { this.items = keepFavorites ? this.items.filter(x => x.favorite) : []; }
@@ -110,15 +123,9 @@ export function calculate(input) {
     try { const value = expression(); return at === tokens.length && Number.isFinite(value) ? value : null; } catch { return null; }
 }
 
-// German relative time for list metadata ("gerade eben", "vor 5 Min.", "gestern").
-export function relativeTime(then, now = Date.now()) {
-    const minutes = Math.floor(Math.max(0, now - then) / 60000);
-    if (minutes < 1) return 'gerade eben';
-    if (minutes < 60) return `vor ${minutes} Min.`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `vor ${hours} Std.`;
-    return hours < 48 ? 'gestern' : `vor ${Math.floor(hours / 24)} Tagen`;
-}
+// Relative time for list metadata ("just now", "5 min ago", "yesterday"),
+// in the interface language.
+export function relativeTime(then, now = Date.now()) { return localRelativeTime(then, now); }
 
 // ISO 8601 calendar week (weeks start on Monday; week 1 holds the year's first Thursday).
 export function isoWeek(date) {
@@ -144,12 +151,12 @@ export function groupBy(items, key) {
 // Window layouts offered when a window is dragged into the notch, as in
 // Windows' snap layouts. Zones are fractions [x, y, width, height] of the work area.
 export const SNAP_LAYOUTS = [
-    {name: 'Hälften', zones: [[0, 0, 1 / 2, 1], [1 / 2, 0, 1 / 2, 1]]},
-    {name: 'Zwei Drittel und ein Drittel', zones: [[0, 0, 2 / 3, 1], [2 / 3, 0, 1 / 3, 1]]},
-    {name: 'Drittel', zones: [[0, 0, 1 / 3, 1], [1 / 3, 0, 1 / 3, 1], [2 / 3, 0, 1 / 3, 1]]},
-    {name: 'Hälfte und zwei Viertel', zones: [[0, 0, 1 / 2, 1], [1 / 2, 0, 1 / 2, 1 / 2], [1 / 2, 1 / 2, 1 / 2, 1 / 2]]},
-    {name: 'Viertel', zones: [[0, 0, 1 / 2, 1 / 2], [1 / 2, 0, 1 / 2, 1 / 2], [0, 1 / 2, 1 / 2, 1 / 2], [1 / 2, 1 / 2, 1 / 2, 1 / 2]]},
-    {name: 'Vollbild', zones: [[0, 0, 1, 1]]},
+    {name: N_('Halves'), zones: [[0, 0, 1 / 2, 1], [1 / 2, 0, 1 / 2, 1]]},
+    {name: N_('Two Thirds and One Third'), zones: [[0, 0, 2 / 3, 1], [2 / 3, 0, 1 / 3, 1]]},
+    {name: N_('Thirds'), zones: [[0, 0, 1 / 3, 1], [1 / 3, 0, 1 / 3, 1], [2 / 3, 0, 1 / 3, 1]]},
+    {name: N_('Half and Two Quarters'), zones: [[0, 0, 1 / 2, 1], [1 / 2, 0, 1 / 2, 1 / 2], [1 / 2, 1 / 2, 1 / 2, 1 / 2]]},
+    {name: N_('Quarters'), zones: [[0, 0, 1 / 2, 1 / 2], [1 / 2, 0, 1 / 2, 1 / 2], [0, 1 / 2, 1 / 2, 1 / 2], [1 / 2, 1 / 2, 1 / 2, 1 / 2]]},
+    {name: N_('Full Screen'), zones: [[0, 0, 1, 1]]},
 ];
 
 // A zone in pixels; neighbouring zones share their edges exactly.

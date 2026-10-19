@@ -12,6 +12,8 @@ import time
 import unittest
 
 HELPER = Path(__file__).parent.parent / 'helper'
+# The helpers import their siblings (i18n) as scripts do: from their own folder.
+sys.path.insert(0, str(HELPER))
 
 
 def load(name):

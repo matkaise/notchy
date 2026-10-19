@@ -8,19 +8,14 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {box, label, gicon} from './widgets.js';
 import {Lifetime} from '../lifecycle.js';
-import {PROVIDERS, stateText, shownState} from '../services/agentModel.js';
+import {PROVIDERS, stateText, shownState, statusText} from '../services/agentModel.js';
+import {_, fmt, ngettext, duration} from '../i18n/core.js';
 
 // Ring colours per state (RGBA).
 const COLOR = {working: [0.42, 0.71, 1, 1], waiting: [1, 0.62, 0.04, 1], error: [1, 0.27, 0.23, 1], completed: [0.2, 0.78, 0.35, 1], idle: [1, 1, 1, 0.22], disconnected: [1, 1, 1, 0.12]};
 
-// A running time as "12 s", "4 Min.", "1 Std. 5 Min.".
-export function duration(ms) {
-    const seconds = Math.max(0, Math.floor(ms / 1000));
-    if (seconds < 60) return `${seconds} s`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} Min.`;
-    return `${Math.floor(minutes / 60)} Std. ${minutes % 60} Min.`;
-}
+// A running time ("12 s", "4 min", "1 h 5 min"), in the interface language.
+export {duration};
 
 // The agents beside the notch: one indicator per agent (Claude Code, Codex,
 // Antigravity, or whatever reports over notchyctl/MCP), its sessions in its
@@ -53,7 +48,7 @@ export class AgentIndicators {
 export class AgentBubble {
     constructor(island, provider) {
         this.island = island; this.provider = provider; this.agents = island.agents; this.settings = island.settings; this.life = new Lifetime();
-        this.group = null; this.rows = new Map(); this.leaving = false;
+        this.group = null; this.rows = new Map(); this.leaving = false; this.leaveSources = new Set();
         const name = PROVIDERS[provider]?.name ?? provider;
         this.button = new PanelMenu.Button(0.5, name, false);
         this.button.add_style_class_name('notchy-side-button');
@@ -124,7 +119,7 @@ export class AgentBubble {
         this.group = group;
         const {state, count, progress, name} = group;
         this.style();
-        this.button.accessible_name = `${name}: ${stateText(state)}${count > 1 ? `, ${count} Sitzungen` : ''}`;
+        this.button.accessible_name = count > 1 ? fmt(ngettext('%1$s: %2$s, %3$d session', '%1$s: %2$s, %3$d sessions', count), name, stateText(state), count) : `${name}: ${stateText(state)}`;
         // The spinner turns only while the agent works and no real progress is known.
         const spin = state === 'working' && progress === null;
         if (spin !== this.spinning) {
@@ -192,7 +187,7 @@ export class AgentBubble {
     syncMenu() {
         const group = this.group; if (!group) return;
         const live = group.sessions.filter(s => s.connected).length;
-        this.menuSub.text = `${stateText(group.state)}${live > 1 ? ` · ${live} Sitzungen` : ''}`;
+        this.menuSub.text = live > 1 ? fmt(ngettext('%1$s · %2$d session', '%1$s · %2$d sessions', live), stateText(group.state), live) : stateText(group.state);
         const ids = new Set(group.sessions.map(s => s.id));
         for (const [id, row] of this.rows) if (!ids.has(id)) { row.item.destroy(); this.rows.delete(id); }
         group.sessions.forEach((session, index) => {
@@ -212,7 +207,7 @@ export class AgentBubble {
         const fill = new St.Widget({style_class: 'notchy-agent-progress-fill'}); progress.add_child(fill);
         column.add_child(title); column.add_child(sub); column.add_child(progress);
         const time = label('', 'notchy-agent-row-time', {y_align: Clutter.ActorAlign.CENTER});
-        const go = new St.Button({style_class: 'notchy-agent-switch', label: 'Wechseln', can_focus: true, y_align: Clutter.ActorAlign.CENTER, visible: false, accessible_name: 'Zum Agenten wechseln'});
+        const go = new St.Button({style_class: 'notchy-agent-switch', label: _('Switch'), can_focus: true, y_align: Clutter.ActorAlign.CENTER, visible: false, accessible_name: _('Switch to the agent')});
         for (const child of [dot, column, time, go]) item.add_child(child);
         const row = {item, dot, title, sub, progress, fill, time, go, session};
         const jump = () => { const window = this.agents.window(row.session); if (window) { Main.activateWindow(window); this.button.menu.close(); } };
@@ -225,16 +220,16 @@ export class AgentBubble {
         for (const row of this.rows.values()) {
             const {session} = row, state = shownState(session);
             row.dot.set_style_class_name(`notchy-agent-dot ${state}`);
-            const title = session.project || (session.id.length > 18 ? `Sitzung ${session.id.slice(0, 8)}` : `Sitzung ${session.id}`);
+            const title = session.project || fmt(_('Session %s'), session.id.length > 18 ? session.id.slice(0, 8) : session.id);
             if (row.title.text !== title) row.title.text = title;
-            const sub = [stateText(state), session.status].filter(Boolean).join(' · ');
+            const sub = [stateText(state), statusText(session)].filter(Boolean).join(' · ');
             if (row.sub.text !== sub) row.sub.text = sub;
             row.time.text = duration(now - session.started);
             // Real progress only; no invented numbers.
             const known = session.progress !== null && session.progress !== undefined && state === 'working';
             row.progress.visible = known;
             if (known) row.fill.width = Math.round(Math.max(0, Math.min(1, session.progress)) * Math.max(1, row.progress.width || 200));
-            // „Zum Agenten wechseln“ only when its window is known for sure.
+            // "Switch to the agent" only when its window is known for sure.
             const window = this.button.menu.isOpen ? this.agents.window(session) : null;
             row.go.visible = Boolean(window);
             row.item.reactive = Boolean(window);
@@ -242,23 +237,30 @@ export class AgentBubble {
     }
     summary() {
         const group = this.group; if (!group) return [];
-        return group.sessions.filter(s => s.connected).map(session => ({title: `${group.name}${session.project ? ` · ${session.project}` : ''}`, subtitle: [stateText(shownState(session)), session.status].filter(Boolean).join(' · '),
+        return group.sessions.filter(s => s.connected).map(session => ({title: `${group.name}${session.project ? ` · ${session.project}` : ''}`, subtitle: [stateText(shownState(session)), statusText(session)].filter(Boolean).join(' · '),
             icon: this.icon.gicon, activate: this.agents.window(session) ? () => Main.activateWindow(this.agents.window(session)) : null}));
     }
     // Leaving: the indicator fades and shrinks, then gives up its place.
     leave(done) {
         if (this.leaving) return;
         this.leaving = true; this.button.menu.close();
-        // Destroyed only after the transition has finished with the actor.
-        const finish = () => GLib.idle_add(GLib.PRIORITY_DEFAULT, () => { this.destroyNow(); done(); return GLib.SOURCE_REMOVE; });
+        // Destroyed only after the transition has finished with the actor. The
+        // sources are this bubble's own, so disabling Notchy mid-fade removes them.
+        const finish = () => {
+            const id = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => { this.leaveSources.delete(id); this.destroyNow(); done(); return GLib.SOURCE_REMOVE; });
+            this.leaveSources.add(id);
+        };
         if (!this.content.mapped) { finish(); return; }
         let left = false;
         const once = () => { if (!left) { left = true; finish(); } };
         this.content.ease({opacity: 0, scale_x: 0.6, scale_y: 0.6, duration: 220, mode: Clutter.AnimationMode.EASE_IN_QUAD, onStopped: once});
         // Should Clutter never report the end, it leaves anyway.
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 600, () => { once(); return GLib.SOURCE_REMOVE; });
+        const guard = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 600, () => { this.leaveSources.delete(guard); once(); return GLib.SOURCE_REMOVE; });
+        this.leaveSources.add(guard);
     }
     destroyNow() {
+        for (const id of this.leaveSources) GLib.source_remove(id);
+        this.leaveSources.clear();
         if (this.life.closed) return;
         this.life.dispose(); this.unplace?.(); this.unplace = null;
         this.spinner.remove_all_transitions(); this.ring.remove_all_transitions();

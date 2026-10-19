@@ -6,6 +6,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Lifetime} from '../lifecycle.js';
 import {planSides} from './sideLayout.js';
 import {box, label} from './widgets.js';
+import {_} from '../i18n/core.js';
 
 // Gap between the indicators and GNOME's other panel items.
 const MARGIN = 16;
@@ -39,7 +40,7 @@ export class SideIndicators {
     }
     // A "+N" button per side; its menu lists what did not fit.
     group(side) {
-        const button = new PanelMenu.Button(0.5, 'Weitere Indikatoren', false);
+        const button = new PanelMenu.Button(0.5, _('More Indicators'), false);
         button.add_style_class_name('notchy-side-button');
         const content = new St.Widget({style_class: 'notchy-side-group', layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
         const count = label('', 'notchy-side-group-count', {x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
@@ -107,7 +108,9 @@ export class SideIndicators {
         const measured = wanted.map(item => {
             return {id: item.id, order: item.order, priority: item.priority(), preferred: item.preferred?.() ?? null, width: Math.ceil(item.actor.get_preferred_width(-1)[1])};
         });
-        const plan = planSides(measured, this.capacity, this.sides, {auto: this.settings.get_boolean('agents-auto-layout'), spacing: SPACING, groupWidth: Math.max(26, Main.panel.height - 4)});
+        // The "+N" group is planned with exactly the size it is drawn with.
+        const size = Math.max(22, Main.panel.height - (this.settings.get_string('style') === 'liquid' ? 6 : 4)), groupWidth = Math.max(size, 30);
+        const plan = planSides(measured, this.capacity, this.sides, {auto: this.settings.get_boolean('agents-auto-layout'), spacing: SPACING, groupWidth});
         for (const [id, side] of plan.sides) this.sides.set(id, side);
         const placed = new Set();
         for (const side of ['left', 'right']) {
@@ -124,16 +127,16 @@ export class SideIndicators {
                 } else if (row.get_child_at_index(index) !== actor) row.set_child_at_index(actor, index);
             });
             for (const id of ids) { this.items.get(id).actor.visible = true; placed.add(id); }
-            group.button.container.visible = plan.hidden[side].length > 0;
+            // The group only where it fits (sideLayout.js); else nothing of it shows.
+            group.button.container.visible = plan.groups[side] && plan.hidden[side].length > 0;
             // A PopupMenu never opens while empty: the list is kept current.
             const changed = group.ids.join() !== plan.hidden[side].join();
             group.ids = plan.hidden[side];
             if (changed) this.fillGroup(side);
             group.count.text = `+${group.ids.length}`;
             group.content.set_style_class_name(`notchy-side-group notchy-${this.settings.get_string('style')}`);
-            const size = Math.max(22, Main.panel.height - (this.settings.get_string('style') === 'liquid' ? 6 : 4));
-            group.content.set_size(Math.max(size, 30), size);
-            if (!group.ids.length && group.button.menu.isOpen) group.button.menu.close();
+            group.content.set_size(groupWidth, size);
+            if ((!group.ids.length || !plan.groups[side]) && group.button.menu.isOpen) group.button.menu.close();
         }
         for (const item of this.items.values()) if (!placed.has(item.id)) item.actor.visible = false;
         // Equal widths: the notch keeps its place in the middle of the bar.

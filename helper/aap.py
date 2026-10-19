@@ -112,7 +112,8 @@ class Replay:
     """The headless test's stand-in for the L2CAP socket: recorded packets in,
     sent packets logged."""
     def __init__(self, path, log):
-        self.packets = [bytes.fromhex(line.strip()) for line in open(path) if line.strip() and not line.startswith('#')]
+        with open(path, encoding='utf-8') as source:
+            self.packets = [bytes.fromhex(line.strip()) for line in source if line.strip() and not line.startswith('#')]
         self.log = log
         self.read, self.write = os.pipe()
         for _ in self.packets:
@@ -197,7 +198,7 @@ def run(mac, out=sys.stdout, stdin=sys.stdin):
             if not replay and step != 'ready' and time.monotonic() >= deadline:
                 if step == 'handshake':
                     if tries >= HANDSHAKE_TRIES:
-                        raise OSError('Die AirPods antworten nicht auf den Handshake')
+                        raise OSError('the AirPods do not answer the handshake')
                     channel.send(HANDSHAKE)
                     tries, deadline = tries + 1, time.monotonic() + HANDSHAKE_WAIT
                 elif step == 'features':

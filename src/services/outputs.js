@@ -1,6 +1,7 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {Emitter, Lifetime} from '../lifecycle.js';
+import {_} from '../i18n/core.js';
 
 // AirPlay receivers appear as RAOP sinks named "raop_sink.<host>…".
 export const isAirPlay = sink => /^raop_sink\./.test(sink?.get_name?.() ?? '');
@@ -68,9 +69,9 @@ export class Outputs extends Emitter {
             proc.wait_async(null, (p, result) => {
                 try { p.wait_finish(result); } catch { /* Already ended. */ }
                 if (this.proc !== p) return;
-                this.proc = null; this.error = 'AirPlay-Suche wurde beendet.'; this.changed();
+                this.proc = null; this.error = _('The AirPlay search has ended.'); this.changed();
             });
-        } catch (e) { this.proc = null; this.error = 'PipeWire ist nicht verfügbar.'; console.warn(`Notchy AirPlay: ${e.message}`); }
+        } catch (e) { this.proc = null; this.error = _('PipeWire is not available.'); console.warn(`Notchy AirPlay: ${e.message}`); }
     }
     stop() {
         const proc = this.proc; this.proc = null;

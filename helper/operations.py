@@ -11,14 +11,16 @@ import tempfile
 from urllib.parse import urlparse, unquote
 import zipfile
 
+from i18n import _, ngettext, number
+
 
 def local_path(uri):
     parsed = urlparse(uri)
     if parsed.scheme != 'file' or parsed.netloc not in ('', 'localhost'):
-        raise ValueError('Nur lokale Dateien werden unterstützt.')
+        raise ValueError(_('Only local files are supported.'))
     path = Path(unquote(parsed.path))
     if not path.exists():
-        raise ValueError('Die Quelldatei existiert nicht mehr.')
+        raise ValueError(_('The source file no longer exists.'))
     return path
 
 
@@ -26,13 +28,13 @@ def executable(*names):
     for name in names:
         if command := shutil.which(name):
             return command
-    raise ValueError('Benötigtes Programm fehlt: ' + ' / '.join(names))
+    raise ValueError(_('A required program is missing: %s') % ' / '.join(names))
 
 
 active_process = None
 
 
-def terminate(*_):
+def terminate(*_args):
     if active_process and active_process.poll() is None:
         try:
             os.killpg(active_process.pid, signal.SIGKILL)
@@ -48,7 +50,7 @@ def execute(args, timeout=600):
     try:
         stdout, stderr = active_process.communicate(timeout=timeout)
         if active_process.returncode:
-            raise ValueError(stderr[-600:] or 'Dateiverarbeitung fehlgeschlagen.')
+            raise ValueError(stderr[-600:] or _('Processing the file failed.'))
         return stdout
     finally:
         if active_process.poll() is None:
@@ -85,12 +87,13 @@ def process(action, uri, option=''):
         # One archive for a Regal selection; duplicate names get a counter.
         sources = [local_path(item) for item in json.loads(option)][:200]
         if not sources:
-            raise ValueError('Keine Dateien ausgewählt.')
-        destination = output_path(Path('Archiv'), '.zip')
+            raise ValueError(_('No files selected.'))
+        # Translators: the file name (without .zip) of an archive of several files.
+        destination = output_path(Path(_('Archive')), '.zip')
         with zipfile.ZipFile(destination, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
             for item in sources:
                 add_to_zip(archive, item)
-        return {'uri': destination.as_uri(), 'message': f'{len(sources)} Dateien gepackt · {destination.name} im Regal'}
+        return {'uri': destination.as_uri(), 'message': ngettext('%(count)d file compressed · %(name)s is in the Shelf', '%(count)d files compressed · %(name)s is in the Shelf', len(sources)) % {'count': len(sources), 'name': destination.name}}
     if action == 'copy':
         destination = output_path(source, source.suffix)
         shutil.copyfile(source, destination)
@@ -100,7 +103,7 @@ def process(action, uri, option=''):
             add_to_zip(archive, source)
     elif action == 'image':
         if option not in ('png', 'jpg', 'webp', 'tiff', 'bmp', 'gif'):
-            raise ValueError('Nicht unterstütztes Bildformat.')
+            raise ValueError(_('Unsupported picture format.'))
         destination = output_path(source, '.' + option)
         execute([executable('magick', 'convert'), str(source), str(destination)])
     elif action == 'pdf-compress':
@@ -115,11 +118,11 @@ def process(action, uri, option=''):
                      '--convert-to', 'pdf', '--outdir', temp, str(source)])
             result = Path(temp, source.stem + '.pdf')
             if not result.exists():
-                raise ValueError('LibreOffice hat keine PDF-Datei erzeugt.')
+                raise ValueError(_('LibreOffice did not create a PDF file.'))
             shutil.copyfile(result, destination)
     elif action == 'ocr':
         text = execute([executable('tesseract'), str(source), 'stdout'])
-        return {'text': text.strip(), 'message': 'Erkannter Text wurde kopiert.'}
+        return {'text': text.strip(), 'message': _('The recognized text was copied.')}
     elif action == 'background':
         destination = output_path(source, '.png')
         execute([executable('rembg'), 'i', str(source), str(destination)])
@@ -127,27 +130,27 @@ def process(action, uri, option=''):
         try:
             mb = int(option)
         except ValueError:
-            raise ValueError('Ungültige Zielgröße.') from None
+            raise ValueError(_('Invalid target size.')) from None
         if not 1 <= mb <= 2000:
-            raise ValueError('Zielgröße muss zwischen 1 und 2000 MB liegen.')
+            raise ValueError(_('The target size must be between 1 and 2000 MB.'))
         duration = float(execute([executable('ffprobe'), '-v', 'error', '-show_entries',
                                  'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', str(source)]))
         if duration <= 0:
-            raise ValueError('Videolänge ist ungültig.')
+            raise ValueError(_('The video length is not valid.'))
         # Two-pass encoding, reserve container overhead and audio budget.
         bitrate = int(mb * 1024 * 1024 * 8 * .96 / duration - 128000)
         if bitrate < 32000:
-            raise ValueError('Zielgröße ist zu klein für diese Videolänge.')
+            raise ValueError(_('The target size is too small for this video length.'))
         destination = output_path(source, '.mp4')
         with tempfile.TemporaryDirectory(prefix='notchy-ffmpeg-') as temp:
             args = [executable('ffmpeg'), '-nostdin', '-y', '-i', str(source), '-c:v', 'libx264',
                     '-b:v', str(bitrate), '-passlogfile', str(Path(temp, 'pass'))]
             execute(args + ['-pass', '1', '-an', '-f', 'null', '/dev/null'], timeout=3600)
             execute(args + ['-pass', '2', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', str(destination)], timeout=3600)
-        return {'uri': destination.as_uri(), 'message': f'Video komprimiert ({destination.stat().st_size / 1048576:.1f} MB). Die Zielgröße ist eine Näherung.'}
+        return {'uri': destination.as_uri(), 'message': _('Video compressed (%s MB). The target size is an approximation.') % number(destination.stat().st_size / 1048576)}
     else:
-        raise ValueError('Unbekannte Aktion.')
-    return {'uri': destination.as_uri(), 'message': f'Erstellt: {destination.name}'}
+        raise ValueError(_('Unknown action.'))
+    return {'uri': destination.as_uri(), 'message': _('Created: %s') % destination.name}
 
 
 if __name__ == '__main__':

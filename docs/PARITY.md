@@ -24,7 +24,7 @@ Reference date: 15 October 2026 (redesign "Droppy for GNOME"). Based on [Droppy'
 | Lock screen | Open | No session on the lock screen |
 | Droppy Cloud, iPhone sync, LocalSend | Open | Needs its own backend/protocol |
 | MCP | Local stdio bridge for the shelf and agent status | Limited set of tools |
-| Localisation | German UI | No other languages yet |
+| Localisation | German and English (gettext), automatic from the system language or chosen in the settings | No other languages yet; a new one is a `po/LL.po` |
 
 ## Droplets
 

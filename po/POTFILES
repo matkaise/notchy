@@ -1,0 +1,10 @@
+# Files with translatable strings (globs relative to the repository), for scripts/i18n.py.
+extension.js
+prefs.js
+src/*.js
+src/i18n/*.js
+src/launcher/*.js
+src/services/*.js
+src/ui/*.js
+helper/*.py
+scripts/notchyctl

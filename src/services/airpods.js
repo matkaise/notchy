@@ -1,6 +1,8 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {Emitter, Lifetime} from '../lifecycle.js';
+import {helperLauncher} from '../i18n/gnome.js';
+import {_} from '../i18n/core.js';
 import {BatteryCache} from './batteries.js';
 
 // AirPods through airpods-helper (github.com/superninjv/airpods-helper): its
@@ -225,19 +227,19 @@ export class AirPods extends Emitter {
         }
     }
     call(method, params = null) {
-        if (!this.proxy) return Promise.reject(Error('airpods-helper läuft nicht'));
+        if (!this.proxy) return Promise.reject(Error(_('airpods-helper is not running')));
         return new Promise((resolve, reject) => this.proxy.call(method, params, Gio.DBusCallFlags.NONE, 8000, this.cancellable, (proxy, result) => {
             try { resolve(proxy.call_finish(result)); } catch (e) { reject(e); }
         }));
     }
     setAnc(mode) {
-        if (!ANC_MODES.includes(mode) || !this.modes.includes(mode)) return Promise.reject(Error('Modus nicht unterstützt'));
+        if (!ANC_MODES.includes(mode) || !this.modes.includes(mode)) return Promise.reject(Error(_('Mode not supported')));
         return this.proxy ? this.call('SetAncMode', new GLib.Variant('(s)', [mode])) : this.aapCommand({anc: mode});
     }
     setConversationAwareness(on) { return this.proxy ? this.call('SetConversationalAwareness', new GLib.Variant('(b)', [on])) : this.aapCommand({conversation: Boolean(on)}); }
     // The daemon's own setting; Notchy just switches it.
     setPauseOnRemoval(on) {
-        if (!this.proxy) return Promise.reject(Error('airpods-helper läuft nicht'));
+        if (!this.proxy) return Promise.reject(Error(_('airpods-helper is not running')));
         return new Promise((resolve, reject) => Gio.DBus.session.call(HELPER_NAME, PATH, 'org.freedesktop.DBus.Properties', 'Set', new GLib.Variant('(ssv)', [IFACE, 'PauseOnRemoval', new GLib.Variant('b', on)]),
             null, Gio.DBusCallFlags.NONE, 5000, this.cancellable, (connection, result) => { try { resolve(connection.call_finish(result)); } catch (e) { reject(e); } }));
     }
@@ -247,7 +249,7 @@ export class AirPods extends Emitter {
             if (address) return this.call('ConnectTo', new GLib.Variant('(s)', [address]));
             try { return await this.call('Reconnect'); } catch {
                 const [paired] = (await this.call('ListPaired')).deep_unpack();
-                if (!paired.length) throw Error('Keine gekoppelten AirPods');
+                if (!paired.length) throw Error(_('No paired AirPods'));
                 return this.call('ConnectTo', new GLib.Variant('(s)', [paired[0][0]]));
             }
         }
@@ -321,7 +323,7 @@ export class AirPods extends Emitter {
     }
     startAap(address) {
         try {
-            const launcher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE});
+            const launcher = helperLauncher(this.settings, Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
             for (const name of ['NOTCHY_AAP_REPLAY', 'NOTCHY_AAP_LOG']) { const value = GLib.getenv(name); if (value) launcher.setenv(name, value, true); }
             const proc = launcher.spawnv(['/usr/bin/python3', `${this.extension.path}/helper/aap.py`, address]);
             const aap = this.aap = {address, proc, state: null, stdin: proc.get_stdin_pipe(), stdout: new Gio.DataInputStream({base_stream: proc.get_stdout_pipe(), close_base_stream: true})};
@@ -353,12 +355,12 @@ export class AirPods extends Emitter {
     }
     aapCommand(command) {
         const aap = this.aap;
-        if (!aap?.state?.connected) return Promise.reject(Error('AirPods nicht verbunden'));
+        if (!aap?.state?.connected) return Promise.reject(Error(_('AirPods are not connected')));
         return new Promise((resolve, reject) => aap.stdin.write_bytes_async(new GLib.Bytes(new TextEncoder().encode(`${JSON.stringify(command)}\n`)), GLib.PRIORITY_DEFAULT, this.cancellable,
             (stream, result) => { try { stream.write_bytes_finish(result); resolve(); } catch (e) { reject(e); } }));
     }
     bluezCall(method) {
-        const device = this.bluez?.device; if (!device) return Promise.reject(Error('Keine AirPods gefunden'));
+        const device = this.bluez?.device; if (!device) return Promise.reject(Error(_('No AirPods found')));
         return new Promise((resolve, reject) => this.bluez.bus.call('org.bluez', device.path, 'org.bluez.Device1', method, null, null, Gio.DBusCallFlags.NONE, 20000, this.cancellable,
             (connection, result) => { try { resolve(connection.call_finish(result)); } catch (e) { reject(e); } }));
     }

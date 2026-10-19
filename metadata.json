@@ -7,5 +7,6 @@
   ],
   "version": 9,
   "settings-schema": "org.gnome.shell.extensions.notchy",
+  "gettext-domain": "notchy",
   "url": "https://github.com/matkaise/notchy"
 }

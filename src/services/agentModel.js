@@ -12,6 +12,14 @@
 // The state shown is 'disconnected' once the session ended, else the task.
 // Only events from the agent itself (its hooks) or an explicit report change a
 // state; a running process alone never means "working".
+//
+// An ended session stays ended: hooks run as separate processes, so a
+// PostToolUse or Stop can arrive after SessionEnd — even with a newer
+// timestamp. Only a new start (SessionStart, `notchyctl agent start`, or an
+// explicit report from notchyctl or MCP) brings a session id back, as a new
+// generation. Ended ids are remembered for a while (TOMBSTONE_MS) after their
+// indicator faded, so a straggler cannot create them again either.
+import {_, N_, fmt} from '../i18n/core.js';
 
 export const STATES = ['working', 'waiting', 'idle', 'completed', 'error', 'disconnected'];
 export const TASK_STATES = ['working', 'waiting', 'idle', 'completed', 'error'];
@@ -38,8 +46,27 @@ export const providerName = id => PROVIDERS[id]?.name ?? id.replace(/(^|[-_])(\w
 //   heartbeat  still alive, no change
 //   update     explicit state and/or status/progress (notchyctl, MCP)
 export const EVENTS = {start: 'idle', prompt: 'working', tool: 'working', waiting: 'waiting', resume: 'working', stop: 'completed', idle: 'idle', error: 'error', end: 'disconnected', heartbeat: null, update: null};
-const STATUS_TEXT = {working: 'Arbeitet', waiting: 'Wartet auf dich', idle: 'Bereit', completed: 'Fertig', error: 'Fehler', disconnected: 'Beendet'};
-export const stateText = state => STATUS_TEXT[state] ?? '';
+// Events with the same millisecond keep the order a session goes through:
+// an earlier step never overrides a later one (Stop beats a PostToolUse,
+// PermissionRequest beats its PreToolUse). Explicit updates always apply.
+export const EVENT_RANK = {start: 0, prompt: 1, tool: 2, resume: 2, waiting: 3, idle: 4, stop: 4, error: 4, end: 5};
+const STATUS_TEXT = {working: N_('Working'), waiting: N_('Waiting for you'), idle: N_('Ready'), completed: N_('Done'), error: N_('Error'), disconnected: N_('Ended')};
+export const stateText = state => (STATUS_TEXT[state] ? _(STATUS_TEXT[state]) : '');
+// What a hook says beyond its state, as an id (shown translated, see statusText).
+export const NOTES = ['tool', 'permission', 'question', 'reply-failed', 'run-failed', 'interrupted'];
+// A session's status line: its hook note in the interface language, or the
+// free text an explicit report gave.
+export function statusText(session) {
+    switch (session?.note) {
+    case 'tool': return session.tool ? fmt(_('Tool: %s'), session.tool) : '';
+    case 'permission': return session.tool ? fmt(_('Approval for %s'), session.tool) : _('Approval needed');
+    case 'question': return _('Question for you');
+    case 'reply-failed': return _('Reply failed');
+    case 'run-failed': return _('Run failed');
+    case 'interrupted': return _('Interrupted');
+    default: return session?.status ?? '';
+    }
+}
 
 // Limits: what Notchy accepts from the session bus.
 export const LIMITS = {sessions: 32, perProvider: 12, text: 140, project: 60, session: 128, ancestors: 16};
@@ -53,6 +80,8 @@ export const QUIET_IDLE_MS = 2 * 3600 * 1000, QUIET_WORKING_MS = 8 * 3600 * 1000
 export const HEARTBEAT_MISSES = 3;
 // A disconnected session stays this long for its fade-out.
 export const GONE_MS = 1600;
+// An ended session id ignores stragglers this long after it ended.
+export const TOMBSTONE_MS = 2 * 60 * 1000;
 // Events may arrive slightly out of order (hooks run as separate processes);
 // an event older than the newest one applied is ignored for the state.
 export const CLOCK_SLACK_MS = 0;
@@ -63,22 +92,22 @@ const clean = (text, max) => String(text ?? '').replace(/[\u0000-\u001f\u007f]+/
 // Validates and normalises one event; returns {error} or {event}.
 export function parseEvent(input, now = Date.now()) {
     let raw = input;
-    if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return {error: 'Kein gültiges JSON'}; } }
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {error: 'Ereignis muss ein Objekt sein'};
+    if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return {error: _('Not valid JSON')}; } }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {error: _('An event must be an object')};
     const provider = String(raw.provider ?? '').toLowerCase();
-    if (!PROVIDER_RE.test(provider)) return {error: 'Ungültiger Anbieter'};
+    if (!PROVIDER_RE.test(provider)) return {error: _('Invalid provider')};
     const session = clean(raw.session, LIMITS.session);
-    if (!session) return {error: 'Session-ID fehlt'};
+    if (!session) return {error: _('Session id missing')};
     const kind = String(raw.event ?? 'update');
-    if (!(kind in EVENTS)) return {error: `Unbekanntes Ereignis: ${kind}`};
+    if (!(kind in EVENTS)) return {error: fmt(_('Unknown event: %s'), kind)};
     let state = raw.state === undefined || raw.state === null || raw.state === '' ? null : String(raw.state);
-    if (state !== null && !STATES.includes(state)) return {error: `Unbekannter Zustand: ${state}`};
-    if (kind === 'update' && state === null && raw.status === undefined && raw.progress === undefined && raw.project === undefined) return {error: 'update ohne Zustand, Status oder Fortschritt'};
+    if (state !== null && !STATES.includes(state)) return {error: fmt(_('Unknown state: %s'), state)};
+    if (kind === 'update' && state === null && raw.status === undefined && raw.progress === undefined && raw.project === undefined) return {error: _('update without state, status or progress')};
     let progress;
     if (raw.progress === null) progress = null;
     else if (raw.progress !== undefined) {
         const value = Number(raw.progress);
-        if (typeof raw.progress === 'boolean' || !Number.isFinite(value) || value < 0 || value > 1) return {error: 'Fortschritt muss zwischen 0 und 1 liegen'};
+        if (typeof raw.progress === 'boolean' || !Number.isFinite(value) || value < 0 || value > 1) return {error: _('Progress must be between 0 and 1')};
         progress = value;
     }
     const time = Number.isFinite(raw.time) && raw.time > 0 && Math.abs(raw.time - now) < 86400000 ? Math.round(raw.time) : now;
@@ -87,27 +116,50 @@ export function parseEvent(input, now = Date.now()) {
     const heartbeat = Number.isFinite(raw.heartbeat) && raw.heartbeat >= 5 && raw.heartbeat <= 3600 ? Math.round(raw.heartbeat) : null;
     return {event: {provider, session, kind, state: state ?? EVENTS[kind], status: raw.status === undefined ? undefined : clean(raw.status, LIMITS.text),
         project: raw.project === undefined ? undefined : clean(raw.project, LIMITS.project), progress, time, pid, pidStart: raw.pidStart === undefined ? null : clean(raw.pidStart, 24),
-        ancestors, heartbeat, source: ['hook', 'cli', 'mcp'].includes(raw.source) ? raw.source : 'cli', tool: raw.tool === undefined ? undefined : clean(raw.tool, 40)}};
+        ancestors, heartbeat, source: ['hook', 'cli', 'mcp'].includes(raw.source) ? raw.source : 'cli', tool: raw.tool === undefined ? undefined : clean(raw.tool, 40),
+        note: raw.note === '' ? '' : NOTES.includes(raw.note) ? raw.note : undefined}};
 }
 
 // The sessions and their states. apply() returns what changed:
 // {changed: bool, session, transition: 'appeared' | 'completed' | 'ended' | null}.
 export class AgentRegistry {
-    constructor() { this.sessions = new Map(); }
+    constructor() { this.sessions = new Map(); this.ended = new Map(); this.generations = 0; }
     key(provider, session) { return `${provider}\u0000${session}`; }
     get(provider, session) { return this.sessions.get(this.key(provider, session)) ?? null; }
+    // Whether an event may (re)open a session that ended: a start, or an
+    // explicit report from notchyctl or MCP — never a late hook event — and
+    // only if it is newer than the end.
+    reopens(event, ended) {
+        if (event.kind === 'end' || event.kind === 'heartbeat' || event.state === 'disconnected') return false;
+        if (event.kind !== 'start' && event.source === 'hook') return false;
+        return !ended || event.time > ended.lastEvent;
+    }
+    bury(key, session, now) {
+        this.ended.set(key, {at: now, lastEvent: Math.max(session.lastEvent, session.endEvent ?? 0)});
+        if (this.ended.size > 256) this.ended.delete(this.ended.keys().next().value);
+    }
     apply(event, now = Date.now()) {
         const key = this.key(event.provider, event.session);
         let session = this.sessions.get(key), appeared = false;
+        const ended = this.ended.get(key);
+        if (ended && now - ended.at > TOMBSTONE_MS) this.ended.delete(key);
         if (!session) {
-            // An event for a session that already ended (a late hook) does not revive it.
-            if (event.kind === 'end' || event.state === 'disconnected') return {changed: false, session: null, transition: null};
+            // An event for a session that ended (a late hook) does not revive it.
+            if (!this.reopens(event, this.ended.get(key)) && (this.ended.has(key) || event.kind === 'end' || event.state === 'disconnected'))
+                return {changed: false, session: null, transition: null};
             if (this.sessions.size >= LIMITS.sessions) this.evict(now);
             if ([...this.sessions.values()].filter(s => s.provider === event.provider).length >= LIMITS.perProvider) this.evict(now, event.provider);
-            session = {id: event.session, provider: event.provider, project: '', status: '', progress: null, task: 'idle', connected: true,
-                started: event.time, lastEvent: 0, lastActivity: event.time, seen: now, completedAt: 0, endedAt: 0, pid: null, pidStart: null,
-                ancestors: [], heartbeat: null, source: event.source, tool: ''};
-            this.sessions.set(key, session); appeared = true;
+            session = this.fresh(event, now);
+            this.sessions.set(key, session); this.ended.delete(key); appeared = true;
+        } else if (!session.connected) {
+            // Still fading out after its end.
+            if (!this.reopens(event, {lastEvent: session.lastEvent})) {
+                session.seen = now;
+                return {changed: false, session, transition: null};
+            }
+            const started = this.fresh(event, now);
+            Object.assign(session, started);
+            this.ended.delete(key); appeared = true;
         }
         const before = JSON.stringify(session);
         session.seen = now;
@@ -116,27 +168,43 @@ export class AgentRegistry {
         if (event.heartbeat) session.heartbeat = event.heartbeat;
         if (event.project !== undefined && event.project) session.project = event.project;
         let transition = appeared ? 'appeared' : null;
-        // Out of order: an older event than the newest applied one only refreshes liveness.
-        const current = event.time >= session.lastEvent - CLOCK_SLACK_MS;
+        // Out of order: an older event than the newest applied one only
+        // refreshes liveness; one of the same millisecond applies only if it is
+        // not an earlier step (EVENT_RANK).
+        const rank = EVENT_RANK[event.kind];
+        // An end always ends this generation, even when its hook process took
+        // its time a moment before a step that arrived first.
+        const current = (event.state === 'disconnected' && event.time >= session.started)
+            || event.time > session.lastEvent - CLOCK_SLACK_MS
+            || (event.time === session.lastEvent && (rank === undefined || session.lastRank === undefined || rank >= session.lastRank));
         if (current && event.kind !== 'heartbeat') {
+            if (event.time >= session.lastEvent) session.lastRank = rank;
             session.lastEvent = Math.max(session.lastEvent, event.time);
             if (event.state === 'disconnected') {
-                session.connected = false; session.endedAt = now; transition = 'ended';
+                session.connected = false; session.endedAt = now; session.endEvent = event.time; transition = 'ended';
+                this.bury(key, session, now);
             } else if (event.state) {
-                if (!session.connected) { session.connected = true; session.endedAt = 0; }
                 if (event.state === 'completed' && session.task !== 'completed') transition = transition ?? 'completed';
                 session.task = event.state;
                 session.completedAt = event.state === 'completed' ? now : 0;
                 if (event.state === 'working' || event.state === 'waiting') session.lastActivity = event.time;
                 // A new task starts without the old one's progress and text.
-                if (event.kind === 'prompt') { session.progress = null; session.status = ''; }
+                if (event.kind === 'prompt') { session.progress = null; session.status = ''; session.note = ''; }
                 if (event.state !== 'working') session.tool = '';
             }
             if (event.tool !== undefined) session.tool = event.tool;
             if (event.status !== undefined) session.status = event.status;
+            if (event.note !== undefined) session.note = event.note;
             if (event.progress !== undefined) session.progress = event.progress;
         }
         return {changed: JSON.stringify(session) !== before || appeared, session, transition};
+    }
+    // A session as it starts: idle, connected, a new generation (the
+    // indicator's popup tells a reopened id from the one that ended).
+    fresh(event, now) {
+        return {id: event.session, provider: event.provider, project: '', status: '', note: '', progress: null, task: 'idle', connected: true,
+            started: event.time, lastEvent: 0, lastRank: undefined, lastActivity: event.time, seen: now, completedAt: 0, endedAt: 0, endEvent: 0, pid: null, pidStart: null,
+            ancestors: [], heartbeat: null, source: event.source, tool: '', generation: ++this.generations};
     }
     // Time passing: completed → idle, quiet and orphaned sessions, the fade of
     // ended ones. `alive(session)` tells whether its process still runs
@@ -154,8 +222,9 @@ export class AgentRegistry {
             const orphan = living === false
                 || (living === null && session.heartbeat && quiet > session.heartbeat * 1000 * HEARTBEAT_MISSES)
                 || (living === null && !session.heartbeat && quiet > (['working', 'waiting'].includes(session.task) ? QUIET_WORKING_MS : QUIET_IDLE_MS));
-            if (orphan) { session.connected = false; session.endedAt = now; session.orphaned = true; changed = true; }
+            if (orphan) { session.connected = false; session.endedAt = now; session.orphaned = true; changed = true; this.bury(key, session, now); }
         }
+        for (const [key, grave] of this.ended) if (now - grave.at > TOMBSTONE_MS) this.ended.delete(key);
         return changed;
     }
     // Make room: the least important, longest quiet session goes.
@@ -166,7 +235,7 @@ export class AgentRegistry {
     }
     end(provider, session, now = Date.now()) {
         const s = this.get(provider, session); if (!s || !s.connected) return false;
-        s.connected = false; s.endedAt = now; return true;
+        s.connected = false; s.endedAt = now; this.bury(this.key(provider, session), s, now); return true;
     }
     list() { return [...this.sessions.values()]; }
     // Per provider: its sessions, most urgent first, and the state its indicator shows.
@@ -192,7 +261,7 @@ export class AgentRegistry {
             return {provider, name: providerName(provider), state, priority: PRIORITY[state], sessions, count: live.length, progress};
         });
     }
-    toJSON() { return this.list().map(s => ({...s, state: shownState(s)})); }
+    toJSON() { return this.list().map(s => ({...s, state: shownState(s), statusText: statusText(s)})); }
 }
 export const shownState = session => (session.connected ? session.task : 'disconnected');
 
@@ -215,33 +284,33 @@ export function hookEvent(provider, payload) {
     case 'claude:UserPromptSubmit': case 'codex:UserPromptSubmit': case 'antigravity:PreInvocation':
         return {...base, event: 'prompt'};
     case 'claude:PreToolUse': case 'codex:PreToolUse':
-        return {...base, event: 'tool', tool: String(tool ?? ''), status: tool ? `Werkzeug: ${tool}` : undefined};
+        return {...base, event: 'tool', tool: String(tool ?? ''), note: tool ? 'tool' : undefined};
     case 'claude:PostToolUse': case 'claude:PostToolUseFailure': case 'claude:PostToolBatch': case 'codex:PostToolUse': case 'antigravity:PostToolUse':
     case 'claude:PermissionDenied':
-        return {...base, event: 'tool', tool: '', status: ''};
+        return {...base, event: 'tool', tool: '', note: ''};
     case 'antigravity:PostInvocation':
         return {...base, event: 'resume'};
     case 'claude:PermissionRequest': case 'codex:PermissionRequest':
-        return {...base, event: 'waiting', status: tool ? `Freigabe für ${tool}` : 'Freigabe nötig'};
+        return {...base, event: 'waiting', tool: tool ? String(tool) : '', note: 'permission'};
     case 'claude:Notification': {
         const type = payload.notification_type;
-        if (type === 'permission_prompt') return {...base, event: 'waiting', status: 'Freigabe nötig'};
-        if (type === 'elicitation_dialog') return {...base, event: 'waiting', status: 'Frage an dich'};
+        if (type === 'permission_prompt') return {...base, event: 'waiting', note: 'permission'};
+        if (type === 'elicitation_dialog') return {...base, event: 'waiting', note: 'question'};
         if (type === 'idle_prompt') return {...base, event: 'idle'};
         return null;
     }
     case 'claude:Elicitation':
-        return {...base, event: 'waiting', status: 'Frage an dich'};
+        return {...base, event: 'waiting', note: 'question'};
     case 'claude:ElicitationResult':
         return {...base, event: 'resume'};
     case 'claude:Stop': case 'codex:Stop':
         return {...base, event: 'stop'};
     case 'claude:StopFailure':
-        return {...base, event: 'error', status: 'Antwort fehlgeschlagen'};
+        return {...base, event: 'error', note: 'reply-failed'};
     case 'codex:Interrupt':
-        return {...base, event: 'idle', status: 'Abgebrochen'};
+        return {...base, event: 'idle', note: 'interrupted'};
     case 'antigravity:Stop': {
-        if (payload.error) return {...base, event: 'error', status: 'Ausführung fehlgeschlagen'};
+        if (payload.error) return {...base, event: 'error', note: 'run-failed'};
         return {...base, event: payload.fullyIdle === false ? 'resume' : 'stop'};
     }
     case 'claude:SessionEnd': case 'codex:SessionEnd':
