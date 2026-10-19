@@ -10,61 +10,122 @@ import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
 gi.require_version('Graphene', '1.0')
-from gi.repository import Gdk, Gio, GLib, Graphene, Gtk
+gi.require_version('Gsk', '4.0')
+gi.require_version('GdkPixbuf', '2.0')
+from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Graphene, Gsk, Gtk
 from i18n import _, ngettext
+from icons import image
 
 BUS = 'org.gnome.Shell.Extensions.Notchy'
 PATH = '/org/gnome/Shell/Extensions/Notchy'
 IMAGES = ('.png', '.jpg', '.jpeg', '.webp', '.heic', '.tiff', '.bmp', '.gif', '.svg')
-# File-type tints (Droppy for GNOME palette), matching the Shell preview.
-EXT_CLASS = {'pdf': 'pdf', 'md': 'text', 'txt': 'text', 'zip': 'archive', 'gz': 'archive', 'tar': 'archive'}
+# A file's kind: the colour of its type label (matching the Shell preview).
+KINDS = {'pdf': 'pdf', 'md': 'text', 'txt': 'text', 'json': 'text', 'csv': 'text', 'log': 'text',
+         'zip': 'archive', 'gz': 'archive', 'tar': 'archive', 'xz': 'archive', '7z': 'archive', 'rar': 'archive',
+         'mp4': 'video', 'mkv': 'video', 'webm': 'video', 'mov': 'video', 'avi': 'video',
+         'mp3': 'audio', 'flac': 'audio', 'ogg': 'audio', 'wav': 'audio', 'm4a': 'audio', 'opus': 'audio',
+         'doc': 'doc', 'docx': 'doc', 'odt': 'doc', 'rtf': 'doc', 'xls': 'doc', 'xlsx': 'doc', 'ods': 'doc', 'ppt': 'doc', 'pptx': 'doc', 'odp': 'doc'}
 # The Shell shows this pane on top of the island's glass (Island.syncPane); the
 # pane itself stays clear there and only paints Dynamic Glass's black shade.
 CLEAR = 'rgba(0,0,0,0)'
-# Notchy's own symbols, shared with the Shell (symbolic, so GTK recolours them).
-ICONS = Path(__file__).resolve().parent.parent / 'src' / 'icons'
+# The Korb's window (Companion.open places it) and its fanned stack.
+BASKET = (280, 262)
+FAN = (190, 100)
 
 
 def airdrop_image():
-    return Gtk.Image(gicon=Gio.FileIcon.new(Gio.File.new_for_path(str(ICONS / 'notchy-airdrop-symbolic.svg'))))
+    return image('notchy-airdrop-symbolic')
+
+
+# Buttons keep the focus where it was when clicked: a header button that hides
+# itself (the selection changed) would hand it to a tile, and the grid selects
+# the tile it focuses, replacing the selection just made. The keyboard still
+# reaches them with Tab.
+def icon_button(name, tooltip, classes=('circle',), **props):
+    return Gtk.Button(child=image(name), tooltip_text=tooltip, css_classes=list(classes), focus_on_click=False, **props)
+
+
+def pill(icon, text, tooltip, callback, classes=()):
+    # A labelled action: its icon, a short word, the full name as tooltip.
+    content = Gtk.Box(spacing=7, halign=Gtk.Align.CENTER)
+    content.append(icon if isinstance(icon, Gtk.Widget) else image(icon))
+    content.append(Gtk.Label(label=text))
+    button = Gtk.Button(child=content, tooltip_text=tooltip, css_classes=['pill', *classes], focus_on_click=False)
+    button.connect('clicked', lambda *_: callback())
+    return button
+
+
+def size_text(size):
+    return GLib.format_size(size) if size else ''
 CSS = '''
 * { color: #f4f4f6; }
+.title { font-size: 15px; font-weight: 700; }
 .count { font-size: 12.5px; color: rgba(255,255,255,0.6); }
-.hint { font-size: 11.5px; color: rgba(255,255,255,0.45); }
-.title { font-size: 12.5px; font-weight: 700; }
-button { background: rgba(255,255,255,0.08); border-radius: 15px; padding: 4px 12px; box-shadow: none; border: none; min-height: 22px; font-size: 12px; }
-button:hover { background: rgba(255,255,255,0.16); }
+button { background: #1c1c1e; border-radius: 16px; padding: 0 13px; box-shadow: none; border: none; outline: none; min-height: 32px; font-size: 12.5px; }
+button:hover { background: #2a2a2d; }
 button:disabled { opacity: 0.35; }
 button:focus-visible { outline: 1px solid rgba(255,255,255,0.35); outline-offset: -1px; }
-button.round { padding: 5px; min-width: 22px; border-radius: 15px; background: transparent; color: rgba(255,255,255,0.8); }
-button.round:hover { background: rgba(255,255,255,0.1); color: #ffffff; }
-button.wide { padding: 7px 12px; border-radius: 16px; background: rgba(255,255,255,0.12); }
-.drop-area { border-radius: 18px; border: 1.5px dashed transparent; }
-.drop-area.active { background: rgba(255,179,138,0.08); border-color: rgba(255,200,170,0.6); }
-.empty { border-radius: 18px; border: 1.5px dashed rgba(255,255,255,0.18); color: rgba(255,255,255,0.5); font-size: 12.5px; padding: 30px 0; }
-flowboxchild { border-radius: 16px; padding: 8px 6px; background: transparent; outline: none; }
-flowboxchild:hover { background: rgba(255,255,255,0.06); }
-flowboxchild:selected { background: rgba(255,179,138,0.16); box-shadow: inset 0 0 0 1.5px rgba(255,179,138,0.75); }
-.thumb { border-radius: 10px; min-width: 62px; min-height: 76px; background: rgba(255,255,255,0.1); box-shadow: 0 4px 12px rgba(0,0,0,0.25); }
-.thumb.pdf { background: #a8432f; }
-.thumb.text { background: #3f5b8c; }
-.thumb.archive { background: #8b742f; }
-.thumb picture { border-radius: 10px; }
-.ext { font-family: monospace; font-size: 9.5px; color: rgba(255,255,255,0.9); margin-bottom: 6px; }
-.name { font-size: 11.5px; }
+button label, button image { color: #d6d6da; }
+button.circle { padding: 0; min-width: 32px; border-radius: 16px; }
+button.circle.danger image { color: #ff8f84; }
+button.pill { padding: 0 13px 0 10px; }
+button.airdrop image { color: #6cb4ff; }
+button.primary { background: rgba(255,255,255,0.92); border-radius: 20px; min-height: 38px; padding: 0 18px 0 14px; font-weight: 700; outline: none; }
+button.primary:hover { background: #ffffff; }
+button.primary label, button.primary image { color: #000000; }
+button.circle.large { min-width: 38px; min-height: 38px; border-radius: 19px; }
+/* The Regal's tiles: a preview card, the name and the size beneath. */
+flowboxchild { border-radius: 16px; padding: 2px; background: transparent; outline: none; box-shadow: none; }
+flowboxchild:hover, flowboxchild:selected { background: transparent; box-shadow: none; }
+.preview { border-radius: 14px; background: #141416; border: 1px solid #232326; }
+flowboxchild:hover .preview { background: #19191c; border-color: #3a3a3e; }
+flowboxchild:selected .preview { border-color: #f2a25c; box-shadow: inset 0 0 0 1px #f2a25c; }
+.preview picture { border-radius: 13px; }
+.check { background: #f2a25c; border-radius: 10px; min-width: 20px; min-height: 20px; margin: 5px; opacity: 0; }
+.check image { color: #000000; }
+flowboxchild:selected .check { opacity: 1; }
+.sheet { min-width: 40px; min-height: 50px; border-radius: 6px; background: #2a2a2e; }
+.ext { font-size: 9px; font-weight: 700; color: #000000; background: #b8c0cc; border-radius: 4px; padding: 1px 4px; margin-bottom: 6px; }
+.ext.pdf { background: #f08a7e; }
+.ext.archive { background: #e6c36a; }
+.ext.video { background: #a99bf5; }
+.ext.audio { background: #f2a25c; }
+.ext.doc { background: #86b6f2; }
+.ext.image { background: #7fd1a8; }
+.name { font-size: 12px; }
+.size { font-size: 11px; color: rgba(255,255,255,0.5); }
 scrolledwindow.shelf-scroll > scrollbar { background: transparent; border: none; margin-left: 4px; }
-scrolledwindow.shelf-scroll > scrollbar slider { min-width: 6px; border-radius: 6px; background: rgba(255,255,255,0.24); border: 2px solid transparent; }
+scrolledwindow.shelf-scroll > scrollbar slider { min-width: 6px; margin: 0; border-radius: 6px; background: rgba(255,255,255,0.24); border: 2px solid transparent; }
 scrolledwindow.shelf-scroll > scrollbar slider:hover { background: rgba(255,255,255,0.36); }
-.basket .zone { min-height: 84px; border-radius: 16px; border: 1.5px dashed rgba(255,255,255,0.25); padding: 8px; }
-.basket .zone.active { border-color: rgba(255,200,170,0.7); background: rgba(255,179,138,0.08); }
-.basket .thumb { min-width: 38px; min-height: 48px; border-radius: 7px; }
-.basket .ext { font-size: 8.5px; margin-bottom: 4px; }
-.basket .zone-hint { font-size: 11.5px; color: rgba(255,255,255,0.65); }
+.drop-area { border-radius: 18px; }
+.drop-area.active .preview { border-color: rgba(242,162,92,0.5); }
+/* The empty Regal: a small stack of tiles, one line and a way to add files. */
+.ghost { border-radius: 12px; background: #141416; border: 1.5px solid #2c2c30; }
+.ghost.front { background: #1c1c1f; border-color: #3a3a3e; }
+.ghost.front image { color: #f2a25c; }
+.empty-title { font-size: 20px; font-weight: 700; }
+.empty-hint { font-size: 14px; color: #a3abb8; }
+/* The Korb: a well that lights up under a drag, the collected files as a fanned stack. */
+.basket .basket-icon { color: #f2a25c; }
+.basket .well { border-radius: 18px; background: #141416; border: 1.5px solid #141416; }
+.basket .well.active { background: rgba(242,162,92,0.12); border-color: #f2a25c; }
+.basket .badge { background: #2e2419; border-radius: 22px; min-width: 44px; min-height: 44px; }
+.basket .badge image { color: #f2a25c; }
+.basket .well.active .badge { background: #f2a25c; }
+.basket .well.active .badge image { color: #000000; }
+.basket .well-title { font-size: 14px; font-weight: 700; }
+.basket .well-hint, .basket .caption { font-size: 12px; color: #c4c4c9; }
+.basket .well { transition: background 260ms ease-out, border-color 260ms ease-out; }
+.basket .fan-holder { padding: 3px; background: transparent; }
+.basket .fan { border-radius: 9px; background: #2c2c30; border: 1px solid #44444a; box-shadow: 0 4px 10px rgba(0,0,0,0.45); }
+.basket .fan picture { border-radius: 8px; }
+.basket .fan .ext { font-size: 8px; margin-bottom: 5px; }
+.basket .well.landed { background: rgba(242,162,92,0.2); border-color: #f2a25c; }
 '''
 WINDOW_CSS = '''
-.tray.shelf { padding: 8px 22px 0; border-radius: 0; border: none; }
+.tray.shelf { padding: 6px 22px 0; border-radius: 0; border: none; }
 .tray.shelf.liquid { background: transparent; }
-.tray.basket { background: rgba(18,16,20,0.96); border-radius: 26px; padding: 12px; border: none; }
+.tray.basket { background: rgba(12,12,14,0.97); border-radius: 26px; padding: 14px; border: none; }
 /* GtkFrame draws its outline on a separate "border" node; it would leave a seam. */
 frame.tray > border { border: none; box-shadow: none; margin: 0; padding: 0; }
 /* GTK's own drop highlight (a green inset ring) would be a second effect. */
@@ -91,8 +152,82 @@ popover.notchy-menu .ctx-accel { color: rgba(255,255,255,0.38); font-size: 11px;
 '''
 
 
-def tint(name):
-    return EXT_CLASS.get(Path(name).suffix.lower().lstrip('.'), 'other')
+def kind_of(name):
+    ext = Path(name).suffix.lower()
+    return 'image' if ext in IMAGES else KINDS.get(ext.lstrip('.'), 'other')
+
+
+def ease_out_back(t):
+    return 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2
+
+
+def ease_out_cubic(t):
+    return 1 - (1 - t) ** 3
+
+
+class Fan(Gtk.Fixed):
+    """The Korb's files as a fanned stack. A new file drops in from above,
+    turning and overshooting a little before it settles; the others spread
+    to make room. Each card sits in a holder with a clear border: GTK draws a
+    turned widget as a texture, and only clear pixels at its edge give the
+    card smooth edges at any angle."""
+    HOLDER = (58, 68)
+    LAND, MOVE = 0.55, 0.32
+
+    def __init__(self):
+        super().__init__(width_request=FAN[0], height_request=FAN[1], halign=Gtk.Align.CENTER)
+        self.cards = []
+        self.ticking = 0
+
+    def place(self, entries):
+        """entries: (uri, make) oldest first, make() builds the card; four at most are shown."""
+        now = GLib.get_monotonic_time() / 1e6
+        known = {card['uri']: card for card in self.cards}
+        shown = entries[-4:]
+        cards = []
+        for index, (uri, make) in enumerate(shown):
+            offset = index - (len(shown) - 1) / 2
+            target = (FAN[0] / 2 + offset * 28, FAN[1] / 2 + 8 + abs(offset) * 4, offset * 9, 1.0, 1.0)
+            card = known.pop(uri, None)
+            if card:
+                card.update(start=self.state(card, now), target=target, begun=now, duration=self.MOVE, ease=ease_out_cubic)
+            else:
+                holder = Gtk.Box(css_classes=['fan-holder'])
+                holder.append(make())
+                self.put(holder, 0, 0)
+                # From above the well, turned the other way, larger and clear.
+                card = {'uri': uri, 'widget': holder, 'start': (target[0] + 10, -36, target[2] - 28, 1.35, 0.0),
+                        'target': target, 'begun': now, 'duration': self.LAND, 'ease': ease_out_back}
+            cards.append(card)
+        for card in known.values():
+            self.remove(card['widget'])
+        self.cards = cards
+        for card in cards:
+            self.apply(card, now)
+        if not self.ticking:
+            self.ticking = self.add_tick_callback(self.tick)
+
+    def state(self, card, now):
+        progress = min(1.0, (now - card['begun']) / card['duration'])
+        eased = card['ease'](progress)
+        # Opacity never overshoots.
+        return tuple(a + (b - a) * (min(1.0, progress * 2.5) if i == 4 else eased) for i, (a, b) in enumerate(zip(card['start'], card['target'])))
+
+    def apply(self, card, now):
+        x, y, angle, scale, alpha = self.state(card, now)
+        w, h = self.HOLDER
+        transform = Gsk.Transform.new().translate(Graphene.Point().init(x, y)).rotate(angle).scale(scale, scale).translate(Graphene.Point().init(-w / 2, -h / 2))
+        self.set_child_transform(card['widget'], transform)
+        card['widget'].set_opacity(alpha)
+
+    def tick(self, _widget, clock):
+        now = clock.get_frame_time() / 1e6
+        for card in self.cards:
+            self.apply(card, now)
+        if all(now - card['begun'] >= card['duration'] for card in self.cards):
+            self.ticking = 0
+            return GLib.SOURCE_REMOVE
+        return GLib.SOURCE_CONTINUE
 
 
 class Tray(Gtk.Application):
@@ -111,9 +246,11 @@ class Tray(Gtk.Application):
             self.quit()
             return
         display = Gdk.Display.get_default()
+        # Above a user's gtk.css (a full theme there styles every button):
+        # the Regal and the Korb keep Notchy's look whatever the GTK theme.
         provider = Gtk.CssProvider()
         provider.load_from_data(CSS.encode())
-        Gtk.StyleContext.add_provider_for_display(display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        Gtk.StyleContext.add_provider_for_display(display, provider, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
         # A user's gtk.css has higher priority than application CSS. Its window
         # background must not paint a second outline behind our root.
         window_provider = Gtk.CssProvider()
@@ -125,11 +262,12 @@ class Tray(Gtk.Application):
         Gtk.StyleContext.add_provider_for_display(display, self.shade_provider, Gtk.STYLE_PROVIDER_PRIORITY_USER + 2)
         shelf = self.kind == 'shelf'
         self.window = Gtk.ApplicationWindow(application=self, title='Notchy Files' if shelf else 'Notchy File Tray', decorated=False,
-                                            default_width=self.width if shelf else 240, default_height=250 if shelf else 230, resizable=False)
+                                            default_width=self.width if shelf else BASKET[0], default_height=250 if shelf else BASKET[1], resizable=False)
         self.window.connect('close-request', self.close)
         self.window.add_css_class('notchy-files')
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12 if shelf else 10)
-        self.root = Gtk.Frame(child=root, css_classes=['tray', self.kind, self.style], overflow=Gtk.Overflow.HIDDEN)
+        # The Korb moves by dragging it anywhere but on its buttons and its stack.
+        self.root = Gtk.Frame(child=root if shelf else Gtk.WindowHandle(child=root), css_classes=['tray', self.kind, self.style], overflow=Gtk.Overflow.HIDDEN)
         self.window.set_child(self.root)
         (self.build_shelf if shelf else self.build_basket)(root)
         target = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
@@ -152,34 +290,51 @@ class Tray(Gtk.Application):
             self.call('GetShelfConfig', done=lambda reply: reply and self.configure(json.loads(reply[0])))
         else:
             self.window.present()
+            # No focus ring until the keyboard is used.
+            self.window.set_focus_visible(False)
 
     def build_shelf(self, root):
         root.set_margin_top(0)
-        header = self.header = Gtk.Box(spacing=10, height_request=30)
-        self.count = Gtk.Label(xalign=0, hexpand=True, ellipsize=3, css_classes=['count'])
+        # Idle: „Regal · 12 Dateien · 68 MB“, select all and add. With a
+        # selection: clear it, how many and how large, and what to do with them.
+        header = self.header = Gtk.Box(spacing=8, height_request=40)
+        self.clear_button = icon_button('window-close-symbolic', _('Clear Selection'), visible=False, valign=Gtk.Align.CENTER)
+        self.clear_button.connect('clicked', lambda *_: self.flow.unselect_all())
+        header.append(self.clear_button)
+        self.title = Gtk.Label(label=_('Shelf'), xalign=0, css_classes=['title'])
+        header.append(self.title)
+        self.count = Gtk.Label(xalign=0, hexpand=True, ellipsize=3, css_classes=['count'], margin_start=2)
         header.append(self.count)
-        self.actions = Gtk.Box(spacing=4, visible=False)
-        self.zip_button = self.action('package-x-generic-symbolic', _('Compress as ZIP'), self.zip_selected)
-        can_convert = bool(shutil.which('magick') or shutil.which('convert'))
-        self.convert_button = self.action('emblem-synchronizing-symbolic', _('Convert Pictures to WebP') if can_convert else _('Converting pictures needs ImageMagick'), self.convert_selected)
-        self.convert_button.can_convert = can_convert
+        self.actions = Gtk.Box(spacing=6, visible=False, valign=Gtk.Align.CENTER)
         # AirDrop appears once Notchy reports its backend installed (ShelfConfig / AirDrop signal).
         self.airdrop_available = False
-        self.airdrop_button = Gtk.Button(child=airdrop_image(), tooltip_text=_('Send with AirDrop'), css_classes=['round'], visible=False)
-        self.airdrop_button.connect('clicked', lambda *_: self.airdrop_selected())
+        self.airdrop_button = pill(airdrop_image(), 'AirDrop', _('Send with AirDrop'), self.airdrop_selected, ('airdrop',))
+        self.airdrop_button.set_visible(False)
         self.actions.append(self.airdrop_button)
-        self.action('user-trash-symbolic', _('Remove from the Shelf · originals stay'), self.remove_selected)
+        # Translators: a short button label; its tooltip is „Compress as ZIP“.
+        self.zip_button = pill('package-x-generic-symbolic', _('Zip'), _('Compress as ZIP'), self.zip_selected)
+        self.actions.append(self.zip_button)
+        can_convert = bool(shutil.which('magick') or shutil.which('convert'))
+        # Translators: a short button label; its tooltip says what it converts.
+        self.convert_button = pill('emblem-synchronizing-symbolic', _('Convert'), _('Convert Pictures to WebP') if can_convert else _('Converting pictures needs ImageMagick'), self.convert_selected)
+        self.convert_button.can_convert = can_convert
+        self.actions.append(self.convert_button)
+        remove = icon_button('user-trash-symbolic', _('Remove from the Shelf · originals stay'), ('circle', 'danger'))
+        remove.connect('clicked', lambda *_: self.remove_selected())
+        self.actions.append(remove)
         header.append(self.actions)
-        # Icons instead of words; tooltips name each action.
-        self.idle = Gtk.Box(spacing=8)
-        add = Gtk.Button(icon_name='list-add-symbolic', tooltip_text=_('Add Files · a click selects, a double click opens'), css_classes=['round'])
+        self.idle = Gtk.Box(spacing=6, valign=Gtk.Align.CENTER)
+        self.select_all = Gtk.Button(label=_('Select All'), tooltip_text=_('Select All'), focus_on_click=False)
+        self.select_all.connect('clicked', lambda *_: self.flow.select_all())
+        self.idle.append(self.select_all)
+        add = icon_button('list-add-symbolic', _('Add Files · a click selects, a double click opens'))
         add.connect('clicked', self.choose)
         self.idle.append(add)
         header.append(self.idle)
         root.append(header)
         self.area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, css_classes=['drop-area'], vexpand=True)
-        self.flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.MULTIPLE, max_children_per_line=5, min_children_per_line=5,
-                                column_spacing=6, row_spacing=6, homogeneous=True, valign=Gtk.Align.START)
+        self.flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.MULTIPLE, max_children_per_line=6, min_children_per_line=6,
+                                column_spacing=10, row_spacing=10, homogeneous=True, valign=Gtk.Align.START)
         # A classic scroll bar beside the tiles (only while there is more to
         # scroll): GTK's overlay indicator would cover the right column.
         scroll = Gtk.ScrolledWindow(vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER, min_content_height=150,
@@ -189,9 +344,7 @@ class Tray(Gtk.Application):
         self.flow.set_hadjustment(scroll.get_hadjustment())
         self.flow.set_vadjustment(scroll.get_vadjustment())
         self.area.append(scroll)
-        self.empty = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, css_classes=['empty'], visible=False, valign=Gtk.Align.START)
-        self.empty.append(Gtk.Image.new_from_icon_name('document-save-symbolic'))
-        self.empty.append(Gtk.Label(label=_('Drag files onto the island')))
+        self.empty = self.empty_state()
         self.area.append(self.empty)
         root.append(self.area)
         # A file's actions open as a real context menu: a GTK popover, which is
@@ -229,28 +382,70 @@ class Tray(Gtk.Application):
         release.connect('event', self.area_event)
         self.area.add_controller(release)
 
-    def action(self, icon_name, tooltip, callback):
-        button = Gtk.Button(icon_name=icon_name, tooltip_text=tooltip, css_classes=['round'])
-        button.connect('clicked', lambda *_: callback())
-        self.actions.append(button)
-        return button
+    def empty_state(self):
+        empty = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0, visible=False, vexpand=True, valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER)
+        # Three tiles, the outer two tilted, an arrow into the front one.
+        stack = Gtk.Fixed(width_request=150, height_request=84, halign=Gtk.Align.CENTER)
+        for x, y, width, height, angle, front in ((14, 14, 58, 64, -9, False), (78, 14, 58, 64, 9, False), (44, 4, 62, 70, 0, True)):
+            ghost = Gtk.Box(css_classes=['ghost', 'front'] if front else ['ghost'], width_request=width, height_request=height)
+            if front:
+                ghost.append(image('document-save-symbolic', 24, hexpand=True, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, vexpand=True))
+            stack.put(ghost, 0, 0)
+            # Rotate about the tile's centre.
+            transform = Gsk.Transform.new().translate(Graphene.Point().init(x + width / 2, y + height / 2)).rotate(angle).translate(Graphene.Point().init(-width / 2, -height / 2))
+            stack.set_child_transform(ghost, transform)
+        empty.append(stack)
+        empty.append(Gtk.Label(label=_('The Shelf Is Empty'), css_classes=['empty-title'], margin_top=18))
+        empty.append(Gtk.Label(label=_('Drag files onto the notch to keep them close at hand.'), css_classes=['empty-hint'], margin_top=6, wrap=True, justify=Gtk.Justification.CENTER))
+        choose = pill('list-add-symbolic', _('Choose Files'), _('Add Files to the Shelf'), self.choose, ('primary',))
+        choose.set_halign(Gtk.Align.CENTER)
+        choose.set_margin_top(18)
+        empty.append(choose)
+        return empty
 
     def build_basket(self, root):
-        header = Gtk.Box(spacing=8)
-        header.append(Gtk.Label(label=_('Basket'), xalign=0, hexpand=True, css_classes=['title']))
-        close = Gtk.Button(icon_name='window-close-symbolic', tooltip_text=_('Close Basket'), css_classes=['round'])
+        self.flow = None
+        header = Gtk.Box(spacing=10, css_classes=['header'], margin_start=4)
+        icon = image('notchy-basket-symbolic', 18)
+        icon.add_css_class('basket-icon')
+        header.append(icon)
+        header.append(Gtk.Label(label=_('Basket'), xalign=0, css_classes=['title']))
+        self.count = Gtk.Label(xalign=0, hexpand=True, css_classes=['count'])
+        header.append(self.count)
+        close = icon_button('window-close-symbolic', _('Close Basket'))
         close.connect('clicked', lambda *_: self.quit())
         header.append(close)
         root.append(header)
-        self.area = Gtk.Box(css_classes=['zone'], vexpand=True)
-        self.flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.MULTIPLE, max_children_per_line=4, min_children_per_line=1,
-                                column_spacing=6, row_spacing=6, homogeneous=True, valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER, hexpand=True)
-        self.flow.set_activate_on_single_click(False)
-        self.area.append(self.flow)
+        # Waiting: a well that lights up under a drag. Filled: the files as a
+        # fanned stack, dragged out as one.
+        self.area = Gtk.Stack(css_classes=['well'], vexpand=True, transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=160)
+        waiting = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER)
+        badge = Gtk.Box(css_classes=['badge'], halign=Gtk.Align.CENTER)
+        badge.append(image('document-save-symbolic', 22, hexpand=True, halign=Gtk.Align.CENTER))
+        waiting.append(badge)
+        waiting.append(Gtk.Label(label=_('Drop here'), css_classes=['well-title']))
+        waiting.append(Gtk.Label(label=_('Collect now, drop later'), css_classes=['well-hint']))
+        self.area.add_named(waiting, 'waiting')
+        filled = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER)
+        self.fan = Fan()
+        filled.append(self.fan)
+        self.caption = Gtk.Label(css_classes=['caption'], ellipsize=3, max_width_chars=30)
+        filled.append(self.caption)
+        drag = Gtk.DragSource(actions=Gdk.DragAction.COPY)
+        drag.connect('prepare', lambda *_: self.stack_content())
+        filled.add_controller(drag)
+        self.area.add_named(filled, 'filled')
         root.append(self.area)
-        self.to_shelf = Gtk.Button(label=_('Everything to the Shelf'), css_classes=['wide'])
-        self.to_shelf.connect('clicked', lambda *_: self.basket_to_shelf())
-        root.append(self.to_shelf)
+        footer = Gtk.Box(spacing=8)
+        self.to_shelf = pill('document-save-symbolic', _('Everything to the Shelf'), _('Everything to the Shelf'), self.basket_to_shelf, ('primary',))
+        self.to_shelf.set_hexpand(True)
+        footer.append(self.to_shelf)
+        self.airdrop_available = False
+        self.airdrop_button = Gtk.Button(child=airdrop_image(), tooltip_text=_('Send Everything with AirDrop'), css_classes=['circle', 'airdrop', 'large'], visible=False)
+        self.airdrop_button.connect('clicked', lambda *_: self.basket_items and self.call('AirDropSend', GLib.Variant('(s)', ('\n'.join(item['uri'] for item in self.basket_items),))))
+        footer.append(self.airdrop_button)
+        root.append(footer)
+        self.call('GetShelfConfig', done=lambda reply: reply and self.set_airdrop(json.loads(reply[0]).get('airdrop')))
 
     def key(self, _controller, keyval, _code, state):
         if keyval == Gdk.KEY_Escape:
@@ -262,7 +457,11 @@ class Tray(Gtk.Application):
                 self.close()
             return True
         if keyval in (Gdk.KEY_c, Gdk.KEY_C) and state & Gdk.ModifierType.CONTROL_MASK:
-            self.copy_selected()
+            if self.kind == 'basket':
+                if self.basket_items:
+                    Gdk.Display.get_default().get_clipboard().set_content(self.content([item['uri'] for item in self.basket_items]))
+            else:
+                self.copy_selected()
             return True
         if keyval == Gdk.KEY_Delete and self.kind == 'shelf':
             self.remove_selected()
@@ -298,12 +497,12 @@ class Tray(Gtk.Application):
             self.refresh()
         elif name == 'ShelfConfig' and self.kind == 'shelf':
             self.configure(json.loads(values.unpack()[0]))
-        elif name == 'AirDrop' and self.kind == 'shelf':
+        elif name == 'AirDrop':
             self.set_airdrop(json.loads(values.unpack()[0]))
 
     def set_airdrop(self, config):
         self.airdrop_available = bool((config or {}).get('available'))
-        self.airdrop_button.set_visible(self.airdrop_available)
+        self.airdrop_button.set_visible(self.airdrop_available and (self.kind == 'shelf' or bool(self.basket_items)))
 
     def airdrop_selected(self):
         uris = self.selected_uris()
@@ -321,6 +520,10 @@ class Tray(Gtk.Application):
                if style == 'dynamic' else '')
         self.shade_provider.load_from_data(css.encode())
         self.set_airdrop(config.get('airdrop'))
+        # Six tiles a row; five on a narrow island.
+        columns = 6 if config['width'] >= 680 else 5
+        self.flow.set_min_children_per_line(columns)
+        self.flow.set_max_children_per_line(columns)
         self.window.set_default_size(config['width'], config['height'])
         if not config['visible'] and self.menu_open:
             self.popover.popdown()
@@ -356,12 +559,16 @@ class Tray(Gtk.Application):
         return False
 
     def basket_add(self, uris):
+        before = len(self.basket_items)
         known = {item['uri'] for item in self.basket_items}
         for uri in uris:
             file = Gio.File.new_for_uri(uri)
             if uri not in known and file.get_path():
                 self.basket_items.append({'uri': uri, 'name': file.get_basename()})
                 known.add(uri)
+        if len(self.basket_items) > before:
+            self.area.add_css_class('landed')
+            GLib.timeout_add(420, lambda: self.area.remove_css_class('landed') or GLib.SOURCE_REMOVE)
         self.render_basket()
 
     def basket_to_shelf(self):
@@ -370,8 +577,16 @@ class Tray(Gtk.Application):
         uris = '\r\n'.join(item['uri'] for item in self.basket_items)
         self.call('AddUris', GLib.Variant('(s)', (uris,)), done=lambda *_: self.quit())
 
+    def leave_for_dialog(self):
+        # A file dialog stands on its own, on top: as the Regal's child GNOME
+        # would attach it (moving one moves both) and keep it below the Regal,
+        # which stays above windows. So the Regal closes; what the dialog adds
+        # or saves is announced in the notch.
+        if self.kind == 'shelf':
+            self.call('CloseShelf')
+
     def choose(self, *_args):
-        self.hold_interaction(True)
+        self.leave_for_dialog()
         dialog = Gtk.FileDialog(title=_('Add Files to the Shelf'))
         def selected(d, result):
             try:
@@ -381,7 +596,7 @@ class Tray(Gtk.Application):
                 pass
             finally:
                 self.hold_interaction(False)
-        dialog.open_multiple(self.window, None, selected)
+        dialog.open_multiple(None, None, selected)
 
     def refresh(self):
         self.call('GetItems', done=self.populate)
@@ -393,27 +608,57 @@ class Tray(Gtk.Application):
             self.flow.remove(child)
             child = next_child
 
-    def thumbnail(self, item, small=False):
-        ext = Path(item['name']).suffix.lower().lstrip('.')
-        thumb = Gtk.Overlay(css_classes=['thumb', tint(item['name'])], halign=Gtk.Align.CENTER, overflow=Gtk.Overflow.HIDDEN)
-        width, height = (38, 48) if small else (62, 76)
-        thumb.set_size_request(width, height)
+    def file_info(self, item):
+        # The thumbnail GNOME made, else (pictures only) the picture itself, and the size.
         try:
-            info = Gio.File.new_for_uri(item['uri']).query_info('thumbnail::path', Gio.FileQueryInfoFlags.NONE, None)
-            path = info.get_attribute_byte_string('thumbnail::path')
-            if path and Path(item['name']).suffix.lower() in IMAGES:
-                thumb.set_child(Gtk.Picture.new_for_filename(path))
-                thumb.get_child().set_content_fit(Gtk.ContentFit.COVER)
+            info = Gio.File.new_for_uri(item['uri']).query_info('thumbnail::path,standard::size', Gio.FileQueryInfoFlags.NONE, None)
         except GLib.Error:
-            pass
-        thumb.add_overlay(Gtk.Label(label=(ext or 'datei').upper()[:5], css_classes=['ext'], valign=Gtk.Align.END, halign=Gtk.Align.CENTER))
-        return thumb
+            return None, 0
+        path = info.get_attribute_byte_string('thumbnail::path')
+        if not path and kind_of(item['name']) == 'image' and info.get_size() < 30 * 1024 * 1024:
+            path = Gio.File.new_for_uri(item['uri']).get_path()
+        return path, info.get_size()
 
-    def tile(self, item, small=False):
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, css_classes=['file'])
-        card.append(self.thumbnail(item, small))
-        if not small:
-            card.append(Gtk.Label(label=item['name'], ellipsize=3, max_width_chars=10, tooltip_text=item['name'], css_classes=['name']))
+    def preview(self, item, thumb, width, height, classes, inset):
+        # A picture fills the card; any other file shows its type label, on a
+        # small document shape inside the card (inset) or at the card's foot.
+        kind = kind_of(item['name'])
+        card = Gtk.Overlay(css_classes=classes, overflow=Gtk.Overflow.HIDDEN, width_request=width, height_request=height)
+        picture = None
+        if thumb and kind == 'image':
+            try:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(thumb, 256, 256, True)
+                picture = Gtk.Picture(paintable=Gdk.Texture.new_for_pixbuf(pixbuf), content_fit=Gtk.ContentFit.COVER)
+            except GLib.Error:
+                picture = None
+        if picture:
+            card.set_child(picture)
+            return card
+        ext = Path(item['name']).suffix.lstrip('.').upper()[:5] or _('FILE')
+        label = Gtk.Label(label=ext, css_classes=['ext', kind], valign=Gtk.Align.END, halign=Gtk.Align.CENTER)
+        if inset:
+            doc = Gtk.Overlay(css_classes=['sheet'], halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+            doc.set_child(Gtk.Box(width_request=40, height_request=50))
+            doc.add_overlay(label)
+            card.set_child(doc)
+        else:
+            # Fanned: the next card covers this one's right half.
+            label.set_halign(Gtk.Align.START)
+            label.set_margin_start(6)
+            card.set_child(Gtk.Box())
+            card.add_overlay(label)
+        return card
+
+    def tile(self, item):
+        thumb, size = self.file_info(item)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5, css_classes=['file'])
+        preview = self.preview(item, thumb, -1, 76, ['preview'], True)
+        check = Gtk.Box(css_classes=['check'], halign=Gtk.Align.END, valign=Gtk.Align.START)
+        check.append(image('object-select-symbolic', 12, hexpand=True, halign=Gtk.Align.CENTER))
+        preview.add_overlay(check)
+        card.append(preview)
+        card.append(Gtk.Label(label=item['name'], ellipsize=3, max_width_chars=12, width_chars=1, css_classes=['name']))
+        card.append(Gtk.Label(label=size_text(size), css_classes=['size']))
         drag = Gtk.DragSource(actions=Gdk.DragAction.COPY)
         drag.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         drag.connect('prepare', lambda *_args, widget=card: self.prepare_drag(widget))
@@ -429,6 +674,7 @@ class Tray(Gtk.Application):
         child.add_controller(click)
         child.notchy_uri = item['uri']
         child.notchy_name = item['name']
+        child.notchy_size = size
         child.set_tooltip_text(item['name'])
         return child
 
@@ -441,22 +687,32 @@ class Tray(Gtk.Application):
         selected_uris = set(self.selected_uris())
         self.clear_flow()
         items = json.loads(reply[0])
-        self.total = len(items)
+        self.total, self.total_size = len(items), 0
         self.empty.set_visible(not items)
         self.flow.get_parent().get_parent().set_visible(bool(items))
         for item in items:
             child = self.tile(item)
+            self.total_size += child.notchy_size
             if item['uri'] in selected_uris:
                 self.flow.select_child(child)
         self.update_selection()
 
+    def stack_content(self):
+        # The Korb's stack drags out as one: every file it holds.
+        return self.content([item['uri'] for item in self.basket_items]) if self.basket_items else None
+
     def render_basket(self):
-        self.clear_flow()
-        for item in self.basket_items:
-            self.tile(item, small=True)
-        if not self.basket_items:
-            self.flow.insert(Gtk.Label(label=_('Drop here'), css_classes=['zone-hint']), -1)
-        self.to_shelf.set_sensitive(bool(self.basket_items))
+        items = self.basket_items
+        # Built only for a file new to the stack (its preview is read once).
+        self.fan.place([(item['uri'], lambda it=item: self.preview(it, self.file_info(it)[0], 52, 62, ['fan'], False)) for item in items])
+        self.count.set_text(ngettext('%d file', '%d files', len(items)) % len(items) if items else '')
+        if items:
+            self.caption.set_text(items[-1]['name'] if len(items) == 1 else
+                                  ngettext('%(name)s and %(count)d more', '%(name)s and %(count)d more', len(items) - 1) % {'name': items[-1]['name'], 'count': len(items) - 1})
+            self.caption.set_tooltip_text('\n'.join(item['name'] for item in items))
+        self.area.set_visible_child_name('filled' if items else 'waiting')
+        self.to_shelf.set_sensitive(bool(items))
+        self.airdrop_button.set_visible(self.airdrop_available and bool(items))
 
     def tile_pressed(self, gesture, presses, x, y, item, card):
         child = card.get_parent()
@@ -507,6 +763,8 @@ class Tray(Gtk.Application):
             GLib.idle_add(lambda: (self.flow.unselect_child(child) if child.get_parent() is self.flow else None, GLib.SOURCE_REMOVE)[1])
 
     def selected_children(self):
+        if not self.flow:
+            return []
         return [child for child in self.flow.get_selected_children() if hasattr(child, 'notchy_uri')]
 
     def selected_uris(self):
@@ -517,11 +775,24 @@ class Tray(Gtk.Application):
             return
         selected = self.selected_children()
         self.call('ShelfSelected', GLib.Variant('(u)', (len(selected),)))
-        self.actions.set_visible(bool(selected))
-        self.idle.set_visible(not selected)
         total = getattr(self, 'total', 0)
-        self.count.set_text((ngettext('%(selected)d of %(total)d selected', '%(selected)d of %(total)d selected', total) % {'selected': len(selected), 'total': total}) if selected
-                           else ngettext('%d file', '%d files', total) % total)
+        # The keyboard way (Tab, Enter): a focused button about to hide lets go
+        # of the focus first, so it never lands on a tile (which would select it).
+        focus = self.window.get_focus() if getattr(self, 'window', None) else None
+        if focus and any(focus is box or focus.is_ancestor(box) for box in ((self.idle,) if selected else (self.actions, self.clear_button))):
+            self.window.set_focus(None)
+        self.actions.set_visible(bool(selected))
+        self.clear_button.set_visible(bool(selected))
+        # The empty Regal offers its own button to add files.
+        self.idle.set_visible(not selected and total > 0)
+        if selected:
+            self.title.set_text(ngettext('%d selected', '%d selected', len(selected)) % len(selected))
+            self.count.set_text(size_text(sum(child.notchy_size for child in selected)))
+        else:
+            self.title.set_text(_('Shelf'))
+            words, size = ngettext('%d file', '%d files', total) % total, size_text(getattr(self, 'total_size', 0))
+            self.count.set_text(f'{words} · {size}' if total and size else words)
+        self.report_header()
         if selected:
             images = [child for child in selected if Path(child.notchy_name).suffix.lower() in IMAGES]
             self.convert_button.set_sensitive(bool(images) and self.convert_button.can_convert)
@@ -561,7 +832,7 @@ class Tray(Gtk.Application):
         Gio.AppInfo.launch_default_for_uri_async(uri, None, None, None)
 
     def save(self, item):
-        self.hold_interaction(True)
+        self.leave_for_dialog()
         dialog = Gtk.FileDialog(title=_('Save a Copy'), initial_name=item['name'])
         def selected(d, result):
             try:
@@ -577,11 +848,11 @@ class Tray(Gtk.Application):
             except GLib.Error as error:
                 print(str(error), file=sys.stderr)
                 self.hold_interaction(False)
-        dialog.save(self.window, None, selected)
+        dialog.save(None, None, selected)
 
     def save_many(self, items):
         # Several files: one folder, a copy of each.
-        self.hold_interaction(True)
+        self.leave_for_dialog()
         dialog = Gtk.FileDialog(title=ngettext('Save %d Copy In', 'Save %d Copies In', len(items)) % len(items))
         def selected(d, result):
             try:
@@ -601,7 +872,7 @@ class Tray(Gtk.Application):
                     self.hold_interaction(False)
             for item in items:
                 Gio.File.new_for_uri(item['uri']).copy_async(folder.get_child(item['name']), Gio.FileCopyFlags.NONE, GLib.PRIORITY_DEFAULT, None, None, copied)
-        dialog.select_folder(self.window, None, selected)
+        dialog.select_folder(None, None, selected)
 
     def show_in_folder(self, uris):
         # The file manager opens the folder with the files selected; without
@@ -684,12 +955,10 @@ class Tray(Gtk.Application):
 
     def menu_row(self, icon, label, callback, keep=False, submenu=False, danger=False):
         content = Gtk.Box(spacing=10)
-        image = airdrop_image() if icon == 'notchy-airdrop' else Gtk.Image.new_from_icon_name(icon)
-        image.set_pixel_size(16)
-        content.append(image)
+        content.append(airdrop_image() if icon == 'notchy-airdrop' else image(icon))
         content.append(Gtk.Label(label=label, xalign=0, hexpand=True, ellipsize=3, max_width_chars=34))
         if submenu:
-            content.append(Gtk.Image.new_from_icon_name('go-next-symbolic'))
+            content.append(image('go-next-symbolic'))
         button = Gtk.Button(child=content, css_classes=['ctx-item'] + (['danger'] if danger else []))
         button.update_property([Gtk.AccessibleProperty.LABEL], [label])
         button.notchy_label, button.notchy_submenu = label, submenu
@@ -792,6 +1061,24 @@ class Tray(Gtk.Application):
             Path(out, 'regal-menu.json').write_text(json.dumps(rows))
             return GLib.SOURCE_REMOVE
         GLib.timeout_add(250, write)
+
+    def report_header(self):
+        # The headless Shell test clicks the header's buttons by position too.
+        out = os.environ.get('NOTCHY_TEST_OUTPUT')
+        if not out or self.kind != 'shelf':
+            return
+        def write():
+            native = self.window.get_native()
+            surface_x, surface_y = native.get_surface_transform() if native else (0, 0)
+            buttons = {}
+            for name, button in (('selectAll', self.select_all), ('clear', self.clear_button)):
+                ok, bounds = button.compute_bounds(self.window)
+                if ok and button.get_mapped():
+                    buttons[name] = {'x': surface_x + bounds.get_x(), 'y': surface_y + bounds.get_y(), 'width': bounds.get_width(), 'height': bounds.get_height()}
+            Path(out, 'regal-header.json').write_text(json.dumps(buttons))
+            return GLib.SOURCE_REMOVE
+        GLib.timeout_add(250, write)
+
 
 if __name__ == '__main__':
     Tray(sys.argv[1] if len(sys.argv) > 1 else 'shelf', int(sys.argv[2]) if len(sys.argv) > 2 else 700, sys.argv[3] if len(sys.argv) > 3 else 'dynamic',

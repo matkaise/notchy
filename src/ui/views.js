@@ -1,9 +1,11 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
+import GdkPixbuf from 'gi://GdkPixbuf';
 import GLib from 'gi://GLib';
 import Cairo from 'cairo';
 import Graphene from 'gi://Graphene';
 import Meta from 'gi://Meta';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 import Shell from 'gi://Shell';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
@@ -17,8 +19,55 @@ import {ageText} from '../services/batteries.js';
 import {Waveform} from './waveform.js';
 import {Lifetime} from '../lifecycle.js';
 
-// File-type tints for shelf tiles (Droppy for GNOME palette).
-const EXT_CLASS = {pdf: 'pdf', md: 'text', txt: 'text', zip: 'archive', gz: 'archive', tar: 'archive', png: 'image', jpg: 'image', jpeg: 'image', svg: 'image', webp: 'image', gif: 'image'};
+// A file's kind: the colour of its type label (as in helper/tray.py).
+const KIND = Object.fromEntries([
+    ['pdf', 'pdf'], ...['md', 'txt', 'json', 'csv', 'log'].map(e => [e, 'text']), ...['zip', 'gz', 'tar', 'xz', '7z', 'rar'].map(e => [e, 'archive']),
+    ...['mp4', 'mkv', 'webm', 'mov', 'avi'].map(e => [e, 'video']), ...['mp3', 'flac', 'ogg', 'wav', 'm4a', 'opus'].map(e => [e, 'audio']),
+    ...['doc', 'docx', 'odt', 'rtf', 'xls', 'xlsx', 'ods', 'ppt', 'pptx', 'odp'].map(e => [e, 'doc']),
+    ...['png', 'jpg', 'jpeg', 'webp', 'heic', 'tiff', 'bmp', 'gif', 'svg'].map(e => [e, 'image'])]);
+// The clipboard: its list's height, an entry's kind as a tile, its day.
+const CLIP_HEIGHT = 238;
+const CLIP_KIND = {text: N_('Text'), link: N_('Link'), image: N_('Picture'), color: N_('Color'), files: N_('Files')};
+const clipKindName = item => _(CLIP_KIND[item.kind] ?? CLIP_KIND.text);
+function clipTile(item) {
+    const tile = new St.Bin({style_class: `notchy-clip-icon ${item.kind}`, y_align: Clutter.ActorAlign.CENTER});
+    if (item.kind === 'color') tile.style = `background-color: ${normalHex(item.text.trim())};`;
+    else if (item.kind === 'image' && item.asset) tile.style = `background-image: url("${item.asset.replace(/["\\]/g, '\\$&')}");`;
+    else tile.set_child(icon(CLIP_ICON[item.kind] ?? CLIP_ICON.text, 14));
+    return tile;
+}
+function dayHeading(created) {
+    const day = new Date(created); day.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const days = Math.round((today - day) / 86400000);
+    return days <= 0 ? _('Today') : days === 1 ? _('Yesterday') : formatDate(day, {weekday: 'long', day: 'numeric', month: 'long'});
+}
+function clipSize(item) {
+    if (item.kind === 'image' && item.asset) {
+        try { const [, width, height] = GdkPixbuf.Pixbuf.get_file_info(item.asset); if (width) return `${width} × ${height}`; } catch { /* Unreadable: no size. */ }
+        return '';
+    }
+    if (item.kind === 'text') return fmt(ngettext('%d character', '%d characters', item.text.length), item.text.length);
+    return '';
+}
+// #abc and #aabbcc, upper case, six digits.
+const normalHex = text => (/^#[0-9a-f]{3}$/i.test(text) ? `#${[...text.slice(1)].map(c => c + c).join('')}` : text).toUpperCase();
+function colorFormats(hex) {
+    const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
+    const [rf, gf, bf] = [r / 255, g / 255, b / 255], max = Math.max(rf, gf, bf), min = Math.min(rf, gf, bf), l = (max + min) / 2;
+    let h = 0, sat = 0;
+    if (max !== min) {
+        const d = max - min; sat = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        h = max === rf ? (gf - bf) / d + (gf < bf ? 6 : 0) : max === gf ? (bf - rf) / d + 2 : (rf - gf) / d + 4; h *= 60;
+    }
+    return [['HEX', hex], ['RGB', `${r}, ${g}, ${b}`], ['HSL', `${Math.round(h)}°, ${Math.round(sat * 100)} %, ${Math.round(l * 100)} %`]];
+}
+// The AirPods card: its product picture and the size of its battery rings.
+const AIRPODS_HERO = [128, 140], CARD_RING = 64;
+// The stage the arriving files drop onto (Views.shelfArrivalView).
+const ARRIVAL_STAGE = [104, 58];
+// The Regal's tiles: six a row (five on a narrow island), as in helper/tray.py.
+const shelfColumns = width => (width >= 680 ? 6 : 5);
 export const extensionOf = name => (name.includes('.') ? name.split('.').pop() : '').toLowerCase();
 const CLIP_ICON = {text: 'text-x-generic-symbolic', link: 'web-browser-symbolic', color: 'applications-graphics-symbolic', image: 'image-x-generic-symbolic', files: 'folder-symbolic'};
 const FILTERS = [['all', 'view-list-symbolic', N_('All')], ['link', 'insert-link-symbolic', N_('Links')], ['image', 'image-x-generic-symbolic', N_('Pictures')], ['fav', 'starred-symbolic', N_('Favorites Only')]];
@@ -105,11 +154,11 @@ function drawProduct(cr, kind, size) {
 }
 // One product of the connection card: its picture inside a battery ring, the
 // percentage below. The picture springs in, the ring fills and the number counts up.
-export function productCell(kind, caption) {
-    const SIZE = 84, actor = box(true, {style_class: 'notchy-airpods-cell'});
+export function productCell(kind, caption, SIZE = 84) {
+    const actor = box(true, {style_class: 'notchy-airpods-cell'});
     const stack = new St.Widget({layout_manager: new Clutter.BinLayout(), width: SIZE, height: SIZE, x_align: Clutter.ActorAlign.CENTER});
     const ring = new St.DrawingArea({width: SIZE, height: SIZE});
-    const picture = new St.DrawingArea({width: 56, height: 56, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, pivot_point: new Graphene.Point({x: 0.5, y: 0.5})});
+    const picture = new St.DrawingArea({width: Math.round(SIZE * 2 / 3), height: Math.round(SIZE * 2 / 3), x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, pivot_point: new Graphene.Point({x: 0.5, y: 0.5})});
     stack.add_child(ring); stack.add_child(picture);
     const value = label('–', 'notchy-airpods-card-value', {x_align: Clutter.ActorAlign.CENTER});
     const captionLabel = label(caption, 'notchy-airpods-card-caption', {x_align: Clutter.ActorAlign.CENTER});
@@ -119,7 +168,7 @@ export function productCell(kind, caption) {
     picture.connect('repaint', () => { const cr = picture.get_context(); drawProduct(cr, kind, picture.get_surface_size()[0]); cr.$dispose(); });
     ring.connect('repaint', () => {
         const cr = ring.get_context(), [w, h] = ring.get_surface_size(), r = Math.min(w, h) / 2 - 3;
-        cr.setLineWidth(4); cr.setSourceRGBA(1, 1, 1, 0.13); cr.arc(w / 2, h / 2, r, 0, 2 * Math.PI); cr.stroke();
+        cr.setLineWidth(Math.max(3, SIZE / 21)); cr.setSourceRGBA(1, 1, 1, 0.13); cr.arc(w / 2, h / 2, r, 0, 2 * Math.PI); cr.stroke();
         if (cell.level !== null && cell.progress > 0) {
             if (cell.low) cr.setSourceRGBA(1, 0.62, 0.04, 1); else cr.setSourceRGBA(0.2, 0.78, 0.35, 1);
             cr.setLineCap(Cairo.LineCap.ROUND);
@@ -282,17 +331,25 @@ export class Views {
     // AirPods connected: the capsule grows into a card as on an iPhone — the
     // name, the AirPods and their case springing in, battery rings filling up
     // with the percentages counting, and „Verbunden“ with a check.
+    // AirPods connected, as an iPhone shows it: the notch springs open into a
+    // card. The AirPods and their case float in large on the left, turning and
+    // overshooting, a glint passes over them; beside them the name, „Verbunden“
+    // with a check, and the battery rings filling with the numbers counting up.
     airpodsPeekView() {
-        const airpods = this.airpods, root = box(true, {style_class: 'notchy-peek notchy-airpods-card'});
-        const head = box(false, {style_class: 'notchy-airpods-card-head'});
-        const title = label('', 'notchy-airpods-card-title', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        const status = box(false, {style_class: 'notchy-airpods-card-status', y_align: Clutter.ActorAlign.CENTER, opacity: 0, pivot_point: new Graphene.Point({x: 0.5, y: 0.5})});
+        const airpods = this.airpods, root = box(false, {style_class: 'notchy-peek notchy-airpods-card'});
+        const hero = this.airpodsHero(airpods.state);
+        root.add_child(hero.actor);
+        const column = box(true, {style_class: 'notchy-airpods-card-column', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        root.add_child(column);
+        const head = box(true, {style_class: 'notchy-airpods-card-head'});
+        const title = label('', 'notchy-airpods-card-title', {y_align: Clutter.ActorAlign.CENTER});
+        const status = box(false, {style_class: 'notchy-airpods-card-status', x_align: Clutter.ActorAlign.START, opacity: 0, pivot_point: new Graphene.Point({x: 0, y: 0.5})});
         status.add_child(new St.Icon({icon_name: 'object-select-symbolic', icon_size: 13, style_class: 'notchy-airpods-card-check', y_align: Clutter.ActorAlign.CENTER}));
         const statusText = label(_('Connected'), 'notchy-airpods-card-status-text', {y_align: Clutter.ActorAlign.CENTER});
         status.add_child(statusText);
-        head.add_child(title); head.add_child(status); root.add_child(head);
-        const products = box(false, {style_class: 'notchy-airpods-products', x_align: Clutter.ActorAlign.CENTER});
-        root.add_child(products);
+        head.add_child(title); head.add_child(status); column.add_child(head);
+        const products = box(false, {style_class: 'notchy-airpods-products', x_align: Clutter.ActorAlign.START});
+        column.add_child(products);
         const threshold = this.settings.get_int('airpods-battery-threshold');
         let cells = new Map(), layout = '';
         // Both buds in one ring while they are within 10 %, as the iPhone does; else one each.
@@ -303,9 +360,10 @@ export class Views {
             return [...(together ? [['buds', 'buds', 'AirPods']] : [['left', 'left', _('Left')], ['right', 'right', _('Right')]]), ['case', 'case', _('Case')]];
         };
         const animate = () => {
-            let delay = 0;
+            hero.play();
+            let delay = 120;
             for (const cell of cells.values()) { cell.appear(delay); delay += 130; }
-            status.ease({opacity: 255, scale_x: 1, scale_y: 1, delay: 650, duration: 400, mode: Clutter.AnimationMode.EASE_OUT_BACK});
+            status.ease({opacity: 255, scale_x: 1, scale_y: 1, delay: 550, duration: 420, mode: Clutter.AnimationMode.EASE_OUT_BACK});
         };
         const draw = () => {
             const state = airpods.state; if (!state) return;
@@ -317,7 +375,7 @@ export class Views {
                 layout = key;
                 for (const cell of cells.values()) cell.stop();
                 products.destroy_all_children(); cells = new Map();
-                for (const [partKey, kind, caption] of wanted) { const cell = productCell(kind, caption); cells.set(partKey, cell); products.add_child(cell.actor); }
+                for (const [partKey, kind, caption] of wanted) { const cell = productCell(kind, caption, CARD_RING); cells.set(partKey, cell); products.add_child(cell.actor); }
                 // A later re-layout (batteries arrived) shows the pictures at once.
                 if (shown) for (const cell of cells.values()) { cell.instant = true; cell.progress = 1; cell.picture.opacity = 255; cell.picture.scale_x = cell.picture.scale_y = 1; cell.picture.rotation_angle_z = 0; }
             }
@@ -330,9 +388,46 @@ export class Views {
         status.scale_x = status.scale_y = 0.6;
         let started = false;
         const start = () => { if (started || !products.mapped) return; started = true; animate(); };
-        const mappedId = products.connect('notify::mapped', start); start();
-        root.connect('destroy', () => { unsubscribe(); products.disconnect(mappedId); for (const cell of cells.values()) cell.stop(); });
-        return {actor: root, get cells() { return cells; }};
+        // GNOME skips the easing of actors not on screen: the show starts a
+        // tick after the card is mapped (its children map after it).
+        const mappedId = products.connect('notify::mapped', () => this.life.later(0, start)); start();
+        root.connect('destroy', () => { unsubscribe(); products.disconnect(mappedId); hero.stop(); for (const cell of cells.values()) cell.stop(); });
+        return {actor: root, hero, get cells() { return cells; }};
+    }
+    // The product, large: the case below, the buds above it (or headphones).
+    // It flies in turned and too large, overshoots and settles, then floats
+    // gently; a glint passes over it once.
+    airpodsHero(state) {
+        const [W, H] = AIRPODS_HERO, center = new Graphene.Point({x: 0.5, y: 0.5});
+        const actor = new St.Widget({style_class: 'notchy-airpods-hero', width: W, height: H, clip_to_allocation: true, y_align: Clutter.ActorAlign.CENTER});
+        const body = new St.Widget({width: W, height: H, pivot_point: center, opacity: 0, scale_x: 0.5, scale_y: 0.5, rotation_angle_z: -16});
+        actor.add_child(body);
+        const piece = (kind, size, x, y) => {
+            const area = new St.DrawingArea({width: size, height: size, x, y});
+            area.connect('repaint', () => { const cr = area.get_context(); drawProduct(cr, kind, area.get_surface_size()[0]); cr.$dispose(); });
+            body.add_child(area);
+        };
+        if (state?.headphones) piece('headphones', 112, (W - 112) / 2, (H - 112) / 2);
+        else { piece('case', 96, (W - 96) / 2, H - 100); piece('buds', 86, (W - 86) / 2, 2); }
+        // The glint: a soft bright band, turned, sweeping across once.
+        const glint = new St.Widget({style_class: 'notchy-airpods-glint', width: 34, height: H * 1.6, x: -60, y: -H * 0.3, rotation_angle_z: 18, opacity: 0});
+        actor.add_child(glint);
+        let floating = 0, kick = 0;
+        const stop = () => { this.life.cancel(floating); this.life.cancel(kick); floating = kick = 0; };
+        const play = () => {
+            body.ease({opacity: 255, duration: 220, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            body.ease({scale_x: 1, scale_y: 1, rotation_angle_z: 0, duration: 720, mode: Clutter.AnimationMode.EASE_OUT_BACK});
+            glint.opacity = 200;
+            glint.ease({x: W + 40, duration: 760, delay: 520, mode: Clutter.AnimationMode.EASE_IN_OUT_QUAD, onComplete: () => { glint.opacity = 0; }});
+            // Floating: up and down, turning a little, until the card folds.
+            let up = true;
+            const sway = () => {
+                body.ease({translation_y: up ? -4 : 0, rotation_angle_z: up ? 2 : -2, duration: 1600, mode: Clutter.AnimationMode.EASE_IN_OUT_SINE});
+                up = !up;
+            };
+            kick = this.life.later(760, () => { kick = 0; sway(); floating = this.life.every(1600, sway); });
+        };
+        return {actor, body, play, stop};
     }
 
     // Snap layouts: miniature screens whose zones take the dragged window.
@@ -414,57 +509,178 @@ export class Views {
     // Regal: the native GTK pane supplies files, selection and drag sources in
     // this same place. This Shell copy mirrors its layout so switching tabs
     // cross-fades into the native pane instead of visibly rebuilding.
+    // The Shell's picture of the Regal, shown until its GTK window is mapped
+    // (helper/tray.py): the same header, tiles and empty state.
     shelfView() {
         const root = box(true, {style_class: 'notchy-page notchy-shelf-preview', y_expand: true});
-        const items = this.shelf.items;
+        const items = this.shelf.items, center = {y_align: Clutter.ActorAlign.CENTER};
         const head = box(false, {style_class: 'notchy-shelf-head'});
-        head.add_child(label(fmt(ngettext('%d file', '%d files', items.length), items.length), 'notchy-shelf-count', {x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
-        head.add_child(new St.Bin({style_class: 'notchy-shelf-add', child: icon('list-add-symbolic', 16), y_align: Clutter.ActorAlign.CENTER}));
+        head.add_child(label(_('Shelf'), 'notchy-shelf-title', center));
+        head.add_child(label(fmt(ngettext('%d file', '%d files', items.length), items.length), 'notchy-shelf-count', {x_expand: true, ...center}));
         root.add_child(head);
-        if (!items.length) {
-            const empty = box(true, {style_class: 'notchy-drop-hint', x_expand: true});
-            empty.add_child(icon('document-save-symbolic', 24)); empty.add_child(label(_('Drag files onto the island'), 'notchy-muted'));
-            root.add_child(empty); return root;
-        }
-        const width = Math.floor((this.island.currentWidth - 44 - 4 * 6) / 5);
-        for (let i = 0; i < Math.min(items.length, 10); i += 5) {
+        if (!items.length) { root.add_child(this.shelfEmpty()); return root; }
+        const columns = shelfColumns(this.island.currentWidth);
+        const width = Math.floor((this.island.currentWidth - 44 - (columns - 1) * 14) / columns);
+        const grid = box(true, {style_class: 'notchy-shelf-grid'});
+        for (let i = 0; i < Math.min(items.length, 2 * columns); i += columns) {
             const row = box(false, {style_class: 'notchy-shelf-row'});
-            for (const item of items.slice(i, i + 5)) row.add_child(this.fileTile(item, width));
-            root.add_child(row);
+            for (const item of items.slice(i, i + columns)) row.add_child(this.fileTile(item, width));
+            grid.add_child(row);
         }
+        root.add_child(grid);
         return root;
+    }
+    shelfEmpty() {
+        const empty = box(true, {style_class: 'notchy-shelf-empty', x_expand: true, y_expand: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        const stack = new St.Widget({width: 150, height: 84, x_align: Clutter.ActorAlign.CENTER});
+        for (const [x, y, w, h, angle, front] of [[14, 14, 58, 64, -9, false], [78, 14, 58, 64, 9, false], [44, 4, 62, 70, 0, true]]) {
+            const ghost = new St.Bin({style_class: front ? 'notchy-shelf-ghost front' : 'notchy-shelf-ghost', x, y, width: w, height: h,
+                pivot_point: new Graphene.Point({x: 0.5, y: 0.5}), rotation_angle_z: angle});
+            if (front) ghost.child = new St.Icon({gicon: gicon('adwaita:document-save-symbolic'), icon_size: 24});
+            stack.add_child(ghost);
+        }
+        empty.add_child(stack);
+        empty.add_child(label(_('The Shelf Is Empty'), 'notchy-shelf-empty-title', {x_align: Clutter.ActorAlign.CENTER}));
+        empty.add_child(label(_('Drag files onto the notch to keep them close at hand.'), 'notchy-shelf-empty-hint', {x_align: Clutter.ActorAlign.CENTER}));
+        return empty;
     }
     fileTile(item, width) {
         const ext = extensionOf(item.name);
         const tile = box(true, {style_class: 'notchy-file-tile', width});
-        const thumb = new St.Widget({style_class: `notchy-file-thumb ${EXT_CLASS[ext] ?? 'other'}`, layout_manager: new Clutter.BinLayout(), x_align: Clutter.ActorAlign.CENTER});
+        const card = new St.Widget({style_class: 'notchy-file-card', layout_manager: new Clutter.BinLayout(), height: 76});
+        const sheet = new St.Widget({style_class: 'notchy-file-sheet', layout_manager: new Clutter.BinLayout(), width: 40, height: 50, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         // Translators: shown on a file tile without a file name extension.
-        thumb.add_child(label(ext.toUpperCase() || _('FILE'), 'notchy-file-ext', {x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.END}));
-        tile.add_child(thumb);
+        sheet.add_child(label(ext.toUpperCase().slice(0, 5) || _('FILE'), `notchy-file-ext ${KIND[ext] ?? 'other'}`, {x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.END}));
+        card.add_child(sheet);
+        tile.add_child(card);
         tile.add_child(label(item.name, 'notchy-file-name', {x_align: Clutter.ActorAlign.CENTER}));
         return tile;
     }
 
+    // Files landing in the Regal, in the opened notch: their cards drop in
+    // from behind the clock one after another, overshoot and settle in a fan;
+    // where the first lands a ring of light spreads and sparks fly apart;
+    // „Im Regal“ slides in beside them and the Regal's count rolls up to its
+    // new number with a pop. A click opens the Regal.
+    shelfArrivalView(arrived, before, total) {
+        const life = new Lifetime(), ease = (actor, props) => actor.ease({mode: Clutter.AnimationMode.EASE_OUT_QUAD, ...props});
+        const root = new St.Button({style_class: 'notchy-peek notchy-shelf-arrival', can_focus: true, x_expand: true,
+            accessible_name: fmt(ngettext('%d file in the Shelf', '%d files in the Shelf', arrived.length), arrived.length)});
+        root.connect('clicked', () => this.island.open('shelf'));
+        const row = box(false, {style_class: 'notchy-shelf-arrival-row', x_expand: true});
+        root.set_child(row);
+        const [W, H] = ARRIVAL_STAGE, center = new Graphene.Point({x: 0.5, y: 0.5});
+        const stage = new St.Widget({width: W, height: H, y_align: Clutter.ActorAlign.CENTER});
+        row.add_child(stage);
+        // The light: two rings and a handful of sparks, at the landing point.
+        const rings = [0, 1].map(() => new St.Widget({style_class: 'notchy-shelf-arrival-ring', width: 44, height: 44, x: W / 2 - 22, y: H / 2 - 18, opacity: 0, pivot_point: center}));
+        const sparks = Array.from({length: 12}, (_s, i) => new St.Widget({style_class: 'notchy-shelf-arrival-spark', width: i % 2 ? 4 : 7, height: i % 2 ? 4 : 7, x: W / 2 - 3, y: H / 2, opacity: 0}));
+        for (const actor of [...rings, ...sparks]) stage.add_child(actor);
+        const shown = arrived.slice(-3), first = 180, step = 120, landing = 520, cards = [];
+        shown.forEach((item, index) => {
+            const offset = index - (shown.length - 1) / 2;
+            const card = new St.Widget({style_class: 'notchy-shelf-arrival-card', layout_manager: new Clutter.BinLayout(), width: 34, height: 42,
+                x: W / 2 - 17 + offset * 16, y: H / 2 - 21 + 2 + Math.abs(offset) * 2, pivot_point: center});
+            const path = Gio.File.new_for_uri(item.uri).get_path(), ext = extensionOf(item.name);
+            if (path && KIND[ext] === 'image') card.style = `background-image: url("${path.replace(/["\\]/g, '\\$&')}");`;
+            else card.add_child(label(ext.toUpperCase().slice(0, 4) || _('FILE'), `notchy-file-ext notchy-shelf-arrival-ext ${KIND[ext] ?? 'other'}`, {x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.END}));
+            // From high above, turned the other way, larger; in it falls.
+            card.translation_y = -90; card.opacity = 0; card.scale_x = card.scale_y = 1.4; card.rotation_angle_z = offset * 10 + 30;
+            stage.add_child(card); cards.push([card, offset]);
+        });
+        // „Im Regal“ and what came, sliding in.
+        const words = box(true, {x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'notchy-shelf-arrival-words', opacity: 0, translation_x: -16});
+        words.add_child(label(_('In the Shelf'), 'notchy-shelf-arrival-title'));
+        words.add_child(label(arrived.length === 1 ? arrived[0].name : fmt(ngettext('%d file', '%d files', arrived.length), arrived.length), 'notchy-shelf-arrival-name'));
+        row.add_child(words);
+        const pill = box(false, {style_class: 'notchy-shelf-pill notchy-shelf-arrival-pill', y_align: Clutter.ActorAlign.CENTER, pivot_point: center});
+        pill.add_child(new St.Icon({gicon: gicon('adwaita:package-x-generic-symbolic'), icon_size: 14, y_align: Clutter.ActorAlign.CENTER}));
+        const count = label(String(before), 'notchy-shelf-pill-count', {y_align: Clutter.ActorAlign.CENTER});
+        pill.add_child(count); row.add_child(pill);
+        // GNOME skips the easing of an actor not yet on screen: the show
+        // starts once the opening notch has mapped the stage and, a tick
+        // later, its cards (the stage says so before its children are).
+        let played = false;
+        const play = () => {
+            if (played || !stage.mapped || cards.some(([card]) => !card.mapped)) return;
+            played = true;
+            cards.forEach(([card, offset], index) => {
+                const delay = first + index * step;
+                ease(card, {opacity: 255, duration: 160, delay});
+                card.ease({translation_y: 0, scale_x: 1, scale_y: 1, rotation_angle_z: offset * 10, duration: landing, delay, mode: Clutter.AnimationMode.EASE_OUT_BACK});
+            });
+            // A bump of the whole stack as the last card lands.
+            const landed = first + (shown.length - 1) * step + landing * 0.62;
+            life.later(landed, () => {
+                stage.pivot_point = new Graphene.Point({x: 0.5, y: 0.8});
+                stage.ease({scale_x: 1.08, scale_y: 0.92, duration: 90, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                    onComplete: () => stage.ease({scale_x: 1, scale_y: 1, duration: 320, mode: Clutter.AnimationMode.EASE_OUT_BACK})});
+            });
+            life.later(first + landing * 0.62, () => {
+                rings.forEach((ring, i) => {
+                    ring.opacity = 230; ring.scale_x = ring.scale_y = 0.5;
+                    ease(ring, {scale_x: 2.4, scale_y: 2.4, opacity: 0, duration: 760, delay: i * 170, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+                });
+                sparks.forEach((spark, i) => {
+                    const angle = (i / sparks.length) * 2 * Math.PI + 0.3, reach = 34 + (i % 3) * 10;
+                    spark.opacity = 255;
+                    ease(spark, {translation_x: Math.cos(angle) * reach * 1.5, translation_y: Math.sin(angle) * reach, opacity: 0, duration: 700 + (i % 3) * 110, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+                });
+            });
+            ease(words, {opacity: 255, translation_x: 0, duration: 420, delay: first + 180, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            // The count rolls from what was there to what is there now, then pops.
+            const rolls = Math.max(1, total - before), rollStart = first + landing * 0.62;
+            for (let i = 1; i <= rolls; i++) {
+                life.later(rollStart + (i - 1) * Math.min(110, 480 / rolls), () => {
+                    count.text = String(before + Math.round((total - before) * i / rolls));
+                    count.translation_y = -6; count.opacity = 120;
+                    ease(count, {translation_y: 0, opacity: 255, duration: 140});
+                    if (i === rolls) pill.ease({scale_x: 1.35, scale_y: 1.35, duration: 130, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                        onComplete: () => pill.ease({scale_x: 1, scale_y: 1, duration: 360, mode: Clutter.AnimationMode.EASE_OUT_BACK})});
+                });
+            }
+        };
+        const mapped = stage.connect('notify::mapped', () => life.later(0, play));
+        root.connect('destroy', () => { stage.disconnect(mapped); life.dispose(); });
+        return {actor: root, stage, get played() { return played; }};
+    }
+
     // Ablage: search with filters, a quiet list and one selected row that
     // offers its actions. ↑↓ move, ↵ copies, ⇧↵ copies plain text, F and Entf.
+    // Ablage: the history on the left, grouped by day — each entry's kind as a
+    // tinted tile (a colour as itself), one line, a star, the time — and the
+    // selected entry on the right, shown as what it is: text to read, a link
+    // with its site, the picture, a colour with HEX, RGB and HSL to copy, the
+    // files. ↑↓ move, ↵ copies, ⇧↵ copies plain text, F and Entf.
     clipboardView() {
         const root = box(true, {style_class: 'notchy-page notchy-clipboard', y_expand: true});
-        if (!this.settings.get_boolean('clipboard-enabled')) {
-            root.add_child(emptyState('edit-paste-symbolic', _('History Is Paused'), _('Copies are only recorded once this is turned on.'), _('Turn On Recording'), () => this.settings.set_boolean('clipboard-enabled', true)));
-            return root;
-        }
+        if (!this.settings.get_boolean('clipboard-enabled')) return this.clipboardPaused(root);
         let filter = 'all', query = '', selected = 0, lastClick = [-1, 0];
+        const center = {y_align: Clutter.ActorAlign.CENTER};
         const top = box(false, {style_class: 'notchy-clip-top'});
-        const search = new St.Entry({style_class: 'notchy-search-pill', hint_text: _('Search'), can_focus: true, x_expand: true});
+        const search = new St.Entry({style_class: 'notchy-search-pill', hint_text: _('Search the history'), can_focus: true, x_expand: true});
         search.set_primary_icon(icon('edit-find-symbolic', 16));
         top.add_child(search); this.focusEntry = search;
-        const chips = box(false, {style_class: 'notchy-chips'});
-        const chipButtons = FILTERS.map(([id, iconName, title]) => {
-            const chip = button(iconName, _(title), () => { filter = id; selected = 0; update(); }, 'notchy-chip'); chips.add_child(chip); return [id, chip];
+        // Filters as one segmented control: the word and how many there are.
+        const segments = box(false, {style_class: 'notchy-clip-segments', ...center});
+        const chipButtons = FILTERS.map(([id, , title]) => {
+            const row = box(false, {style_class: 'notchy-clip-segment-row'});
+            row.add_child(label(id === 'fav' ? _('Favorites') : _(title), 'notchy-clip-segment-label', center));
+            const count = label('', 'notchy-clip-segment-count', center); row.add_child(count);
+            const chip = new St.Button({style_class: 'notchy-clip-segment', child: row, can_focus: true, accessible_name: _(title)});
+            chip.connect('clicked', () => { filter = id; selected = 0; update(); });
+            segments.add_child(chip); return [id, chip, count];
         });
-        top.add_child(chips); root.add_child(top);
+        top.add_child(segments); root.add_child(top);
+        const body = box(false, {style_class: 'notchy-clip-body', y_expand: true});
         const list = box(true, {style_class: 'notchy-clip-list'});
-        root.add_child(scroll(list, 250));
+        // Fixed widths: what the preview shows never moves the list.
+        const inner = this.island.currentWidth - 36, listWidth = Math.round(inner * 0.44);
+        const listScroll = scroll(list, CLIP_HEIGHT);
+        listScroll.width = listWidth;
+        body.add_child(listScroll);
+        const preview = box(true, {style_class: 'notchy-clip-preview', width: inner - listWidth - 14, height: CLIP_HEIGHT});
+        body.add_child(preview); root.add_child(body);
         const items = () => this.clipboard.history.search(query, filter === 'link' ? 'link' : filter === 'image' ? 'image' : 'all', filter === 'fav');
         const copy = (item, plain = false) => {
             if (plain && item.kind !== 'image' && item.kind !== 'files') St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, item.text);
@@ -479,20 +695,21 @@ export class Views {
             else if (action === 'shelf') { this.shelveClip(item); this.island.toast('package-x-generic-symbolic', _('Added to the Shelf')); }
         };
         const update = () => {
-            for (const [id, chip] of chipButtons) id === filter ? chip.add_style_class_name('active') : chip.remove_style_class_name('active');
+            const counts = {all: this.clipboard.history.search(query).length, link: this.clipboard.history.search(query, 'link').length,
+                image: this.clipboard.history.search(query, 'image').length, fav: this.clipboard.history.search(query, 'all', true).length};
+            for (const [id, chip, count] of chipButtons) { id === filter ? chip.add_style_class_name('active') : chip.remove_style_class_name('active'); count.text = String(counts[id]); }
             list.destroy_all_children();
             const found = items(); selected = Math.max(0, Math.min(selected, found.length - 1));
+            let day = '';
             found.slice(0, 100).forEach((item, index) => {
+                const heading = dayHeading(item.created);
+                if (heading !== day) { day = heading; list.add_child(label(heading, 'notchy-clip-group')); }
                 const current = index === selected;
                 const row = box(false, {style_class: `notchy-clip-row${current ? ' selected' : ''}`});
-                const tile = new St.Bin({style_class: `notchy-clip-icon ${item.kind}`, y_align: Clutter.ActorAlign.CENTER});
-                if (item.kind === 'color') tile.style = `background-color: ${item.text.trim()};`;
-                tile.set_child(item.kind === 'image' && item.asset ? new St.Icon({gicon: new Gio.FileIcon({file: Gio.File.new_for_path(item.asset)}), icon_size: 26}) : icon(CLIP_ICON[item.kind] ?? CLIP_ICON.text, 15));
-                row.add_child(tile);
-                const text = box(true, {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-                text.add_child(label(clipTitle(item) || item.text.replace(/\s+/g, ' ').slice(0, 160), `notchy-clip-text${item.kind === 'color' ? ' mono' : ''}`));
-                if (current) text.add_child(label([item.source, relativeTime(item.created)].filter(Boolean).join(' · '), 'notchy-clip-meta'));
-                const open = new St.Button({child: text, x_expand: true, can_focus: false, style_class: 'notchy-clip-open', accessible_name: clipTitle(item) || item.text.slice(0, 80)});
+                row.add_child(clipTile(item));
+                const words = clipTitle(item) || item.text.replace(/\s+/g, ' ').slice(0, 160);
+                const open = new St.Button({child: label(words, `notchy-clip-text${item.kind === 'color' ? ' mono' : ''}`, {x_expand: true, x_align: Clutter.ActorAlign.START, ...center}), x_expand: true, can_focus: false,
+                    style_class: 'notchy-clip-open', accessible_name: clipTitle(item) || item.text.slice(0, 80)});
                 open.connect('clicked', () => {
                     // A second click on the same row within 400 ms copies it.
                     const now = GLib.get_monotonic_time() / 1000, double = lastClick[0] === item.id && now - lastClick[1] < 400;
@@ -501,25 +718,19 @@ export class Views {
                     selected = index; update();
                 });
                 row.add_child(open);
-                if (current) {
-                    const actions = box(false, {style_class: 'notchy-clip-actions', y_align: Clutter.ActorAlign.CENTER});
-                    actions.add_child(button(item.favorite ? 'starred-symbolic' : 'non-starred-symbolic', _('Favorite (F)'), () => act('fav', item), `notchy-round-button${item.favorite ? ' favorite' : ''}`));
-                    actions.add_child(button('user-trash-symbolic', _('Delete (Del)'), () => act('del', item), 'notchy-round-button'));
-                    actions.add_child(button('package-x-generic-symbolic', _('Add to Shelf'), () => act('shelf', item), 'notchy-round-button'));
-                    actions.add_child(button('edit-copy-symbolic', _('Copy (Enter)'), () => act('copy', item), 'notchy-round-button accent'));
-                    row.add_child(actions);
-                } else {
-                    if (item.favorite) { const star = icon('starred-symbolic', 13); star.add_style_class_name('notchy-star'); star.y_align = Clutter.ActorAlign.CENTER; row.add_child(star); }
-                    row.add_child(label(relativeTime(item.created), 'notchy-clip-time', {y_align: Clutter.ActorAlign.CENTER}));
-                }
+                if (item.favorite) { const star = icon('starred-symbolic', 12); star.add_style_class_name('notchy-star'); star.y_align = Clutter.ActorAlign.CENTER; row.add_child(star); }
+                row.add_child(label(relativeTime(item.created), 'notchy-clip-meta', center));
                 list.add_child(row);
             });
-            if (!found.length) list.add_child(label(_('Nothing found'), 'notchy-muted', {x_align: Clutter.ActorAlign.CENTER, style: 'padding: 24px 0;'}));
+            if (!found.length) list.add_child(label(query ? _('Nothing found') : _('Nothing copied yet'), 'notchy-clip-none', {x_align: Clutter.ActorAlign.CENTER}));
+            preview.destroy_all_children();
+            if (found[selected]) this.clipPreview(preview, found[selected], act, query); else preview.add_style_class_name('empty');
+            if (found[selected]) preview.remove_style_class_name('empty');
             this.pageLife.later(0, () => {
-                const row = list.get_child_at_index(selected), view = list.get_parent();
+                const row = list.get_children().filter(child => child.has_style_class_name?.('notchy-clip-row'))[selected], view = list.get_parent();
                 if (!row || !view?.vadjustment) return;
                 const adjust = view.vadjustment;
-                if (row.y < adjust.value) adjust.value = row.y;
+                if (row.y < adjust.value) adjust.value = Math.max(0, row.y - 22);
                 else if (row.y + row.height > adjust.value + adjust.page_size) adjust.value = row.y + row.height - adjust.page_size;
             });
         };
@@ -529,15 +740,113 @@ export class Views {
             if (key === Clutter.KEY_Down) { selected = Math.min(found.length - 1, selected + 1); update(); return Clutter.EVENT_STOP; }
             if (key === Clutter.KEY_Up) { selected = Math.max(0, selected - 1); update(); return Clutter.EVENT_STOP; }
             if (key === Clutter.KEY_Return || key === Clutter.KEY_KP_Enter) { act(shift ? 'plain' : 'copy', found[selected]); return Clutter.EVENT_STOP; }
+            if (inEntry && key === Clutter.KEY_Escape && search.get_text()) { search.set_text(''); return Clutter.EVENT_STOP; }
             if (inEntry) return Clutter.EVENT_PROPAGATE;
             if (key === Clutter.KEY_f || key === Clutter.KEY_F) { act('fav', found[selected]); return Clutter.EVENT_STOP; }
             if (key === Clutter.KEY_Delete) { act('del', found[selected]); return Clutter.EVENT_STOP; }
             return Clutter.EVENT_PROPAGATE;
         };
-        search.clutter_text.connect('text-changed', () => { query = search.get_text(); selected = 0; update(); });
+        search.clutter_text.connect('text-changed', () => { query = search.get_text(); selected = 0; search.get_text() ? search.add_style_class_name('searching') : search.remove_style_class_name('searching'); update(); });
         search.clutter_text.connect('key-press-event', (_t, event) => keys(event, true));
         this.keyPress = event => keys(event, false);
         update(); this.pageLife.cleanups.push(this.clipboard.subscribe(update));
+        return root;
+    }
+    // The selected entry, shown as what it is, with what can be done with it.
+    clipPreview(preview, item, act, query) {
+        const center = {y_align: Clutter.ActorAlign.CENTER};
+        const meta = box(false, {style_class: 'notchy-clip-preview-meta'});
+        meta.add_child(label(clipKindName(item), `notchy-clip-kind ${item.kind}`, center));
+        const where = [item.source, relativeTime(item.created)].filter(Boolean).join(' · ');
+        meta.add_child(label(where, 'notchy-clip-preview-where', {x_expand: true, ...center}));
+        const size = clipSize(item);
+        if (size) meta.add_child(label(size, 'notchy-clip-preview-where', center));
+        preview.add_child(meta);
+        const content = box(true, {style_class: 'notchy-clip-preview-content', y_expand: true, clip_to_allocation: true});
+        if (item.kind === 'link') {
+            let host = item.text;
+            try { host = GLib.Uri.parse(item.text.trim(), GLib.UriFlags.NONE).get_host() || item.text; } catch { /* Shown as it is. */ }
+            const card = box(false, {style_class: 'notchy-clip-link-card'});
+            card.add_child(new St.Bin({style_class: 'notchy-clip-link-avatar', child: label(host.replace(/^www\./, '').charAt(0).toUpperCase(), 'notchy-clip-link-letter', {x_align: Clutter.ActorAlign.CENTER, ...center}), ...center}));
+            card.add_child(label(host.replace(/^www\./, ''), 'notchy-clip-link-host', {x_expand: true, ...center}));
+            content.add_child(card);
+            const url = label(item.text.trim(), 'notchy-clip-link-url'); url.clutter_text.line_wrap = true; url.clutter_text.line_wrap_mode = Pango.WrapMode.CHAR; url.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+            content.add_child(url);
+        } else if (item.kind === 'image' && item.asset) {
+            const picture = new St.Widget({style_class: 'notchy-clip-picture', y_expand: true, x_expand: true});
+            picture.style = `background-image: url("${item.asset.replace(/["\\]/g, '\\$&')}");`;
+            content.add_child(picture);
+        } else if (item.kind === 'color') {
+            const hex = normalHex(item.text.trim());
+            const swatch = new St.Widget({style_class: 'notchy-clip-swatch', height: 74}); swatch.style = `background-color: ${hex};`;
+            content.add_child(swatch);
+            const formats = box(false, {style_class: 'notchy-clip-formats'});
+            for (const [name, value] of colorFormats(hex)) {
+                const cell = box(true, {style_class: 'notchy-clip-format-cell'});
+                cell.add_child(label(name, 'notchy-clip-format-name')); cell.add_child(label(value, 'notchy-clip-format-value'));
+                const button_ = new St.Button({style_class: 'notchy-clip-format', child: cell, x_expand: true, can_focus: true, accessible_name: fmt(_('Copy %s'), value)});
+                button_.connect('clicked', () => { St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, value); this.island.close(); this.island.toast('edit-copy-symbolic', _('Copied to clipboard')); });
+                formats.add_child(button_);
+            }
+            content.add_child(formats);
+        } else if (item.kind === 'files') {
+            for (const uri of (item.uris ?? []).slice(0, 4)) {
+                const name = Gio.File.new_for_uri(uri).get_basename() ?? uri, ext = extensionOf(name);
+                const row = box(false, {style_class: 'notchy-clip-file'});
+                row.add_child(label(ext.toUpperCase().slice(0, 4) || _('FILE'), `notchy-file-ext ${KIND[ext] ?? 'other'}`, center));
+                row.add_child(label(name, 'notchy-clip-file-name', {x_expand: true, ...center}));
+                content.add_child(row);
+            }
+            if ((item.uris?.length ?? 0) > 4) content.add_child(label(fmt(ngettext('and %d more', 'and %d more', item.uris.length - 4), item.uris.length - 4), 'notchy-clip-preview-where'));
+        } else {
+            const text = label(item.text, 'notchy-clip-preview-text');
+            text.clutter_text.line_wrap = true; text.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR; text.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            // The match stands out while searching.
+            const at = query ? item.text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) : -1;
+            if (at >= 0 && item.text.length < 4000) {
+                const escape = t => GLib.markup_escape_text(t, -1);
+                text.clutter_text.set_markup(`${escape(item.text.slice(0, at))}<span background="#f2a25c55" foreground="#ffffff">${escape(item.text.slice(at, at + query.length))}</span>${escape(item.text.slice(at + query.length))}`);
+            }
+            content.add_child(text);
+        }
+        preview.add_child(content);
+        const actions = box(false, {style_class: 'notchy-clip-preview-actions'});
+        const primary = new St.Button({style_class: 'notchy-clip-copy', can_focus: true, accessible_name: _('Copy (Enter)'), ...center});
+        const primaryRow = box(false, {style_class: 'notchy-clip-copy-row'});
+        primaryRow.add_child(label(_('Copy'), 'notchy-clip-copy-label', center));
+        primary.set_child(primaryRow); primary.connect('clicked', () => act('copy', item)); actions.add_child(primary);
+        // The keys (↵, ⇧↵) are in the buttons' names; the room goes to the words.
+        if (item.kind === 'text' || item.kind === 'link') {
+            const plain = new St.Button({style_class: 'notchy-clip-plain', can_focus: true, accessible_name: _('Copy as plain text (Shift+Enter)'), ...center});
+            const plainRow = box(false, {style_class: 'notchy-clip-copy-row'});
+            plainRow.add_child(label(_('Copy as Text'), 'notchy-clip-plain-label', center));
+            plain.set_child(plainRow); plain.connect('clicked', () => act('plain', item)); actions.add_child(plain);
+        }
+        actions.add_child(new St.Widget({x_expand: true}));
+        actions.add_child(button(item.favorite ? 'starred-symbolic' : 'non-starred-symbolic', _('Favorite (F)'), () => act('fav', item), `notchy-round-button notchy-clip-action${item.favorite ? ' favorite' : ''}`));
+        actions.add_child(button('package-x-generic-symbolic', _('Add to Shelf'), () => act('shelf', item), 'notchy-round-button notchy-clip-action'));
+        actions.add_child(button('user-trash-symbolic', _('Delete (Del)'), () => act('del', item), 'notchy-round-button notchy-clip-action danger'));
+        preview.add_child(actions);
+    }
+    // The history is off: what it would do, and a way to turn it on.
+    clipboardPaused(root) {
+        const empty = box(true, {style_class: 'notchy-clip-paused', x_expand: true, y_expand: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        const stack = new St.Widget({width: 150, height: 84, x_align: Clutter.ActorAlign.CENTER});
+        for (const [x, y, w, h, angle, front] of [[26, 18, 98, 26, -4, false], [22, 36, 106, 28, 3, false], [18, 50, 114, 30, 0, true]]) {
+            const strip = new St.Widget({style_class: front ? 'notchy-clip-ghost front' : 'notchy-clip-ghost', x, y, width: w, height: h, pivot_point: new Graphene.Point({x: 0.5, y: 0.5}), rotation_angle_z: angle});
+            if (front) {
+                strip.add_child(new St.Widget({style_class: 'notchy-clip-ghost-dot', x: 10, y: 8, width: 14, height: 14}));
+                strip.add_child(new St.Widget({style_class: 'notchy-clip-ghost-line', x: 32, y: 13, width: 70, height: 5}));
+            }
+            stack.add_child(strip);
+        }
+        empty.add_child(stack);
+        empty.add_child(label(_('The History Is Off'), 'notchy-clip-paused-title', {x_align: Clutter.ActorAlign.CENTER}));
+        empty.add_child(label(_('Turn it on to find everything you copied here again.'), 'notchy-clip-paused-hint', {x_align: Clutter.ActorAlign.CENTER}));
+        const turnOn = textButton(_('Turn On History'), () => this.settings.set_boolean('clipboard-enabled', true), 'notchy-clip-turn-on');
+        turnOn.x_align = Clutter.ActorAlign.CENTER; empty.add_child(turnOn);
+        empty.add_child(label(_('It is kept on this computer only.'), 'notchy-clip-paused-note', {x_align: Clutter.ActorAlign.CENTER}));
+        root.add_child(empty);
         return root;
     }
     shelveClip(item) {

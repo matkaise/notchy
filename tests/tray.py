@@ -3,12 +3,13 @@
 import os
 import sys
 sys.path.insert(0, os.path.join(os.environ['NOTCHY_EXTENSION_PATH'], 'helper'))
-from tray import Tray, Gdk, Gio, GLib, Gtk
+from tray import Tray, Gdk, Gio, GLib, Gtk, _, ngettext
 import gi
 gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import GdkPixbuf
 
-app = Tray('basket')
+app = basket = Tray('basket')
+shelf = None
 failed = False
 
 def check():
@@ -34,6 +35,38 @@ def check():
         assert all(alpha(x, y) == 0 for x, y in ((5, 5), (width - 6, 5), (5, height - 6), (width - 6, height - 6))), 'basket preserves its large corner radius against user frame styles'
         assert alpha(width // 2, height // 2) > 200, 'native basket contents remain visible'
         print('PASS: native basket renders transparent corners and visible contents', flush=True)
+        # The Korb shows what it holds as one fanned stack, dragged out as one.
+        fanned = len(app.fan.cards)
+        items = app.basket_items
+        assert app.area.get_visible_child_name() == 'filled' and fanned == min(4, len(items)) and app.to_shelf.get_sensitive(), 'the Korb fans out its files'
+        more = ngettext('%(name)s and %(count)d more', '%(name)s and %(count)d more', len(items) - 1) % {'name': items[-1]['name'], 'count': len(items) - 1}
+        assert app.caption.get_text() == (items[-1]['name'] if len(items) == 1 else more), 'the Korb names its newest file'
+        stack = app.stack_content()
+        assert stack.ref_formats().contain_gtype(Gdk.FileList) and len(items) >= 2, 'the stack drags the Korb\'s files as one native file list'
+        print('PASS: the Korb fans out its files and drags them as one stack', flush=True)
+        # Selecting is the Regal's: one built in this process from the same files.
+        global shelf
+        shelf = Tray('shelf')
+        shelf.proxy = app.proxy
+        shelf.call = lambda method, values=None, done=None: app.call(method, values, done) if method == 'GetItems' else None
+        shelf.window = Gtk.Window(application=app, title='Notchy Tray Test Regal', decorated=False, default_width=700, default_height=300)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        shelf.root = Gtk.Frame(child=box, css_classes=['tray', 'shelf', 'dynamic'])
+        shelf.window.set_child(shelf.root)
+        shelf.build_shelf(box)
+        shelf.window.present()
+        shelf.refresh()
+        GLib.timeout_add(500, select)
+    except Exception as error:
+        failed = True
+        print(f'NOTCHY_TRAY_TEST_FAILED: {error}', flush=True)
+        app.quit()
+    return GLib.SOURCE_REMOVE
+
+def select():
+    global failed
+    app = shelf
+    try:
         children = []
         child = app.flow.get_first_child()
         while child:
@@ -41,9 +74,11 @@ def check():
                 children.append(child)
             child = child.get_next_sibling()
         assert len(children) >= 2, 'two shelf fixtures required'
+        assert not app.empty.get_visible() and app.title.get_text() == _('Shelf'), 'the Regal lists its files under its name'
         app.flow.select_child(children[0])
         app.flow.select_child(children[1])
         expected = set(app.selected_uris())
+        assert app.title.get_text() == ngettext('%d selected', '%d selected', 2) % 2 and app.actions.get_visible() and app.clear_button.get_visible() and not app.idle.get_visible(), 'a selection turns the header into its actions'
         assert len(expected) == 2, 'GTK multiple selection'
         # Deselecting: a plain click (press and release in place) on the only
         # selected tile clears it; a press that turns into a drag never does.
@@ -83,12 +118,12 @@ def check():
             except Exception as error:
                 failed = True
                 print(f'NOTCHY_TRAY_TEST_FAILED: {error}', flush=True)
-            app.quit()
+            basket.quit()
         Gdk.Display.get_default().get_clipboard().read_value_async(Gdk.FileList, 0, None, copied)
     except Exception as error:
         failed = True
         print(f'NOTCHY_TRAY_TEST_FAILED: {error}', flush=True)
-        app.quit()
+        basket.quit()
     return GLib.SOURCE_REMOVE
 
 def prepare_render():

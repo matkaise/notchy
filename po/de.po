@@ -19,7 +19,7 @@ msgstr "Helligkeit"
 msgid "Microphone"
 msgstr "Mikrofon"
 
-#: extension.js:114 src/ui/island.js:665
+#: extension.js:114 src/ui/island.js:784
 msgid "Volume"
 msgstr "Lautstärke"
 
@@ -59,17 +59,22 @@ msgstr "%(path)s ist kein gültiges JSON (%(error)s)"
 msgid "%s holds no JSON object"
 msgstr "%s enthält kein JSON-Objekt"
 
-#: src/launcher/providers.js:379 src/ui/views.js:508 helper/drop.py:57
+#: src/launcher/providers.js:379 src/ui/views.js:827 helper/drop.py:64
 msgid "Add to Shelf"
 msgstr "Ins Regal legen"
 
-#: helper/drop.py:57
-msgid "The original stays where it is"
-msgstr "Original bleibt, wo es ist"
+#: src/launcher/logic.js:11 src/ui/island.js:23 src/ui/shelfBubble.js:44 src/ui/views.js:518
+#: helper/drop.py:64 helper/tray.py:304 helper/tray.py:792
+msgid "Shelf"
+msgstr "Regal"
 
-#: helper/drop.py:59
+#: helper/drop.py:65
 msgid "Send to an iPhone"
 msgstr "An ein iPhone senden"
+
+#: helper/drop.py:65 helper/tray.py:311 helper/tray.py:915
+msgid "Send with AirDrop"
+msgstr "Per AirDrop senden"
 
 #: helper/operations.py:106
 msgid "Unsupported picture format."
@@ -146,176 +151,222 @@ msgid_plural "%(count)d files compressed · %(name)s is in the Shelf"
 msgstr[0] "%(count)d Datei gepackt · %(name)s im Regal"
 msgstr[1] "%(count)d Dateien gepackt · %(name)s im Regal"
 
-#: helper/tray.py:162 helper/tray.py:640
-msgid "Compress as ZIP"
-msgstr "Als ZIP packen"
-
-#: helper/tray.py:164
-msgid "Convert Pictures to WebP"
-msgstr "Bilder nach WebP konvertieren"
-
-#: helper/tray.py:164
-msgid "Converting pictures needs ImageMagick"
-msgstr "Bildkonvertierung braucht ImageMagick"
-
-#: helper/tray.py:168 helper/tray.py:644
-msgid "Send with AirDrop"
-msgstr "Per AirDrop senden"
-
-#: helper/tray.py:171
-msgid "Remove from the Shelf · originals stay"
-msgstr "Aus dem Regal entfernen · Originale bleiben"
-
-#: helper/tray.py:175
-msgid "Add Files · a click selects, a double click opens"
-msgstr "Dateien hinzufügen · Klicken wählt aus, Doppelklick öffnet"
-
-#: src/ui/views.js:426 helper/tray.py:194
-msgid "Drag files onto the island"
-msgstr "Dateien auf die Island ziehen"
-
-#: prefs.js:113 helper/tray.py:240
-msgid "Basket"
-msgstr "Korb"
-
-#: helper/tray.py:241
-msgid "Close Basket"
-msgstr "Korb schließen"
-
-#: helper/tray.py:251
-msgid "Everything to the Shelf"
-msgstr "Alles ins Regal"
-
-#: helper/tray.py:375
-msgid "Add Files to the Shelf"
-msgstr "Dateien zum Regal hinzufügen"
-
-#: helper/tray.py:458
-msgid "Drop here"
-msgstr "Hier loslassen"
-
-#: helper/tray.py:523
-#, python-format
-msgid "%(selected)d of %(total)d selected"
-msgid_plural "%(selected)d of %(total)d selected"
-msgstr[0] "%(selected)d von %(total)d ausgewählt"
-msgstr[1] "%(selected)d von %(total)d ausgewählt"
-
-#: src/model.js:66 src/ui/views.js:421 src/ui/views.js:947 helper/tray.py:524
-#, javascript-format, python-format
-msgid "%d file"
-msgid_plural "%d files"
-msgstr[0] "%d Datei"
-msgstr[1] "%d Dateien"
-
-#: helper/tray.py:565
-msgid "Save a Copy"
-msgstr "Kopie speichern"
-
-#: helper/tray.py:585
-#, python-format
-msgid "Save %d Copy In"
-msgid_plural "Save %d Copies In"
-msgstr[0] "%d Kopie speichern in"
-msgstr[1] "%d Kopien speichern in"
-
-#: helper/tray.py:631
-#, python-format
-msgid "%d picture"
-msgid_plural "%d pictures"
-msgstr[0] "%d Bild"
-msgstr[1] "%d Bilder"
-
-#: src/launcher/providers.js:104 src/launcher/providers.js:139 src/launcher/providers.js:376 src/ui/views.js:839
-#: helper/tray.py:635
-msgid "Open"
-msgstr "Öffnen"
-
-#: helper/tray.py:635
-#, python-format
-msgid "Open %d File"
-msgid_plural "Open %d Files"
-msgstr[0] "%d Datei öffnen"
-msgstr[1] "%d Dateien öffnen"
-
-#: helper/tray.py:636
-msgid "Show in Folder"
-msgstr "Im Ordner zeigen"
-
-#: src/launcher/providers.js:319 src/launcher/providers.js:355 helper/tray.py:637
-msgid "Copy"
-msgstr "Kopieren"
-
-#: helper/tray.py:638
-msgid "Save Copies…"
-msgstr "Kopien speichern …"
-
-#: helper/tray.py:638
-msgid "Save a Copy…"
-msgstr "Kopie speichern …"
-
-#: helper/tray.py:647
-msgid "Recognize Text"
-msgstr "Text erkennen"
-
-#: helper/tray.py:649
-msgid "Convert To"
-msgstr "Konvertieren in"
-
-#: helper/tray.py:652
-msgid "Remove Background"
-msgstr "Hintergrund entfernen"
-
-#: helper/tray.py:654
-#, python-format
-msgid "%d PDF"
-msgid_plural "%d PDFs"
-msgstr[0] "%d PDF"
-msgstr[1] "%d PDFs"
-
-#: helper/tray.py:654
-msgid "Shrink PDF"
-msgstr "PDF verkleinern"
-
-#: helper/tray.py:656
-#, python-format
-msgid "%d document"
-msgid_plural "%d documents"
-msgstr[0] "%d Dokument"
-msgstr[1] "%d Dokumente"
-
-#: helper/tray.py:656
-msgid "Save as PDF"
-msgstr "Als PDF speichern"
-
-#: helper/tray.py:658
-#, python-format
-msgid "%d video"
-msgid_plural "%d videos"
-msgstr[0] "%d Video"
-msgstr[1] "%d Videos"
-
-#: helper/tray.py:658
-msgid "Shrink Video"
-msgstr "Video verkleinern"
-
-#: helper/tray.py:659
-#, python-format
-msgid "To %s MB"
-msgstr "Auf %s MB"
-
-#: helper/tray.py:662
-msgid "Remove from Shelf"
-msgstr "Aus Regal entfernen"
-
-#: helper/tray.py:754
+#: helper/tray.py:1023
 #, python-format
 msgid "%d file selected"
 msgid_plural "%d files selected"
 msgstr[0] "%d Datei ausgewählt"
 msgstr[1] "%d Dateien ausgewählt"
 
-#: prefs.js:103 prefs.js:113 src/launcher/logic.js:12 src/ui/island.js:21
+#: helper/tray.py:301
+msgid "Clear Selection"
+msgstr "Auswahl aufheben"
+
+#. Translators: a short button label; its tooltip is „Compress as ZIP“.
+#: helper/tray.py:315 helper/tray.py:911
+msgid "Compress as ZIP"
+msgstr "Als ZIP packen"
+
+#. Translators: a short button label; its tooltip is „Compress as ZIP“.
+#: helper/tray.py:315
+msgid "Zip"
+msgstr "Zippen"
+
+#. Translators: a short button label; its tooltip says what it converts.
+#: helper/tray.py:319
+msgid "Convert"
+msgstr "Umwandeln"
+
+#. Translators: a short button label; its tooltip says what it converts.
+#: helper/tray.py:319
+msgid "Convert Pictures to WebP"
+msgstr "Bilder nach WebP konvertieren"
+
+#. Translators: a short button label; its tooltip says what it converts.
+#: helper/tray.py:319
+msgid "Converting pictures needs ImageMagick"
+msgstr "Bildkonvertierung braucht ImageMagick"
+
+#: helper/tray.py:322
+msgid "Remove from the Shelf · originals stay"
+msgstr "Aus dem Regal entfernen · Originale bleiben"
+
+#: helper/tray.py:327 helper/tray.py:327
+msgid "Select All"
+msgstr "Alle auswählen"
+
+#: helper/tray.py:330
+msgid "Add Files · a click selects, a double click opens"
+msgstr "Dateien hinzufügen · Klicken wählt aus, Doppelklick öffnet"
+
+#: src/ui/views.js:543 helper/tray.py:398
+msgid "The Shelf Is Empty"
+msgstr "Das Regal ist leer"
+
+#: src/ui/views.js:544 helper/tray.py:399
+msgid "Drag files onto the notch to keep them close at hand."
+msgstr "Zieh Dateien auf die Notch, dann liegen sie hier griffbereit."
+
+#: helper/tray.py:400 helper/tray.py:590
+msgid "Add Files to the Shelf"
+msgstr "Dateien zum Regal hinzufügen"
+
+#: helper/tray.py:400
+msgid "Choose Files"
+msgstr "Dateien auswählen"
+
+#: prefs.js:113 helper/tray.py:412
+msgid "Basket"
+msgstr "Korb"
+
+#: helper/tray.py:415
+msgid "Close Basket"
+msgstr "Korb schließen"
+
+#: helper/tray.py:426
+msgid "Drop here"
+msgstr "Hier loslassen"
+
+#: helper/tray.py:427
+msgid "Collect now, drop later"
+msgstr "Sammeln, später ablegen"
+
+#: helper/tray.py:440 helper/tray.py:440
+msgid "Everything to the Shelf"
+msgstr "Alles ins Regal"
+
+#: helper/tray.py:444
+msgid "Send Everything with AirDrop"
+msgstr "Alles per AirDrop senden"
+
+#. Translators: shown on a file tile without a file name extension.
+#: src/ui/views.js:553 src/ui/views.js:586 src/ui/views.js:796 helper/tray.py:637
+msgid "FILE"
+msgstr "DATEI"
+
+#: src/model.js:66 src/ui/shelfBubble.js:44 src/ui/views.js:519 src/ui/views.js:594
+#: src/ui/views.js:1256 helper/tray.py:708 helper/tray.py:793
+#, javascript-format, python-format
+msgid "%d file"
+msgid_plural "%d files"
+msgstr[0] "%d Datei"
+msgstr[1] "%d Dateien"
+
+#: helper/tray.py:711
+#, python-format
+msgid "%(name)s and %(count)d more"
+msgid_plural "%(name)s and %(count)d more"
+msgstr[0] "%(name)s und %(count)d weitere"
+msgstr[1] "%(name)s und %(count)d weitere"
+
+#: helper/tray.py:789
+#, python-format
+msgid "%d selected"
+msgid_plural "%d selected"
+msgstr[0] "%d ausgewählt"
+msgstr[1] "%d ausgewählt"
+
+#: helper/tray.py:836
+msgid "Save a Copy"
+msgstr "Kopie speichern"
+
+#: helper/tray.py:856
+#, python-format
+msgid "Save %d Copy In"
+msgid_plural "Save %d Copies In"
+msgstr[0] "%d Kopie speichern in"
+msgstr[1] "%d Kopien speichern in"
+
+#: helper/tray.py:902
+#, python-format
+msgid "%d picture"
+msgid_plural "%d pictures"
+msgstr[0] "%d Bild"
+msgstr[1] "%d Bilder"
+
+#: src/launcher/providers.js:104 src/launcher/providers.js:139 src/launcher/providers.js:376 src/ui/views.js:1148
+#: helper/tray.py:906
+msgid "Open"
+msgstr "Öffnen"
+
+#: helper/tray.py:906
+#, python-format
+msgid "Open %d File"
+msgid_plural "Open %d Files"
+msgstr[0] "%d Datei öffnen"
+msgstr[1] "%d Dateien öffnen"
+
+#: helper/tray.py:907
+msgid "Show in Folder"
+msgstr "Im Ordner zeigen"
+
+#: src/launcher/providers.js:319 src/launcher/providers.js:355 src/ui/views.js:816 helper/tray.py:908
+msgid "Copy"
+msgstr "Kopieren"
+
+#: helper/tray.py:909
+msgid "Save Copies…"
+msgstr "Kopien speichern …"
+
+#: helper/tray.py:909
+msgid "Save a Copy…"
+msgstr "Kopie speichern …"
+
+#: helper/tray.py:918
+msgid "Recognize Text"
+msgstr "Text erkennen"
+
+#: helper/tray.py:920
+msgid "Convert To"
+msgstr "Konvertieren in"
+
+#: helper/tray.py:923
+msgid "Remove Background"
+msgstr "Hintergrund entfernen"
+
+#: helper/tray.py:925
+#, python-format
+msgid "%d PDF"
+msgid_plural "%d PDFs"
+msgstr[0] "%d PDF"
+msgstr[1] "%d PDFs"
+
+#: helper/tray.py:925
+msgid "Shrink PDF"
+msgstr "PDF verkleinern"
+
+#: helper/tray.py:927
+#, python-format
+msgid "%d document"
+msgid_plural "%d documents"
+msgstr[0] "%d Dokument"
+msgstr[1] "%d Dokumente"
+
+#: helper/tray.py:927
+msgid "Save as PDF"
+msgstr "Als PDF speichern"
+
+#: helper/tray.py:929
+#, python-format
+msgid "%d video"
+msgid_plural "%d videos"
+msgstr[0] "%d Video"
+msgstr[1] "%d Videos"
+
+#: helper/tray.py:929
+msgid "Shrink Video"
+msgstr "Video verkleinern"
+
+#: helper/tray.py:930
+#, python-format
+msgid "To %s MB"
+msgstr "Auf %s MB"
+
+#: helper/tray.py:933
+msgid "Remove from Shelf"
+msgstr "Aus Regal entfernen"
+
+#: prefs.js:103 prefs.js:113 src/launcher/logic.js:12 src/ui/island.js:24
 msgid "Clipboard"
 msgstr "Ablage"
 
@@ -411,7 +462,7 @@ msgstr "Droplets"
 msgid "The small tools are removed for now and will return later under a new name."
 msgstr "Die kleinen Werkzeuge sind vorerst entfernt und kehren später unter neuem Namen zurück."
 
-#: prefs.js:131 src/ui/views.js:458
+#: prefs.js:131
 msgid "Search"
 msgstr "Suchen"
 
@@ -556,7 +607,7 @@ msgstr "Textbausteine: Name oder Kürzel eingeben, Enter kopiert. {date}, {time}
 msgid "Keyword (optional)"
 msgstr "Kürzel (optional)"
 
-#: prefs.js:196
+#: prefs.js:196 src/ui/views.js:30
 msgid "Text"
 msgstr "Text"
 
@@ -670,7 +721,7 @@ msgid "Hidden"
 msgstr "Ausgeblendet"
 
 #. Translators: short labels of the AirPods noise control buttons.
-#: prefs.js:305 src/ui/airpodsBubble.js:124
+#: prefs.js:305 src/ui/airpodsBubble.js:125
 msgid "Off"
 msgstr "Aus"
 
@@ -804,7 +855,7 @@ msgstr "Läuft"
 msgid "Running (version %s)"
 msgstr "Läuft (Version %s)"
 
-#: prefs.js:380 src/ui/island.js:629
+#: prefs.js:380 src/ui/island.js:739
 #, javascript-format
 msgid "%s connected"
 msgstr "%s verbunden"
@@ -896,7 +947,7 @@ msgid "Automatic"
 msgstr "Automatisch"
 
 #. Translators: L and R are the left and the right AirPod.
-#: prefs.js:424 src/ui/views.js:55 src/ui/views.js:303
+#: prefs.js:424 src/ui/views.js:104 src/ui/views.js:360
 msgid "Left"
 msgstr "Links"
 
@@ -905,7 +956,7 @@ msgid "Preferred side"
 msgstr "Bevorzugte Seite"
 
 #. Translators: L and R are the left and the right AirPod.
-#: prefs.js:424 src/ui/views.js:55 src/ui/views.js:303
+#: prefs.js:424 src/ui/views.js:104 src/ui/views.js:360
 msgid "Right"
 msgstr "Rechts"
 
@@ -1249,7 +1300,7 @@ msgid_plural "%d days ago"
 msgstr[0] "vor %d Tag"
 msgstr[1] "vor %d Tagen"
 
-#: src/i18n/core.js:149 src/ui/views.js:989
+#: src/i18n/core.js:149 src/ui/views.js:1298
 #, javascript-format
 msgid "%d s"
 msgstr "%d s"
@@ -1320,7 +1371,7 @@ msgstr "„Arbeitsbereich 2“ wechselt in diesen Arbeitsbereich."
 msgid "Power & Session"
 msgstr "Energie & Sitzung"
 
-#: src/launcher/commands.js:23 src/launcher/logic.js:19 src/ui/island.js:88
+#: src/launcher/commands.js:23 src/launcher/logic.js:19 src/ui/island.js:153
 msgid "Settings"
 msgstr "Einstellungen"
 
@@ -1445,7 +1496,7 @@ msgid "Notchy’s own preferences."
 msgstr "Notchys eigene Einstellungen."
 
 #. Translators: the notifications switch in the calendar tab: on, or Do Not Disturb.
-#: src/launcher/commands.js:62 src/ui/views.js:581 src/ui/views.js:658
+#: src/launcher/commands.js:62 src/ui/views.js:890 src/ui/views.js:967
 msgid "Do Not Disturb"
 msgstr "Nicht stören"
 
@@ -1469,7 +1520,7 @@ msgstr "GNOMEs Bildschirmaufnahme."
 msgid "Record Screen"
 msgstr "Bildschirm aufnehmen"
 
-#: src/launcher/commands.js:68 src/ui/island.js:171 src/ui/island.js:173
+#: src/launcher/commands.js:68 src/ui/island.js:238 src/ui/island.js:240
 msgid "Open Notchy"
 msgstr "Notchy öffnen"
 
@@ -1653,16 +1704,12 @@ msgstr "Datei"
 msgid "Folder"
 msgstr "Ordner"
 
-#: src/launcher/logic.js:11
+#: src/launcher/logic.js:11 src/ui/views.js:30
 msgid "Link"
 msgstr "Link"
 
-#: src/launcher/logic.js:11 src/ui/island.js:20
-msgid "Shelf"
-msgstr "Regal"
-
 #. Translators: the radial capture menu: a selected area, a window, the whole screen, a recording, text recognition.
-#: src/launcher/logic.js:11 src/ui/radial.js:9 src/ui/views.js:343
+#: src/launcher/logic.js:11 src/ui/radial.js:9 src/ui/views.js:438
 msgid "Window"
 msgstr "Fenster"
 
@@ -1702,7 +1749,7 @@ msgstr "Indiziert"
 msgid "Web"
 msgstr "Web"
 
-#: src/launcher/logic.js:18
+#: src/launcher/logic.js:18 src/ui/views.js:668
 msgid "Favorites"
 msgstr "Favoriten"
 
@@ -1849,7 +1896,7 @@ msgstr "Anzeigen"
 msgid "Workspace %d"
 msgstr "Arbeitsbereich %d"
 
-#: src/launcher/providers.js:319 src/ui/views.js:472
+#: src/launcher/providers.js:319 src/ui/views.js:688 src/ui/views.js:788
 msgid "Copied to clipboard"
 msgstr "In Zwischenablage kopiert"
 
@@ -1892,7 +1939,7 @@ msgstr "Strg+⇧+C"
 msgid "Path copied"
 msgstr "Pfad kopiert"
 
-#: src/launcher/providers.js:379 src/ui/views.js:479
+#: src/launcher/providers.js:379 src/ui/views.js:695
 msgid "Added to the Shelf"
 msgstr "Ins Regal gelegt"
 
@@ -1959,7 +2006,7 @@ msgstr "Vollbild"
 msgid "Unknown Title"
 msgstr "Unbekannter Titel"
 
-#: src/model.js:67
+#: src/model.js:67 src/ui/views.js:30
 msgid "Picture"
 msgstr "Bild"
 
@@ -2138,7 +2185,7 @@ msgstr "Bildschirmfoto im Regal"
 msgid "The shelf could not be opened: %s"
 msgstr "Regal konnte nicht geöffnet werden: %s"
 
-#: src/services/companion.js:242
+#: src/services/companion.js:243
 #, javascript-format
 msgid "The basket could not be opened: %s"
 msgstr "Korb konnte nicht geöffnet werden: %s"
@@ -2159,7 +2206,7 @@ msgstr "Dateisuche nicht verfügbar"
 msgid "File search stopped."
 msgstr "Dateisuche beendet."
 
-#: src/services/media.js:131
+#: src/services/media.js:149
 msgid "This player offers no playlist."
 msgstr "Dieser Player stellt keine Wiedergabeliste bereit."
 
@@ -2218,158 +2265,170 @@ msgstr "Zum Agenten wechseln"
 msgid "Session %s"
 msgstr "Sitzung %s"
 
-#: src/ui/airpodsBubble.js:109 src/ui/airpodsBubble.js:161 src/ui/views.js:53 src/ui/views.js:301
+#: src/ui/airpodsBubble.js:110 src/ui/airpodsBubble.js:162 src/ui/views.js:102 src/ui/views.js:358
 msgid "Battery"
 msgstr "Akku"
 
 #. Translators: short labels of the AirPods noise control buttons.
-#: src/ui/airpodsBubble.js:124
+#: src/ui/airpodsBubble.js:125
 msgid "ANC"
 msgstr "ANC"
 
 #. Translators: short labels of the AirPods noise control buttons.
-#: src/ui/airpodsBubble.js:124 src/ui/views.js:49
+#: src/ui/airpodsBubble.js:125 src/ui/views.js:98
 msgid "Adaptive"
 msgstr "Adaptiv"
 
 #. Translators: short labels of the AirPods noise control buttons.
-#: src/ui/airpodsBubble.js:124 src/ui/views.js:49
+#: src/ui/airpodsBubble.js:125 src/ui/views.js:98
 msgid "Transparency"
 msgstr "Transparenz"
 
-#: src/ui/airpodsBubble.js:133
+#: src/ui/airpodsBubble.js:134
 msgid "Conversation Awareness"
 msgstr "Gesprächserkennung"
 
-#: src/ui/airpodsBubble.js:140 src/ui/airpodsBubble.js:144
+#: src/ui/airpodsBubble.js:141 src/ui/airpodsBubble.js:145
 msgid "Pause When Taken Out"
 msgstr "Pause beim Herausnehmen"
 
-#: src/ui/airpodsBubble.js:149
+#: src/ui/airpodsBubble.js:150
 msgid "Disconnect"
 msgstr "Trennen"
 
-#: src/ui/airpodsBubble.js:150
+#: src/ui/airpodsBubble.js:151
 msgid "Bluetooth Settings…"
 msgstr "Bluetooth-Einstellungen …"
 
-#: src/ui/airpodsBubble.js:57 src/ui/airpodsBubble.js:156 src/ui/views.js:291 src/ui/views.js:313
+#: src/ui/airpodsBubble.js:58 src/ui/airpodsBubble.js:157 src/ui/views.js:348 src/ui/views.js:371
 msgid "Connected"
 msgstr "Verbunden"
 
-#: src/ui/airpodsBubble.js:57 src/ui/airpodsBubble.js:156 src/ui/views.js:313
+#: src/ui/airpodsBubble.js:58 src/ui/airpodsBubble.js:157 src/ui/views.js:371
 #, javascript-format
 msgid "Connected · %s"
 msgstr "Verbunden · %s"
 
-#: src/ui/airpodsBubble.js:156 src/ui/views.js:313
+#: src/ui/airpodsBubble.js:157 src/ui/island.js:95 src/ui/views.js:371
 msgid "Disconnected"
 msgstr "Getrennt"
 
-#: src/ui/airpodsBubble.js:161
+#: src/ui/airpodsBubble.js:162
 #, javascript-format
 msgid "%s · not in ear"
 msgstr "%s · nicht im Ohr"
 
-#: src/ui/airpodsBubble.js:66
+#: src/ui/airpodsBubble.js:67
 msgid "AirPods connected"
 msgstr "AirPods verbunden"
 
-#: src/ui/airpodsBubble.js:66
+#: src/ui/airpodsBubble.js:67
 #, javascript-format
 msgid "AirPods: %s"
 msgstr "AirPods: %s"
 
-#: src/ui/island.js:20
+#: src/ui/island.js:147
+msgid "Keep Open"
+msgstr "Offen halten"
+
+#: src/ui/island.js:151 src/ui/island.js:701
+msgid "AirDrop: become visible to iPhones"
+msgstr "AirDrop: für iPhones sichtbar werden"
+
+#: src/ui/island.js:23
 msgid "Media"
 msgstr "Medien"
 
-#: src/ui/island.js:21
+#: src/ui/island.js:24
 msgid "Calendar"
 msgstr "Kalender"
 
-#: src/ui/island.js:483
+#: src/ui/island.js:550
 msgid "Closes when the pointer leaves"
 msgstr "Schließt beim Verlassen"
 
-#: src/ui/island.js:483
+#: src/ui/island.js:550
 msgid "Stays open"
 msgstr "Bleibt geöffnet"
 
-#: src/ui/island.js:580
+#: src/ui/island.js:662
 msgid "Processing…"
 msgstr "Verarbeitung …"
 
-#: src/ui/island.js:591
+#: src/ui/island.js:684
 msgid "Looking for an iPhone…"
 msgstr "Sucht iPhone …"
 
-#: src/ui/island.js:591
+#: src/ui/island.js:684
 #, javascript-format
 msgid "To %s"
 msgstr "An %s"
 
-#: src/ui/island.js:593
+#: src/ui/island.js:686
 msgid "Wi-Fi reconnecting…"
 msgstr "WLAN verbindet …"
 
-#: src/ui/island.js:594
+#: src/ui/island.js:687
 msgid "No iPhone"
 msgstr "Kein iPhone"
 
-#: src/ui/island.js:594
+#: src/ui/island.js:687
 msgid "Starting…"
 msgstr "Startet …"
 
-#: src/ui/island.js:594
+#: src/ui/island.js:687
 msgid "Visible"
 msgstr "Sichtbar"
 
-#: src/ui/island.js:601
+#: src/ui/island.js:694
 msgid "AirDrop: visible, Wi-Fi paused"
 msgstr "AirDrop: sichtbar, WLAN pausiert"
 
-#: src/ui/island.js:86 src/ui/island.js:608
-msgid "AirDrop: become visible to iPhones"
-msgstr "AirDrop: für iPhones sichtbar werden"
-
-#: src/ui/island.js:608
+#: src/ui/island.js:701
 msgid "AirDrop: stop receiving"
 msgstr "AirDrop: Empfang beenden"
 
-#: src/ui/island.js:620
+#: src/ui/island.js:713
 msgid "AirDrop could not start"
 msgstr "AirDrop konnte nicht starten"
 
-#: src/ui/island.js:635
+#: src/ui/island.js:754
 #, javascript-format
 msgid "%s disconnected"
 msgstr "%s getrennt"
 
 #. Translators: a low battery: "AirPods left: 10 %".
 #. Translators: L and R are the left and the right AirPod.
-#: src/ui/island.js:638 src/ui/views.js:55 src/ui/views.js:303
+#: src/ui/island.js:757 src/ui/views.js:104 src/ui/views.js:360
 msgid "Case"
 msgstr "Case"
 
 #. Translators: a low battery: "AirPods left: 10 %".
-#: src/ui/island.js:638
+#: src/ui/island.js:757
 msgid "left"
 msgstr "links"
 
 #. Translators: a low battery: "AirPods left: 10 %".
-#: src/ui/island.js:638
+#: src/ui/island.js:757
 msgid "right"
 msgstr "rechts"
 
-#: src/ui/island.js:639
+#: src/ui/island.js:758
 #, javascript-format
 msgid "%1$s: %2$s"
 msgstr "%1$s: %2$s"
 
-#: src/ui/island.js:82
-msgid "Keep Open"
-msgstr "Offen halten"
+#: src/ui/island.js:871
+#, javascript-format
+msgid "In the Shelf · %s"
+msgstr "Im Regal · %s"
+
+#: src/ui/island.js:872 src/ui/views.js:568
+#, javascript-format
+msgid "%d file in the Shelf"
+msgid_plural "%d files in the Shelf"
+msgstr[0] "%d Datei im Regal"
+msgstr[1] "%d Dateien im Regal"
 
 #: src/ui/radial.js:10
 msgid "Record"
@@ -2388,423 +2447,484 @@ msgstr "Text (OCR)"
 msgid "Area"
 msgstr "Bereich"
 
+#: src/ui/shelfBubble.js:52
+#, javascript-format
+msgid "Shelf: %d file"
+msgid_plural "Shelf: %d files"
+msgstr[0] "Regal: %d Datei"
+msgstr[1] "Regal: %d Dateien"
+
 #: src/ui/sideIndicators.js:43
 msgid "More Indicators"
 msgstr "Weitere Indikatoren"
 
-#: src/ui/views.js:663 src/ui/views.js:1013
-msgid "Notification"
-msgstr "Benachrichtigung"
-
-#: src/ui/views.js:683 src/ui/views.js:699 src/ui/views.js:1019
+#: src/ui/views.js:992 src/ui/views.js:1008 src/ui/views.js:1328
 #, javascript-format
 msgid "Open: %s"
 msgstr "Öffnen: %s"
 
-#: src/ui/views.js:1028
-msgid "Hide Banner"
-msgstr "Banner ausblenden"
+#: src/ui/views.js:1014
+msgid "All caught up"
+msgstr "Alles erledigt"
 
-#: src/ui/views.js:138
-msgid "last known"
-msgstr "zuletzt"
-
-#: src/ui/views.js:152
-#, javascript-format
-msgid "last %1$s, %2$s"
-msgstr "zuletzt %1$s, %2$s"
-
-#: src/ui/views.js:152
-msgid "unknown"
-msgstr "unbekannt"
-
-#: src/ui/views.js:153
-#, javascript-format
-msgid "%1$s: %2$s, charging"
-msgstr "%1$s: %2$s, lädt"
-
-#: src/ui/views.js:195
-msgid "Open the playing app"
-msgstr "Spielende App öffnen"
-
-#: src/ui/views.js:200
-msgid "Now Playing"
-msgstr "Läuft gerade"
-
-#: src/ui/views.js:200
-msgid "Paused"
-msgstr "Pausiert"
-
-#: src/ui/views.js:221
-msgid "Previous Track"
-msgstr "Vorheriger Titel"
-
-#: src/ui/views.js:222
-msgid "Pause"
-msgstr "Pause"
-
-#: src/ui/views.js:222
-msgid "Play"
-msgstr "Wiedergabe"
-
-#: src/ui/views.js:224
-msgid "Next Track"
-msgstr "Nächster Titel"
-
-#: src/ui/views.js:233 src/ui/views.js:256
-#, javascript-format
-msgid "Open %s"
-msgstr "%s öffnen"
-
-#: src/ui/views.js:24
-msgid "All"
-msgstr "Alle"
-
-#: src/ui/views.js:24
-msgid "Favorites Only"
-msgstr "Nur Favoriten"
-
-#: src/ui/views.js:24
-msgid "Links"
-msgstr "Links"
-
-#: src/ui/views.js:24
-msgid "Pictures"
-msgstr "Bilder"
-
-#: src/ui/views.js:248
-msgid "All Quiet"
-msgstr "Gerade ist es still"
-
-#: src/ui/views.js:274
-msgid "No Output"
-msgstr "Keine Ausgabe"
-
-#: src/ui/views.js:275
-#, javascript-format
-msgid "Output: %s. Switch to AirPlay or another device"
-msgstr "Ausgabe: %s. Auf AirPlay oder ein anderes Gerät umschalten"
-
-#: src/ui/views.js:344
-msgid "Release over an area"
-msgstr "Loslassen über einer Fläche"
-
-#: src/ui/views.js:365
-msgid "Back to the Player"
-msgstr "Zurück zum Player"
-
-#: src/ui/views.js:367
-msgid "Play Music On"
-msgstr "Musik abspielen auf"
-
-#: src/ui/views.js:379
-msgid "AirPlay active"
-msgstr "AirPlay aktiv"
-
-#: src/ui/views.js:386
-msgid "This Computer"
-msgstr "Dieser Computer"
-
-#: src/ui/views.js:392
-#, javascript-format
-msgid "Playing on %s"
-msgstr "Wiedergabe auf %s"
-
-#: src/ui/views.js:398
-msgid "Find AirPlay Devices"
-msgstr "AirPlay-Geräte finden"
-
-#: src/ui/views.js:401
-msgid "Find AirPlay Devices on the Network"
-msgstr "AirPlay-Geräte im Netzwerk finden"
-
-#: src/ui/views.js:405
-msgid "Looking for AirPlay devices on the network…"
-msgstr "Suche nach AirPlay-Geräten im Netzwerk …"
-
-#: src/ui/views.js:405
-msgid "No AirPlay devices found."
-msgstr "Keine AirPlay-Geräte gefunden."
-
-#. Translators: shown on a file tile without a file name extension.
-#: src/ui/views.js:442
-msgid "FILE"
-msgstr "DATEI"
-
-#: src/ui/views.js:453
-msgid "Copies are only recorded once this is turned on."
-msgstr "Kopien werden nur nach Aktivierung aufgezeichnet."
-
-#: src/ui/views.js:453
-msgid "History Is Paused"
-msgstr "Verlauf ist pausiert"
-
-#: src/ui/views.js:453
-msgid "Turn On Recording"
-msgstr "Aufzeichnung aktivieren"
-
-#: src/ui/views.js:472
-msgid "Copied as plain text"
-msgstr "Als reiner Text kopiert"
-
-#: src/ui/views.js:49
-msgid "Noise Cancellation"
-msgstr "Geräuschunterdrückung"
-
-#: src/ui/views.js:49
-msgid "Noise Control Off"
-msgstr "Geräuschkontrolle aus"
-
-#: src/ui/views.js:506
-msgid "Favorite (F)"
-msgstr "Favorit (F)"
-
-#: src/ui/views.js:507
-msgid "Delete (Del)"
-msgstr "Löschen (Entf)"
-
-#: src/ui/views.js:509
-msgid "Copy (Enter)"
-msgstr "Kopieren (Enter)"
-
-#: src/ui/views.js:517
-msgid "Nothing found"
-msgstr "Nichts gefunden"
+#: src/ui/views.js:1032
+msgid "Apps, commands, calculations… · “file …” for files"
+msgstr "Apps, Befehle, Rechnen … · „datei …“ für Dateien"
 
 #. Translators: L and R are the left and the right AirPod.
-#: src/ui/views.js:55
+#: src/ui/views.js:104
 msgid "L"
 msgstr "L"
 
 #. Translators: L and R are the left and the right AirPod.
-#: src/ui/views.js:55
+#: src/ui/views.js:104
 msgid "R"
 msgstr "R"
 
-#: src/ui/views.js:562
-msgid "Previous Week"
-msgstr "Vorherige Woche"
-
-#: src/ui/views.js:563
-msgid "Next Week"
-msgstr "Nächste Woche"
-
-#: src/ui/views.js:578
-msgid "Notifications"
-msgstr "Mitteilungen"
-
-#: src/ui/views.js:585
-msgid "Do Not Disturb is on"
-msgstr "Nicht stören ist an"
-
-#: src/ui/views.js:585
-msgid "Notifications are back on"
-msgstr "Mitteilungen wieder an"
-
-#: src/ui/views.js:587
-msgid "Clear All"
-msgstr "Alle löschen"
-
-#. Translators: %s is a date like "19 October".
-#: src/ui/views.js:605
-#, javascript-format
-msgid "Today, %s"
-msgstr "Heute, %s"
-
-#. Translators: %s is a date like "19 October".
-#: src/ui/views.js:605
-#, javascript-format
-msgid "Tomorrow, %s"
-msgstr "Morgen, %s"
-
-#. Translators: %s is a date like "19 October".
-#: src/ui/views.js:605
-#, javascript-format
-msgid "Yesterday, %s"
-msgstr "Gestern, %s"
-
-#. Translators: the ISO calendar week, short ("KW 42" in German).
-#: src/ui/views.js:607
-#, javascript-format
-msgid "Week %d"
-msgstr "KW %d"
-
-#. Translators: in place of a start time, for an event lasting all day.
-#: src/ui/views.js:624
-msgid "Day"
-msgstr "Tag"
-
-#: src/ui/views.js:628
-msgid "Event"
-msgstr "Termin"
-
-#: src/ui/views.js:630
-msgid "All day"
-msgstr "Ganztägig"
-
-#: src/ui/views.js:634
-msgid "Loading events…"
-msgstr "Termine werden geladen …"
-
-#: src/ui/views.js:634
-msgid "No events"
-msgstr "Keine Termine"
-
-#. Translators: the notifications switch in the calendar tab: on, or Do Not Disturb.
-#: src/ui/views.js:658
-msgid "On"
-msgstr "An"
-
-#: src/ui/views.js:683
-#, javascript-format
-msgid "%1$s: %2$d notification"
-msgid_plural "%1$s: %2$d notifications"
-msgstr[0] "%1$s: %2$d Mitteilung"
-msgstr[1] "%1$s: %2$d Mitteilungen"
-
-#: src/ui/views.js:690
-msgid "Close Notifications"
-msgstr "Mitteilungen schließen"
-
-#: src/ui/views.js:705
-msgid "All caught up"
-msgstr "Alles erledigt"
-
-#: src/ui/views.js:723
-msgid "Apps, commands, calculations… · “file …” for files"
-msgstr "Apps, Befehle, Rechnen … · „datei …“ für Dateien"
-
-#: src/ui/views.js:740
+#: src/ui/views.js:1049
 msgid "Copied"
 msgstr "Kopiert"
 
-#: src/ui/views.js:747
+#: src/ui/views.js:1056
 msgid "No permission for this file"
 msgstr "Keine Berechtigung für diese Datei"
 
-#: src/ui/views.js:750
+#: src/ui/views.js:1059
 msgid "The file cannot be reached"
 msgstr "Datei nicht erreichbar"
 
-#: src/ui/views.js:750
+#: src/ui/views.js:1059
 msgid "The file no longer exists"
 msgstr "Datei nicht mehr vorhanden"
 
-#: src/ui/views.js:803
+#: src/ui/views.js:1112
 #, javascript-format
 msgid "%s ↵ to confirm"
 msgstr "%s ↵ zum Bestätigen"
 
-#: src/ui/views.js:804
+#: src/ui/views.js:1113
 msgid "Esc cancels"
 msgstr "Esc bricht ab"
 
-#: src/ui/views.js:836
+#: src/ui/views.js:1145
 msgid "↵ run · Esc back"
 msgstr "↵ ausführen · Esc zurück"
 
-#: src/ui/views.js:840
+#: src/ui/views.js:1149
 #, javascript-format
 msgid "↵ %s · Ctrl+K Actions"
 msgstr "↵ %s · Strg+K Aktionen"
 
-#: src/ui/views.js:840
+#: src/ui/views.js:1149
 msgid "↵ confirm · Esc cancel"
 msgstr "↵ bestätigen · Esc abbrechen"
 
-#: src/ui/views.js:843
+#: src/ui/views.js:1152
 #, javascript-format
 msgid "%d result"
 msgid_plural "%d results"
 msgstr[0] "%d Treffer"
 msgstr[1] "%d Treffer"
 
-#: src/ui/views.js:845
+#: src/ui/views.js:1154
 msgid "Indexed folders · Esc back"
 msgstr "Indizierte Ordner · Esc zurück"
 
-#: src/ui/views.js:846
+#: src/ui/views.js:1155
 msgid "Searching files…"
 msgstr "Suche Dateien …"
 
-#: src/ui/views.js:847
+#: src/ui/views.js:1156
 #, javascript-format
 msgid "Files and folders only · %s"
 msgstr "Nur Dateien und Ordner · %s"
 
-#: src/ui/views.js:848
+#: src/ui/views.js:1157
 msgid "File index not active · basic search in personal folders"
 msgstr "Dateiindex nicht aktiv · einfache Suche in persönlichen Ordnern"
 
-#: src/ui/views.js:849
+#: src/ui/views.js:1158
 msgid "File search is turned off"
 msgstr "Dateisuche ist ausgeschaltet"
 
-#: src/ui/views.js:857
+#: src/ui/views.js:1166
 #, javascript-format
 msgid "Actions · %s"
 msgstr "Aktionen · %s"
 
-#: src/ui/views.js:928
+#: src/ui/views.js:1237
 msgid "Cancel Sending"
 msgstr "Senden abbrechen"
 
-#: src/ui/views.js:952
+#: src/ui/views.js:1261
 msgid "Looking for iPhones nearby…"
 msgstr "Sucht iPhones in der Nähe …"
 
-#: src/ui/views.js:952
+#: src/ui/views.js:1261
 #, javascript-format
 msgid "To %s · accept on the iPhone"
 msgstr "An %s · auf dem iPhone annehmen"
 
-#: src/ui/views.js:952
+#: src/ui/views.js:1261
 #, javascript-format
 msgid "To %s · sending…"
 msgstr "An %s · wird gesendet …"
 
-#: src/ui/views.js:953
+#: src/ui/views.js:1262
 msgid "Cancelled"
 msgstr "Abgebrochen"
 
-#: src/ui/views.js:953
+#: src/ui/views.js:1262
 msgid "Sending failed"
 msgstr "Senden fehlgeschlagen"
 
-#: src/ui/views.js:953
+#: src/ui/views.js:1262
 msgid "Sent"
 msgstr "Gesendet"
 
-#: src/ui/views.js:953
+#: src/ui/views.js:1262
 #, javascript-format
 msgid "Sent to %s"
 msgstr "An %s gesendet"
 
-#: src/ui/views.js:954
+#: src/ui/views.js:1263
 msgid "Wi-Fi is paused during AirDrop"
 msgstr "WLAN ist während AirDrop pausiert"
 
-#: src/ui/views.js:954
+#: src/ui/views.js:1263
 msgid "iPhone: AirDrop “Everyone”, share menu closed"
 msgstr "iPhone: AirDrop „Für alle“, Teilen-Menü zu"
 
-#: src/ui/views.js:975
+#: src/ui/views.js:1284
 msgid "A device nearby"
 msgstr "Ein Gerät in der Nähe"
 
-#: src/ui/views.js:976
+#: src/ui/views.js:1285
 msgid "wants to send something"
 msgstr "möchte etwas senden"
 
-#: src/ui/views.js:976
+#: src/ui/views.js:1285
 #, javascript-format
 msgid "wants to send “%s”"
 msgstr "möchte „%s“ senden"
 
-#: src/ui/views.js:979
+#: src/ui/views.js:1288
 msgid "Decline"
 msgstr "Ablehnen"
 
-#: src/ui/views.js:980
+#: src/ui/views.js:1289
 msgid "Accept"
 msgstr "Annehmen"
+
+#: src/ui/views.js:972 src/ui/views.js:1322
+msgid "Notification"
+msgstr "Benachrichtigung"
+
+#: src/ui/views.js:1337
+msgid "Hide Banner"
+msgstr "Banner ausblenden"
+
+#: src/ui/views.js:187
+msgid "last known"
+msgstr "zuletzt"
+
+#: src/ui/views.js:201
+#, javascript-format
+msgid "last %1$s, %2$s"
+msgstr "zuletzt %1$s, %2$s"
+
+#: src/ui/views.js:201
+msgid "unknown"
+msgstr "unbekannt"
+
+#: src/ui/views.js:202
+#, javascript-format
+msgid "%1$s: %2$s, charging"
+msgstr "%1$s: %2$s, lädt"
+
+#: src/ui/views.js:244
+msgid "Open the playing app"
+msgstr "Spielende App öffnen"
+
+#: src/ui/views.js:249
+msgid "Now Playing"
+msgstr "Läuft gerade"
+
+#: src/ui/views.js:249
+msgid "Paused"
+msgstr "Pausiert"
+
+#: src/ui/views.js:270
+msgid "Previous Track"
+msgstr "Vorheriger Titel"
+
+#: src/ui/views.js:271
+msgid "Pause"
+msgstr "Pause"
+
+#: src/ui/views.js:271
+msgid "Play"
+msgstr "Wiedergabe"
+
+#: src/ui/views.js:273
+msgid "Next Track"
+msgstr "Nächster Titel"
+
+#: src/ui/views.js:282 src/ui/views.js:305
+#, javascript-format
+msgid "Open %s"
+msgstr "%s öffnen"
+
+#: src/ui/views.js:297
+msgid "All Quiet"
+msgstr "Gerade ist es still"
+
+#: src/ui/views.js:30
+msgid "Color"
+msgstr "Farbe"
+
+#: src/ui/views.js:30
+msgid "Files"
+msgstr "Dateien"
+
+#: src/ui/views.js:323
+msgid "No Output"
+msgstr "Keine Ausgabe"
+
+#: src/ui/views.js:324
+#, javascript-format
+msgid "Output: %s. Switch to AirPlay or another device"
+msgstr "Ausgabe: %s. Auf AirPlay oder ein anderes Gerät umschalten"
+
+#: src/ui/views.js:43
+msgid "Today"
+msgstr "Heute"
+
+#: src/ui/views.js:43
+msgid "Yesterday"
+msgstr "Gestern"
+
+#: src/ui/views.js:439
+msgid "Release over an area"
+msgstr "Loslassen über einer Fläche"
+
+#: src/ui/views.js:460
+msgid "Back to the Player"
+msgstr "Zurück zum Player"
+
+#: src/ui/views.js:462
+msgid "Play Music On"
+msgstr "Musik abspielen auf"
+
+#: src/ui/views.js:474
+msgid "AirPlay active"
+msgstr "AirPlay aktiv"
+
+#: src/ui/views.js:481
+msgid "This Computer"
+msgstr "Dieser Computer"
+
+#: src/ui/views.js:487
+#, javascript-format
+msgid "Playing on %s"
+msgstr "Wiedergabe auf %s"
+
+#: src/ui/views.js:493
+msgid "Find AirPlay Devices"
+msgstr "AirPlay-Geräte finden"
+
+#: src/ui/views.js:496
+msgid "Find AirPlay Devices on the Network"
+msgstr "AirPlay-Geräte im Netzwerk finden"
+
+#: src/ui/views.js:50
+#, javascript-format
+msgid "%d character"
+msgid_plural "%d characters"
+msgstr[0] "%d Zeichen"
+msgstr[1] "%d Zeichen"
+
+#: src/ui/views.js:500
+msgid "Looking for AirPlay devices on the network…"
+msgstr "Suche nach AirPlay-Geräten im Netzwerk …"
+
+#: src/ui/views.js:500
+msgid "No AirPlay devices found."
+msgstr "Keine AirPlay-Geräte gefunden."
+
+#: src/ui/views.js:593
+msgid "In the Shelf"
+msgstr "Im Regal"
+
+#: src/ui/views.js:661
+msgid "Search the history"
+msgstr "Verlauf durchsuchen"
+
+#: src/ui/views.js:688
+msgid "Copied as plain text"
+msgstr "Als reiner Text kopiert"
+
+#: src/ui/views.js:725
+msgid "Nothing copied yet"
+msgstr "Noch nichts kopiert"
+
+#: src/ui/views.js:725
+msgid "Nothing found"
+msgstr "Nichts gefunden"
+
+#: src/ui/views.js:73
+msgid "All"
+msgstr "Alle"
+
+#: src/ui/views.js:73
+msgid "Favorites Only"
+msgstr "Nur Favoriten"
+
+#: src/ui/views.js:73
+msgid "Links"
+msgstr "Links"
+
+#: src/ui/views.js:73
+msgid "Pictures"
+msgstr "Bilder"
+
+#: src/ui/views.js:787
+#, javascript-format
+msgid "Copy %s"
+msgstr "%s kopieren"
+
+#: src/ui/views.js:800
+#, javascript-format
+msgid "and %d more"
+msgid_plural "and %d more"
+msgstr[0] "und %d weitere"
+msgstr[1] "und %d weitere"
+
+#: src/ui/views.js:814
+msgid "Copy (Enter)"
+msgstr "Kopieren (Enter)"
+
+#: src/ui/views.js:820
+msgid "Copy as plain text (Shift+Enter)"
+msgstr "Als reinen Text kopieren (Umschalt+Eingabe)"
+
+#: src/ui/views.js:822
+msgid "Copy as Text"
+msgstr "Als Text"
+
+#: src/ui/views.js:826
+msgid "Favorite (F)"
+msgstr "Favorit (F)"
+
+#: src/ui/views.js:828
+msgid "Delete (Del)"
+msgstr "Löschen (Entf)"
+
+#: src/ui/views.js:844
+msgid "The History Is Off"
+msgstr "Der Verlauf ist aus"
+
+#: src/ui/views.js:845
+msgid "Turn it on to find everything you copied here again."
+msgstr "Schalte ihn ein, dann findest du hier alles wieder, was du kopiert hast."
+
+#: src/ui/views.js:846
+msgid "Turn On History"
+msgstr "Verlauf einschalten"
+
+#: src/ui/views.js:848
+msgid "It is kept on this computer only."
+msgstr "Gespeichert wird nur auf diesem Rechner."
+
+#: src/ui/views.js:871
+msgid "Previous Week"
+msgstr "Vorherige Woche"
+
+#: src/ui/views.js:872
+msgid "Next Week"
+msgstr "Nächste Woche"
+
+#: src/ui/views.js:887
+msgid "Notifications"
+msgstr "Mitteilungen"
+
+#: src/ui/views.js:894
+msgid "Do Not Disturb is on"
+msgstr "Nicht stören ist an"
+
+#: src/ui/views.js:894
+msgid "Notifications are back on"
+msgstr "Mitteilungen wieder an"
+
+#: src/ui/views.js:896
+msgid "Clear All"
+msgstr "Alle löschen"
+
+#. Translators: %s is a date like "19 October".
+#: src/ui/views.js:914
+#, javascript-format
+msgid "Today, %s"
+msgstr "Heute, %s"
+
+#. Translators: %s is a date like "19 October".
+#: src/ui/views.js:914
+#, javascript-format
+msgid "Tomorrow, %s"
+msgstr "Morgen, %s"
+
+#. Translators: %s is a date like "19 October".
+#: src/ui/views.js:914
+#, javascript-format
+msgid "Yesterday, %s"
+msgstr "Gestern, %s"
+
+#. Translators: the ISO calendar week, short ("KW 42" in German).
+#: src/ui/views.js:916
+#, javascript-format
+msgid "Week %d"
+msgstr "KW %d"
+
+#. Translators: in place of a start time, for an event lasting all day.
+#: src/ui/views.js:933
+msgid "Day"
+msgstr "Tag"
+
+#: src/ui/views.js:937
+msgid "Event"
+msgstr "Termin"
+
+#: src/ui/views.js:939
+msgid "All day"
+msgstr "Ganztägig"
+
+#: src/ui/views.js:943
+msgid "Loading events…"
+msgstr "Termine werden geladen …"
+
+#: src/ui/views.js:943
+msgid "No events"
+msgstr "Keine Termine"
+
+#. Translators: the notifications switch in the calendar tab: on, or Do Not Disturb.
+#: src/ui/views.js:967
+msgid "On"
+msgstr "An"
+
+#: src/ui/views.js:98
+msgid "Noise Cancellation"
+msgstr "Geräuschunterdrückung"
+
+#: src/ui/views.js:98
+msgid "Noise Control Off"
+msgstr "Geräuschkontrolle aus"
+
+#: src/ui/views.js:992
+#, javascript-format
+msgid "%1$s: %2$d notification"
+msgid_plural "%1$s: %2$d notifications"
+msgstr[0] "%1$s: %2$d Mitteilung"
+msgstr[1] "%1$s: %2$d Mitteilungen"
+
+#: src/ui/views.js:999
+msgid "Close Notifications"
+msgstr "Mitteilungen schließen"

@@ -10,6 +10,14 @@ import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as Scripting from 'resource:///org/gnome/shell/ui/scripting.js';
 
 export const METRICS = {};
+
+// The middle of the Regal's i-th tile preview (helper/tray.py: 22 px padding,
+// six tiles a row 10 px apart, the 40 px header, the 76 px preview).
+function regalTile(regal, i) {
+    const columns = regal.width >= 680 ? 6 : 5, width = (regal.width - 44 - (columns - 1) * 10) / columns;
+    return [Math.round(regal.x + 22 + width / 2 + (i % columns) * (width + 10)), Math.round(regal.y + 95)];
+}
+
 function assert(condition, message) { if (!condition) throw Error(message); print(`PASS: ${message}`); }
 function styled(actor, cls) { return [actor, ...actor.get_children().flatMap(child => styled(child, cls))].filter(a => a.has_style_class_name?.(cls)); }
 function buttons(actor, name) { return [actor, ...actor.get_children().flatMap(child => buttons(child, name))].filter(a => a instanceof St.Button && a.accessible_name === name); }
@@ -273,6 +281,11 @@ export async function run() {
     island.close(); calendarFixture.force_exit(); await Scripting.sleep(100);
     assert(!ext.calendar.loading && ext.calendar.events.size === 0, 'calendar service loss handled');
 
+    // Ablage: off, it says so plainly and offers to turn it on.
+    ext.settings.set_boolean('clipboard-enabled', false);
+    island.open('clipboard'); await Scripting.sleep(500);
+    assert(styled(island.body, 'notchy-clip-paused-title')[0]?.text === 'Der Verlauf ist aus' && buttons(island.body, 'Verlauf einschalten').length === 1, 'the history off says so and offers to turn it on');
+    await screenshot('clipboard-paused'); island.close(true); await Scripting.sleep(300);
     // Ablage: capture, keyboard navigation, favourites, filters and copying.
     ext.settings.set_boolean('clipboard-enabled', true); ext.settings.set_boolean('clipboard-persist', true);
     for (const text of ['Erste Kopie aus dem Test', 'https://extensions.gnome.org/notchy', 'Notchy integration sample']) { St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text); await Scripting.sleep(350); }
@@ -282,10 +295,14 @@ export async function run() {
     await key(Clutter.KEY_Down); await screenshot('clipboard');
     const selectedText = () => styled(styled(island.body, 'notchy-clip-row').find(a => a.has_style_class_name('selected')), 'notchy-clip-text')[0]?.text;
     assert(selectedText() === 'https://extensions.gnome.org/notchy', 'arrow keys move the selection');
+    assert(styled(island.body, 'notchy-clip-link-host')[0]?.text === 'extensions.gnome.org' && styled(island.body, 'notchy-clip-kind')[0]?.text === 'Link'
+        && styled(island.body, 'notchy-clip-group')[0]?.text === 'Heute', 'the selected link is shown beside the list with its site, under „Heute“');
     island.actor.grab_key_focus(); await key(Clutter.KEY_f); await Scripting.sleep(100);
     assert(ext.clipboard.history.search('extensions.gnome.org')[0].favorite, 'F marks the selected entry as favourite');
     buttons(island.body, 'Nur Favoriten')[0].emit('clicked', 1); await Scripting.sleep(100);
     assert(styled(island.body, 'notchy-clip-row').length === 1, 'the ★ filter shows only favourites');
+    const segmentCount = name => styled(buttons(island.body, name)[0], 'notchy-clip-segment-count')[0]?.text;
+    assert(segmentCount('Nur Favoriten') === '1' && segmentCount('Links') === '1', 'the filters count their entries');
     buttons(island.body, 'Links')[0].emit('clicked', 1); await Scripting.sleep(100);
     assert(styled(island.body, 'notchy-clip-row').length === 1 && selectedText().startsWith('https://'), 'the Links filter shows links');
     buttons(island.body, 'Alle')[0].emit('clicked', 1); await Scripting.sleep(100);
@@ -305,6 +322,27 @@ export async function run() {
     const testFile = Gio.File.new_for_path(`${path}/test file ü.txt`); testFile.replace_contents('test', null, false, Gio.FileCreateFlags.PRIVATE, null);
     assert(ext.shelf.add(testFile.get_uri()) === 1, 'file added via shelf model');
     assert(ext.shelf.add(clipFile.get_uri()) === 1, 'second shelf fixture added');
+    // The Regal in the notch: files landing open the notch a moment, their
+    // cards drop in and the count rolls up; with music playing the count then
+    // waits beside the notch (the capsule is the player's).
+    assert(island.peeking && island.peekKind === 'shelf' && styled(island.body, 'notchy-shelf-arrival-card').length === 1, `a file landing in the Regal drops into the opened notch (${island.peekKind})`);
+    let elapsed = 0;
+    for (const at of [120, 420, 820, 1500]) {
+        await Scripting.sleep(at - elapsed); elapsed = at;
+        if (at === 120) {
+            const card = styled(island.body, 'notchy-shelf-arrival-card')[0];
+            assert(card.translation_y < -5 || card.opacity < 255, `the card is still dropping in (${card.translation_y}, ${card.opacity})`);
+        }
+        await screenshot(`shelf-arrival-${at}`);
+    }
+    const rolled = styled(island.body, 'notchy-shelf-pill-count')[0]?.text;
+    assert(rolled === String(ext.shelf.items.length), `the arrival's count rolls up to the Regal's new count (${rolled})`);
+    for (let i = 0; i < 60 && island.expanded; i++) await Scripting.sleep(100);
+    assert(!island.expanded, 'the arrival folds back into the capsule by itself');
+    await Scripting.sleep(300);
+    assert(ext.media.state && !island.shelfInCapsule && island.shelfBubble.wanted && island.shelfBubble.button.container.visible && island.shelfBubble.badge.text === String(ext.shelf.items.length),
+        'with music playing the Regal waits beside the notch with its count');
+    await screenshot('notch-shelf-bubble');
     const trayTest = prefsLauncher.spawnv(['/usr/bin/python3', here('tray.py')]);
     await new Promise((resolve, reject) => trayTest.wait_check_async(null, (p, result) => { try { p.wait_check_finish(result); resolve(); } catch (error) { reject(error); } }));
     ext.companion.open('basket', island.monitor); await Scripting.sleep(1800);
@@ -320,7 +358,12 @@ export async function run() {
     await layoutRegressions(ext, path, screenshot);
     await scrollbarRegressions(ext, path, screenshot);
     await agentRegressions(ext, path, screenshot);
-    mock.force_exit(); for (let i = 0; i < 40 && (ext.media.state || ext.islands[0].toastState); i++) await Scripting.sleep(100); assert(ext.media.state === null && !ext.islands[0].panelSurface.has_style_class_name('notchy-wide'), `MPRIS player removal empties the capsule (${ext.media.state?.title ?? 'no state'}, ${ext.islands[0].panelSurface.get_style_class_name()})`);
+    // The AirPods leaving at the end of the agent phase show their pill a moment; the Regal's arrival may still be open.
+    mock.force_exit(); for (let i = 0; i < 60 && (ext.media.state || ext.islands[0].toastState || ext.islands[0].link || ext.islands[0].peeking); i++) await Scripting.sleep(100); assert(ext.media.state === null && !styled(ext.islands[0].leftRow, 'notchy-mini-art').length && styled(ext.islands[0].rightRow, 'notchy-shelf-pill').length === 1, `MPRIS player removal empties the capsule but for the Regal's count (${ext.media.state?.title ?? 'no state'}, ${ext.islands[0].panelSurface.get_style_class_name()})`);
+    await Scripting.sleep(300);
+    assert(styled(ext.islands[0].rightRow, 'notchy-shelf-pill-count')[0]?.text === String(ext.shelf.items.length) && ext.islands[0].shelfInCapsule && !ext.islands[0].shelfBubble.button.container.visible,
+        'without music the Regal\'s count sits beside the clock, not beside the notch');
+    await screenshot('notch-shelf-count');
     keyboard.run_dispose();
     // Last, as it ends with repeated disable/enable cycles.
     await airpodsRegressions(ext, path, screenshot);
@@ -781,7 +824,7 @@ async function interactionRegressions(ext, path, screenshot) {
                 const file = Gio.File.new_for_path(`${path}/${name}`); file.replace_contents('selection fixture', null, false, Gio.FileCreateFlags.NONE, null); ext.shelf.add(file.get_uri());
             }
             await Scripting.sleep(800);
-            const regal = ext.companion.position, tile = [regal.x + 60, regal.y + 70], empty = [regal.x + regal.width - 60, regal.y + regal.height - 24];
+            const regal = ext.companion.position, tile = regalTile(regal, 0), empty = [regal.x + regal.width - 60, regal.y + regal.height - 24];
             // A whole click every time, whatever state earlier steps left the helper in.
             const click = async ([x, y]) => {
                 await move(x, y); await Scripting.sleep(150);
@@ -794,6 +837,18 @@ async function interactionRegressions(ext, path, screenshot) {
             assert(selectedOnce === 1 && selectedTwice === 0, `a second real click on the selected tile deselects it (${selectedOnce} → ${selectedTwice})`);
             await click(tile); await click(empty);
             assert(ext.companion.shelfSelected === 0, 'a real click on empty space in the Regal clears the selection');
+            // The header: „Alle auswählen“ selects every tile, the X clears the selection (real clicks).
+            const header = () => { try { const [, bytes] = GLib.file_get_contents(`${path}/regal-header.json`); return JSON.parse(new TextDecoder().decode(bytes)); } catch { return {}; } };
+            const headerClick = async name => {
+                const button = header()[name], buffer = currentPane().get_buffer_rect();
+                assert(button, `the Regal reports its header button ${name} (${JSON.stringify(header())})`);
+                await click([buffer.x + button.x + button.width / 2, buffer.y + button.y + button.height / 2]);
+            };
+            await headerClick('selectAll');
+            assert(ext.companion.shelfSelected === ext.shelf.items.length, `a real click on „Alle auswählen“ selects every file (${ext.companion.shelfSelected} of ${ext.shelf.items.length})`);
+            await screenshot('regal-select-all');
+            await headerClick('clear');
+            assert(ext.companion.shelfSelected === 0, `a real click on the X clears the selection (${ext.companion.shelfSelected})`);
             await click(tile);
             const escapeFrame = currentPane().get_frame_rect();
             await move(escapeFrame.x + escapeFrame.width / 2, escapeFrame.y + 16);
@@ -838,7 +893,7 @@ async function regalMenuRegressions(ext, path, screenshot) {
         ext.settings.set_boolean('hover-open', false); ext.settings.set_int('collapse-delay', 150);
         await move(640, 100); island.open('shelf');
         await waitFor(() => ext.companion.shelfWindow?.get_compositor_private()?.mapped && !island.morphing); await Scripting.sleep(900);
-        const regal = ext.companion.position, tileAt = i => [regal.x + 60 + i * 132, regal.y + 70], empty = [regal.x + regal.width - 60, regal.y + regal.height - 24];
+        const regal = ext.companion.position, tileAt = i => regalTile(regal, i), empty = [regal.x + regal.width - 60, regal.y + regal.height - 24];
         // Single selection: a right click selects the tile and opens the menu at the pointer.
         await click(...empty, 1, 400);
         await openMenu(tileAt(1));
@@ -1265,6 +1320,11 @@ async function airpodsRegressions(ext, path, screenshot) {
         assert(airpods.backend === 'airpods-helper' && airpods.status === 'helper' && !airpods.connected, 'the running airpods-helper daemon is detected over D-Bus');
         // Connecting: the capsule grows into a banner; unknown batteries read „–“, never 0 %.
         await fixture('Connect', '(sas)', ['AirPods Pro 2 (USB-C)', ['anc', 'adaptive', 'ca']]);
+        // First the capsule widens into a pill with the AirPods' symbol, as an iPhone's island does.
+        await waitFor(() => island.link?.kind === 'found', 2000);
+        assert(island.link?.kind === 'found' && styled(island.leftRow, 'notchy-link-glyph').length === 1 && styled(island.rightRow, 'notchy-link-ring-row').length === 1 && !island.peeking,
+            'arriving AirPods first widen the capsule into a pill with their symbol and battery');
+        await Scripting.sleep(350); await screenshot('airpods-pill');
         await waitFor(() => island.peekKind === 'airpods');
         assert(island.peeking && island.peekKind === 'airpods' && styled(island.body, 'notchy-airpods-card-title')[0]?.text === 'AirPods Pro 2 (USB-C)', 'connecting AirPods grows the island into the connection card with the name');
         const values = () => styled(island.body, 'notchy-airpods-card-value').map(a => a.text), captions = () => styled(island.body, 'notchy-airpods-card-caption').map(a => a.text);
@@ -1272,6 +1332,9 @@ async function airpodsRegressions(ext, path, screenshot) {
         await Scripting.sleep(300);
         const cards = [...island.peekView.cells.values()];
         assert(cards.every(cell => cell.picture.opacity > 0 && cell.picture.get_transition('scale-x') || cell.picture.scale_x === 1), 'the AirPods and the case spring into the card');
+        assert(!island.link && island.peekView.hero.body.opacity > 0 && (island.peekView.hero.body.get_transition('scale-x') || island.peekView.hero.body.scale_x === 1),
+            'the pill opens into the card: the product flies in large beside the name');
+        await screenshot('airpods-card-arriving');
         // A system notification arriving with the card waits until the card has been seen.
         const systemSource = MessageTray.getSystemSource();
         const echo = new MessageTray.Notification({source: systemSource, title: 'AirPods Pro verbunden', body: 'Bluetooth'});
@@ -1365,7 +1428,13 @@ async function airpodsRegressions(ext, path, screenshot) {
         // Disconnecting.
         await fixture('Drop'); await waitFor(() => !airpods.connected);
         await Scripting.sleep(200);
-        assert(!airpods.connected && toasts.some(t => t.endsWith('getrennt')) && !shownBeside('airpods'), 'disconnecting is announced and the symbol leaves');
+        assert(!airpods.connected && island.link?.kind === 'gone' && styled(island.rightRow, 'notchy-link-text')[0]?.text === 'Getrennt' && !shownBeside('airpods'),
+            `disconnecting is announced in the pill and the symbol beside the notch leaves (${island.link?.kind})`);
+        await Scripting.sleep(250); await screenshot('airpods-gone-1');
+        await Scripting.sleep(1000); await screenshot('airpods-gone-2');
+        assert(styled(island.leftRow, 'notchy-link-glyph')[0]?.has_style_class_name('gone'), 'the AirPods turn grey and fall away');
+        await waitFor(() => !island.link, 3000);
+        assert(!island.link, 'the pill folds back into the clock');
         // Connecting from Thunderstorm, disconnecting from the controls: both through the daemon.
         const offer = ext.launcher.providers.cmd.search('airpods', {}).find(r => r.title === 'AirPods verbinden');
         assert(offer, 'Thunderstorm offers to connect known AirPods');
@@ -1590,6 +1659,9 @@ async function agentRegressions(ext, path, screenshot) {
     };
     ext.settings.set_boolean('hover-open', false);
     let daemon = null, sleeper = null;
+    // The Regal's indicator beside the notch would take a side of its own: this
+    // checks how AirPods and agents share them, so the Regal is empty meanwhile.
+    const shelfItems = [...ext.shelf.items]; ext.shelf.clear();
     try {
         // Nothing reports: no indicator. A started process alone is never "working".
         assert(ext.agents.sessions.length === 0 && ![...island.sides.items.keys()].some(id => id.startsWith('agent:')), 'without hooks or reports there is no agent indicator');
@@ -1733,6 +1805,7 @@ async function agentRegressions(ext, path, screenshot) {
         try { sleeper?.force_exit(); } catch { /* Gone. */ }
         try { daemon?.force_exit(); } catch { /* Gone. */ }
         ext.settings?.set_boolean('airpods-animation', true); ext.settings?.set_boolean('hover-open', true);
+        ext.shelf.items = shelfItems; ext.shelf.save();
     }
 }
 

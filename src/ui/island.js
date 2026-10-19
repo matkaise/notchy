@@ -1,5 +1,7 @@
+import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import Graphene from 'gi://Graphene';
 import Gio from 'gi://Gio';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -10,11 +12,12 @@ import {NotchEars} from './notchEars.js';
 import {Views} from './views.js';
 import {AirPodsBubble} from './airpodsBubble.js';
 import {AgentIndicators} from './agentBubble.js';
+import {ShelfBubble} from './shelfBubble.js';
 import {SideIndicators} from './sideIndicators.js';
 import {Waveform} from './waveform.js';
 import {box, label, icon, gicon, button} from './widgets.js';
 import {Lifetime} from '../lifecycle.js';
-import {_, N_, fmt, formatPercent} from '../i18n/core.js';
+import {_, N_, fmt, ngettext, formatPercent} from '../i18n/core.js';
 
 // Bottom tab bar (Droppy for GNOME): page, icon, label.
 export const TABS = [['media', 'audio-x-generic-symbolic', N_('Media')], ['shelf', 'package-x-generic-symbolic', N_('Shelf')],
@@ -28,6 +31,8 @@ export const CONTENT_HEIGHT = {media: PAGE_HEIGHT, shelf: PAGE_HEIGHT, clipboard
 export const DROP_HEIGHT = 132;
 export const TAB_WIDTH = 46, TAB_HEIGHT = 30, TAB_INSET = 3, TABBAR_HEIGHT = 50;
 const TOP_GAP = 8, RADIUS = 30, SLIDE = 24;
+// AirPods arriving: the pill before the card, the card, the pill after it; leaving.
+const AIRPODS_PILL = 900, AIRPODS_CARD = 4200, AIRPODS_AFTER = 1800, AIRPODS_GONE = 2400;
 const WIDTH = {search: 620, drop: 460, notification: 440, snap: 560};
 const LIQUID_INSET = 3, FADE = 70;
 // Settings that change what an opened tab shows (see the settings handler).
@@ -54,6 +59,66 @@ export function syncRow(row, parts) {
         part.update?.(actor); kept.add(actor);
     });
     for (const child of row.get_children()) if (!kept.has(child)) child.destroy();
+}
+
+// The AirPods pill in the capsule (Island.showLink). Its parts start moving a
+// tick after they are on screen: GNOME skips the easing of unmapped actors.
+// `alive()` tells a later step whether the actor still exists.
+function whenShown(actor, fn) {
+    let gone = false;
+    actor.connect('destroy', () => { gone = true; });
+    const alive = () => !gone && actor.mapped;
+    const go = () => GLib.timeout_add(GLib.PRIORITY_DEFAULT, 0, () => { if (alive()) fn(alive); return GLib.SOURCE_REMOVE; });
+    if (actor.mapped) { go(); return; }
+    const id = actor.connect('notify::mapped', () => { if (gone || !actor.mapped) return; actor.disconnect(id); go(); });
+}
+// The AirPods' symbol: it springs in from the left when they arrive; when they
+// leave it turns grey and falls away.
+function linkGlyph(link) {
+    const glyph = new St.Icon({gicon: gicon('notchy-airpods-symbolic'), icon_size: 18, style_class: 'notchy-link-glyph', y_align: Clutter.ActorAlign.CENTER,
+        pivot_point: new Graphene.Point({x: 0.5, y: 0.5})});
+    if (link.kind === 'found') { glyph.opacity = 0; glyph.scale_x = glyph.scale_y = 0.5; glyph.translation_x = -12; }
+    whenShown(glyph, alive => {
+        if (link.kind === 'found') glyph.ease({opacity: 255, scale_x: 1, scale_y: 1, translation_x: 0, duration: 520, mode: Clutter.AnimationMode.EASE_OUT_BACK});
+        if (link.kind === 'gone') {
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 420, () => { if (alive()) glyph.add_style_class_name('gone'); return GLib.SOURCE_REMOVE; });
+            glyph.ease({translation_y: 16, rotation_angle_z: 20, opacity: 0, delay: 760, duration: 560, mode: Clutter.AnimationMode.EASE_IN_QUAD});
+        }
+    });
+    return glyph;
+}
+// The battery: a small ring with the level beside it (drawn as it arrives,
+// emptying as they leave), or „Getrennt“.
+function linkRing(link) {
+    const row = box(false, {style_class: `notchy-link-ring-row ${link.kind}`, y_align: Clutter.ActorAlign.CENTER});
+    const level = link.level;
+    const words = label(link.kind === 'gone' ? _('Disconnected') : level === null ? '' : formatPercent(level), 'notchy-link-text', {y_align: Clutter.ActorAlign.CENTER});
+    const ring = new St.DrawingArea({width: 18, height: 18, y_align: Clutter.ActorAlign.CENTER});
+    let progress = link.kind === 'found' ? 0 : 1, grey = link.kind === 'gone' ? 0 : -1;
+    ring.connect('repaint', () => {
+        const cr = ring.get_context(), [w, h] = ring.get_surface_size(), r = Math.min(w, h) / 2 - 1.8;
+        cr.setLineWidth(2.6); cr.setSourceRGBA(1, 1, 1, 0.16); cr.arc(w / 2, h / 2, r, 0, 2 * Math.PI); cr.stroke();
+        const shown = link.kind === 'gone' ? (level ?? 0) / 100 * (1 - Math.max(0, grey)) : (level ?? 0) / 100 * progress;
+        if (shown > 0.005) {
+            const g = Math.max(0, grey);
+            cr.setSourceRGBA(0.2 + 0.23 * g, 0.78 - 0.35 * g, 0.35 + 0.1 * g, 1); cr.setLineCap(Cairo.LineCap.ROUND);
+            cr.arc(w / 2, h / 2, r, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * shown); cr.stroke();
+        }
+        cr.$dispose();
+    });
+    if (link.kind === 'gone') words.opacity = 0;
+    row.add_child(words); row.add_child(ring);
+    whenShown(row, () => {
+        if (link.kind === 'gone') words.ease({opacity: 255, duration: 260, delay: 300, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        if (link.kind === 'connected') return;
+        const timeline = new Clutter.Timeline({actor: ring, duration: link.kind === 'gone' ? 700 : 760, delay: link.kind === 'gone' ? 420 : 120, progress_mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+        // The pill may give way to the card mid-way: the timeline ends with its ring.
+        let dead = false;
+        ring.connect('destroy', () => { dead = true; timeline.stop(); });
+        timeline.connect('new-frame', () => { if (dead) return; if (link.kind === 'gone') grey = timeline.get_progress(); else progress = timeline.get_progress(); ring.queue_repaint(); });
+        timeline.start();
+    });
+    return row;
 }
 
 // The island is GNOME's clock grown into a surface: in the bar it is a capsule
@@ -146,7 +211,8 @@ export class Island {
         });
         this.life.cleanups.push(this.media.subscribe(() => { this.updateCompact(); if (this.expanded && this.page === 'media') this.refresh(); }));
         this.life.cleanups.push(this.cover.subscribe(() => { this.updateCompact(); if (this.expanded && this.page === 'media') this.refresh(); }));
-        this.life.cleanups.push(this.shelf.subscribe(() => { if (this.expanded && this.page === 'shelf') this.refresh(); }));
+        this.shelfCount = this.shelf.items.length;
+        this.life.cleanups.push(this.shelf.subscribe(() => { this.shelfArrived(); this.updateCompact(); if (this.expanded && this.page === 'shelf') this.refresh(); }));
         this.life.cleanups.push(this.productivity.subscribe(() => this.updateCompact()));
         this.life.cleanups.push(this.operations.subscribe(() => this.updateCompact()));
         this.life.cleanups.push(this.companion.subscribe(() => this.syncVisibility()));
@@ -160,6 +226,7 @@ export class Island {
         this.sides = new SideIndicators(this);
         if (this.airpods) this.airpodsBubble = new AirPodsBubble(this);
         if (this.agents) this.agentIndicators = new AgentIndicators(this);
+        this.shelfBubble = new ShelfBubble(this);
         this.applyStyle(); this.updateCompact(); this.position(); this.syncVisibility(); this.syncAirDrop();
     }
     buildPanel() {
@@ -497,6 +564,8 @@ export class Island {
         if (this.peekKind === 'airdrop-ask') this.airdrop?.question?.answer(false);
         // What waited for the island: the AirPods card, then a held-back notification.
         const card = this.airpodsPending && GLib.get_monotonic_time() - this.airpodsPending < 10000000 && this.peekKind !== 'airpods';
+        // The card folds back into the pill with the battery, a moment.
+        const fromCard = this.peekKind === 'airpods';
         const queued = this.peekKind === 'airpods' ? this.takeQueuedNotifications() : [];
         if (card || queued.length) {
             this.airpodsPending = 0;
@@ -508,7 +577,8 @@ export class Island {
                 if (latest) this.notify(latest);
             });
         }
-        if (this.life.closed) return; this.endPeek(); this.expanded = false; this.pinned = false; this.cancelCollapse(); this.life.cancel(this.hoverTimeout); this.hoverTimeout = 0;
+        if (this.life.closed) return; this.endPeek(); this.expanded = false;
+        if (fromCard && this.airpods?.connected) this.showLink('connected', this.airpods.state, AIRPODS_AFTER); this.pinned = false; this.cancelCollapse(); this.life.cancel(this.hoverTimeout); this.hoverTimeout = 0;
         if (this.nativeShelf) this.companion.closeShelf();
         const focus = global.stage.get_key_focus(); if (focus && this.actor.contains(focus)) global.stage.set_key_focus(null);
         this.views.pageLife?.dispose(); this.views.menu?.close(); this.views.keyPress = null; this.body.hide(); this.nav.hide();
@@ -557,11 +627,23 @@ export class Island {
         const glyph = (key, cls, size, source) => ({key, make: () => new St.Icon({icon_size: size, style_class: cls, ...center}), update: a => setIcon(a, source)});
         const track = (key, cls, ratio) => ({key, make: () => { const t = new St.Widget({style_class: 'notchy-hud-track', width: 70, ...center}); t.add_child(new St.Widget({style_class: cls})); return t; },
             update: a => { const fill = a.get_first_child(); fill.set_style_class_name(cls); fill.width = Math.round(70 * Math.max(0, Math.min(1, ratio))); }});
-        let left = [], right = [], wide = false;
+        const shelfPill = count => ({key: 'shelf', make: () => {
+            const pill = box(false, {style_class: 'notchy-shelf-pill', ...center});
+            pill.add_child(new St.Icon({gicon: gicon('adwaita:package-x-generic-symbolic'), icon_size: 12, ...center}));
+            pill.add_child(label(String(count), 'notchy-shelf-pill-count', center));
+            return pill;
+        }, update: a => { const text = a.get_last_child(); if (text.text !== String(count)) text.text = String(count); }});
+        let left = [], right = [], wide = false, shelfInCapsule = false;
         if (airdrop) {
             left = [glyph('airdrop-icon', 'notchy-airdrop-icon', 16, airdrop.icon)];
             right = airdrop.progress !== null ? [track('airdrop-track', 'notchy-hud-fill notchy-airdrop-fill', airdrop.progress / 100), text('airdrop-value', 'notchy-hud-value', airdrop.progress)]
                 : [text('airdrop-text', 'notchy-airdrop-text', airdrop.text)];
+            wide = true;
+        } else if (this.link && !hud) {
+            // AirPods coming or going: the capsule widens into a pill.
+            const link = this.link;
+            left = [{key: `link-glyph-${link.shown}`, make: () => linkGlyph(link)}];
+            right = [{key: `link-ring-${link.shown}`, make: () => linkRing(link)}];
             wide = true;
         } else if (toast && !hud) {
             // A new toast fades in once; redraws during the same toast keep it steady.
@@ -580,8 +662,19 @@ export class Island {
             if (activity || this.operations.busy) right.push(text('activity', 'notchy-activity-text', activity ? activity.status : _('Processing…')));
             if (state?.playing && this.settings.get_boolean('media-waveform')) right.push({key: 'waveform', make: () => new Waveform(this.spectrum, 22, 13)});
             else if (state) right.push(glyph('media-state', '', 14, state.playing ? 'audio-volume-high-symbolic' : 'media-playback-pause-symbolic'));
+            // The Regal's file count beside the clock while nothing else is
+            // there; with company the round indicator beside the notch takes it.
+            const files = this.shelf.items.length;
+            shelfInCapsule = files > 0 && !state && !right.length;
+            if (shelfInCapsule) { right.push(shelfPill(files)); wide = true; }
         }
         syncRow(this.leftRow, left); syncRow(this.rightRow, right);
+        // A toast or the HUD only borrows the capsule: the count stays where it was.
+        if (!airdrop && !toast && !hud) this.shelfInCapsule = shelfInCapsule;
+        // The Regal's count and the AirPods pill are quiet indicators: no hover highlight on their slots.
+        const quiet = shelfInCapsule || Boolean(this.link && !hud);
+        for (const slot of [this.leftSlot, this.rightSlot]) quiet ? slot.add_style_class_name('notchy-slot-quiet') : slot.remove_style_class_name('notchy-slot-quiet');
+        this.shelfBubble?.sync();
         this.compactFlags = {wide, hud: Boolean(hud), toasting: Boolean(toast && !hud)};
         this.syncCapsuleClass(); this.syncCompactGeometry();
     }
@@ -622,17 +715,43 @@ export class Island {
     }
     // AirPods: connecting grows the capsule into a short banner with the
     // batteries filling up; low batteries and disconnecting are live activities.
+    // The AirPods pill in the capsule: 'found' (they arrive, before the card),
+    // 'connected' (after it, with the battery) or 'gone'.
+    showLink(kind, state, duration) {
+        const {left, right, single} = state?.battery ?? {left: null, right: null, single: null};
+        const level = single ?? (left === null ? right : right === null ? left : Math.min(left, right));
+        this.link = {kind, level: level ?? null, shown: GLib.get_monotonic_time()};
+        this.life.cancel(this.linkTimeout);
+        this.linkTimeout = duration ? this.life.later(duration, () => { this.linkTimeout = 0; this.link = null; this.updateCompact(); this.sides?.queue(); }) : 0;
+        this.updateCompact(); this.sides?.queue();
+    }
+    clearLink() { if (!this.link) return; this.link = null; this.life.cancel(this.linkTimeout); this.linkTimeout = 0; this.updateCompact(); this.sides?.queue(); }
+    // AirPods arriving, as the iPhone shows it: the capsule widens into a
+    // pill (their symbol springs in, the battery ring draws), then the notch
+    // springs open into the card, and folds back into the pill a moment
+    // before it is the clock again. Leaving: the pill says „Getrennt“ and the
+    // symbol turns grey and falls away.
     airpodsEvent(event) {
         if (this.life.closed) return;
         const name = event.state?.name || 'AirPods';
+        const animated = this.settings.get_boolean('airpods-animation');
         if (event.type === 'connected') {
-            if (!this.settings.get_boolean('airpods-animation')) { this.toast('notchy-airpods-symbolic', fmt(_('%s connected'), name)); return; }
-            // An open tab or a menu gets the card as soon as the island closes (within 10 s).
-            if (!this.peek('airpods', 6500, () => this.views.airpodsPeekView())) this.airpodsPending = GLib.get_monotonic_time();
+            if (!animated) { this.toast('notchy-airpods-symbolic', fmt(_('%s connected'), name)); return; }
+            this.showLink('found', event.state, 0);
+            this.life.cancel(this.linkCard);
+            this.linkCard = this.life.later(AIRPODS_PILL, () => {
+                this.linkCard = 0;
+                const shown = this.peek('airpods', AIRPODS_CARD, () => this.views.airpodsPeekView());
+                this.clearLink();
+                // An open tab or a menu gets the card as soon as the island closes (within 10 s).
+                if (!shown) this.airpodsPending = GLib.get_monotonic_time();
+            });
         } else if (event.type === 'disconnected') {
             this.airpodsPending = 0;
+            this.life.cancel(this.linkCard); this.linkCard = 0;
             if (this.peekKind === 'airpods') this.close();
-            this.toast('notchy-airpods-symbolic', fmt(_('%s disconnected'), name));
+            if (animated) this.showLink('gone', event.state, AIRPODS_GONE);
+            else this.toast('notchy-airpods-symbolic', fmt(_('%s disconnected'), name));
         } else if (event.type === 'low') {
             // Translators: a low battery: "AirPods left: 10 %".
             const part = {left: _('left'), right: _('right'), case: _('Case')}[event.part] ?? '';
@@ -736,6 +855,24 @@ export class Island {
     // Short confirmations ("Copied to clipboard") as a live activity in
     // the capsule itself: the symbol left of the clock, the words right of it.
     // The capsule heads the opened surface too, so they show in both states.
+    // Files landing in the Regal while the island is closed: the notch opens a
+    // moment and they drop into it, the count rolling up (Views.shelfArrivalView).
+    // Callers with their own words (AirDrop, a screenshot) toast after the add.
+    // A drop into the drop zone lands while the zone is still open: the
+    // arrival follows once it has folded away.
+    shelfArrived() {
+        const items = this.shelf.items, before = this.shelfCount, added = items.length - before;
+        this.shelfCount = items.length;
+        if (added <= 0 || (this.expanded && !this.peeking)) return;
+        const arrived = items.slice(-added);
+        const show = () => {
+            if (this.peek('shelf', 2900, () => this.views.shelfArrivalView(arrived, before, this.shelf.items.length))) return;
+            const name = arrived.at(-1).name;
+            this.toast('adwaita:package-x-generic-symbolic', added === 1 ? fmt(_('In the Shelf · %s'), name.length > 28 ? `${name.slice(0, 27).trimEnd()}…` : name)
+                : fmt(ngettext('%d file in the Shelf', '%d files in the Shelf', added), added));
+        };
+        if (this.dropActive) this.life.later(500, show); else show();
+    }
     toast(iconName, text) {
         if (this.life.closed) return;
         this.toastState = {icon: gicon(iconName), text, shown: GLib.get_monotonic_time()};
@@ -774,6 +911,7 @@ export class Island {
         if (this.nativeShelf) this.companion.closeShelf();
         this.agentIndicators?.dispose(); this.agentIndicators = null;
         this.airpodsBubble?.dispose(); this.airpodsBubble = null;
+        this.shelfBubble?.dispose(); this.shelfBubble = null;
         this.sides?.dispose(); this.sides = null;
         this.returnPanelHeader(); this.ears?.dispose(); this.paneLife?.dispose(); this.glass.destroy(); this.life.dispose(); this.views.dispose();
         this.dateMenu.menu.close();

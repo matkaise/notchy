@@ -224,7 +224,8 @@ export class Companion extends Emitter {
     // files during a drag and hands them to the Regal in one go.
     open(kind = 'basket', monitor = Main.layoutManager.primaryMonitor) {
         if (this.proc || this.life.closed) return;
-        const width = 240, height = 230;
+        // As large as helper/tray.py's BASKET.
+        const width = 280, height = 262;
         const [px, py] = global.get_pointer();
         const area = Main.layoutManager.getWorkAreaForMonitor(monitor.index);
         const x = Math.min(Math.max(px - width / 2, area.x), area.x + area.width - width);

@@ -18,10 +18,33 @@
 .notchy-capsule .clock-display:hover .clock, .notchy-capsule .clock-display:active .clock { background-color: rgba(255,255,255,0.08); border-radius: 12px; }
 .notchy-slot { padding: 0 2px; border-radius: 10px; background-color: transparent; color: #f4f4f6; }
 .notchy-slot:hover { background-color: rgba(255,255,255,0.06); }
+.notchy-slot.notchy-slot-quiet:hover { background-color: transparent; }
 .notchy-slot-row { spacing: 8px; }
 .notchy-wide .notchy-slot { min-width: 64px; }
 .notchy-hud .notchy-slot-right { min-width: 112px; }
 .notchy-mini-art { border-radius: 5px; color: #ffb38a; }
+/* AirPods coming and going: the pill in the capsule. */
+.notchy-link-glyph { color: #ffffff; transition-duration: 300ms; }
+.notchy-link-glyph.gone { color: #6e6e73; }
+.notchy-link-ring-row { spacing: 7px; }
+.notchy-link-text { font-size: 12.5px; font-weight: bold; color: #34c759; font-feature-settings: "tnum"; }
+.notchy-link-ring-row.gone .notchy-link-text { color: #c7c7cc; }
+/* The Regal's file count beside the clock. */
+.notchy-shelf-pill { height: 20px; padding: 0 8px; border-radius: 10px; spacing: 4px; color: #f2a25c; background-color: rgba(242,162,92,0.16); }
+.notchy-shelf-pill-count { font-size: 12px; font-weight: bold; color: #f2a25c; }
+/* Files landing in the Regal: cards dropping into the opened notch, a ring of
+   light and sparks where they land, „Im Regal“ and the count rolling up. */
+.notchy-shelf-arrival { padding: 10px 18px 14px 14px; }
+.notchy-shelf-arrival-row { spacing: 14px; }
+.notchy-shelf-arrival-card { border-radius: 7px; background-color: #2c2c30; border: 1px solid #44444a; background-size: cover; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+.notchy-shelf-arrival-ext { font-size: 7.5px; margin-bottom: 5px; padding: 1px 3px; border-radius: 3px; }
+.notchy-shelf-arrival-ring { border-radius: 22px; border: 2px solid #f2a25c; }
+.notchy-shelf-arrival-spark { border-radius: 4px; background-color: #ffc08a; box-shadow: 0 0 6px rgba(255,170,100,0.9); }
+.notchy-shelf-arrival-words { spacing: 2px; }
+.notchy-shelf-arrival-title { font-size: 14px; font-weight: bold; color: #f2a25c; }
+.notchy-shelf-arrival-name { font-size: 12.5px; color: rgba(255,255,255,0.75); }
+.notchy-shelf-arrival-pill { height: 26px; padding: 0 11px; border-radius: 13px; spacing: 6px; }
+.notchy-shelf-arrival-pill .notchy-shelf-pill-count { font-size: 14px; }
 .notchy-liquid .notchy-mini-art { icon-size: 17px; }
 .notchy-hud-icon { color: #ffffff; }
 .notchy-hud-track { height: 5px; border-radius: 3px; background-color: rgba(255,255,255,0.2); }
@@ -125,40 +148,110 @@
 .notchy-quiet-open-row { spacing: 9px; }
 
 /* ── Shelf tab („Regal“, Shell copy of helper/tray.py) ─────────────── */
-.notchy-shelf-preview { spacing: 12px; }
-.notchy-shelf-head { height: 30px; }
+.notchy-shelf-preview { spacing: 8px; padding-top: 6px; }
+.notchy-shelf-head { height: 40px; spacing: 10px; }
+.notchy-shelf-title { font-size: 15px; font-weight: bold; color: #ffffff; }
 .notchy-shelf-count { font-size: 12.5px; color: rgba(255,255,255,0.6); }
-.notchy-shelf-add { width: 30px; height: 30px; border-radius: 15px; color: rgba(255,255,255,0.8); }
-.notchy-shelf-row { spacing: 6px; }
-.notchy-file-tile { padding: 8px 6px; spacing: 6px; border-radius: 16px; }
-.notchy-file-thumb { width: 62px; height: 76px; border-radius: 10px; background-color: rgba(255,255,255,0.1); }
-.notchy-file-thumb.pdf { background-color: #a8432f; }
-.notchy-file-thumb.text { background-color: #3f5b8c; }
-.notchy-file-thumb.archive { background-color: #8b742f; }
-.notchy-file-ext { font-family: monospace; font-size: 9.5px; color: rgba(255,255,255,0.9); padding-bottom: 6px; }
-.notchy-file-name { font-size: 11.5px; }
-.notchy-drop-hint { height: 150px; spacing: 6px; border-radius: 18px; border: 1.5px dashed rgba(255,255,255,0.18); color: rgba(255,255,255,0.5); }
+.notchy-shelf-grid { spacing: 10px; }
+.notchy-shelf-row { spacing: 14px; }
+.notchy-file-tile { spacing: 5px; }
+.notchy-file-card { border-radius: 14px; background-color: #141416; border: 1px solid #232326; }
+.notchy-file-sheet { border-radius: 6px; background-color: #2a2a2e; }
+.notchy-file-ext { font-size: 9px; font-weight: bold; color: #000000; background-color: #b8c0cc; border-radius: 4px; padding: 1px 4px; margin-bottom: 6px; }
+.notchy-file-ext.pdf { background-color: #f08a7e; }
+.notchy-file-ext.archive { background-color: #e6c36a; }
+.notchy-file-ext.video { background-color: #a99bf5; }
+.notchy-file-ext.audio { background-color: #f2a25c; }
+.notchy-file-ext.doc { background-color: #86b6f2; }
+.notchy-file-ext.image { background-color: #7fd1a8; }
+.notchy-file-name { font-size: 12px; }
+.notchy-shelf-empty { spacing: 0; }
+.notchy-shelf-ghost { border-radius: 12px; background-color: #141416; border: 1.5px solid #2c2c30; }
+.notchy-shelf-ghost.front { background-color: #1c1c1f; border-color: #3a3a3e; color: #f2a25c; }
+.notchy-shelf-empty-title { font-size: 20px; font-weight: bold; color: #ffffff; padding-top: 18px; }
+.notchy-shelf-empty-hint { font-size: 14px; color: #a3abb8; padding-top: 6px; }
 
 /* ── Clipboard tab („Ablage“) ───────────────────────────────────────── */
-.notchy-clipboard { padding: 0 18px; spacing: 8px; }
-.notchy-clip-top { spacing: 8px; }
-.notchy-search-pill { height: 34px; padding: 0 12px; border-radius: 17px; background-color: rgba(255,255,255,0.07); border: 0; color: #ffffff; font-size: 13px; selection-background-color: #E95420; }
-.notchy-search-pill:focus { background-color: rgba(255,255,255,0.1); box-shadow: none; }
+/* Ablage: the search and the filters as one segmented control; the history
+   grouped by day on the left, the selected entry shown on the right. */
+.notchy-clipboard { padding: 0 18px; spacing: 10px; }
+.notchy-clip-top { spacing: 10px; }
+.notchy-search-pill { height: 34px; padding: 0 12px; border-radius: 17px; background-color: #1c1c1e; border: 0; color: #ffffff; font-size: 13px; selection-background-color: #E95420; }
+.notchy-search-pill:focus { background-color: #1c1c1e; box-shadow: none; }
+.notchy-search-pill.searching { box-shadow: inset 0 0 0 1.5px #f2a25c; }
 .notchy-search-pill StIcon { color: rgba(255,255,255,0.5); padding-right: 8px; }
-.notchy-chips { spacing: 2px; }
-.notchy-button.notchy-chip { width: 34px; height: 32px; padding: 0; border-radius: 16px; color: rgba(255,255,255,0.5); }
-.notchy-button.notchy-chip.active { color: #ffffff; background-color: rgba(255,255,255,0.14); }
-.notchy-clip-list { spacing: 1px; }
-.notchy-clip-row { padding: 7px 8px; spacing: 10px; border-radius: 14px; }
-.notchy-clip-row:hover { background-color: rgba(255,255,255,0.06); }
-.notchy-clip-row.selected { background-color: rgba(255,255,255,0.1); }
-.notchy-clip-icon { width: 26px; height: 26px; border-radius: 8px; background-color: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); }
-.notchy-clip-text { font-size: 12.5px; color: #f4f4f6; }
+.notchy-clip-segments { padding: 3px; spacing: 2px; border-radius: 18px; background-color: #1c1c1e; }
+.notchy-clip-segment { height: 28px; padding: 0 11px; border-radius: 14px; color: #c7c7cc; }
+.notchy-clip-segment:hover, .notchy-clip-segment:focus { background-color: rgba(255,255,255,0.06); }
+.notchy-clip-segment.active { background-color: #3a3a3c; color: #ffffff; }
+.notchy-clip-segment-row { spacing: 5px; }
+.notchy-clip-segment-label { font-size: 12.5px; }
+.notchy-clip-segment-count { font-size: 11px; color: rgba(255,255,255,0.5); font-feature-settings: "tnum"; }
+.notchy-clip-body { spacing: 14px; }
+.notchy-clip-list { spacing: 2px; padding-right: 2px; }
+.notchy-clip-group { font-size: 11px; font-weight: bold; color: rgba(255,255,255,0.5); padding: 6px 10px 3px; }
+.notchy-clip-row { padding: 6px 10px 6px 6px; spacing: 10px; border-radius: 12px; }
+.notchy-clip-row:hover { background-color: rgba(255,255,255,0.05); }
+.notchy-clip-row.selected { background-color: #1c1c1e; box-shadow: inset 0 0 0 1px #2e2e32; }
+.notchy-clip-icon { width: 28px; height: 28px; border-radius: 8px; background-color: #2a2a2e; color: #c7c7cc; background-size: cover; }
+.notchy-clip-icon.link { background-color: #1d2633; color: #7ab8ff; }
+.notchy-clip-icon.files { background-color: #2e2419; color: #f2a25c; }
+.notchy-clip-icon.image { background-color: #2f3d4c; color: #ffffff; }
+.notchy-clip-icon.color { border: 1px solid rgba(255,255,255,0.12); }
+.notchy-clip-text { font-size: 13px; color: #e8e8ec; }
+.notchy-clip-row.selected .notchy-clip-text { color: #ffffff; }
 .notchy-clip-text.mono { font-family: monospace; }
-.notchy-clip-meta { font-size: 11px; color: rgba(255,255,255,0.55); padding-top: 2px; }
+.notchy-clip-meta { font-size: 11.5px; color: rgba(255,255,255,0.5); }
 .notchy-clip-open { text-align: left; }
-.notchy-clip-actions { spacing: 2px; }
-.notchy-clip-time { font-size: 11px; color: rgba(255,255,255,0.4); }
+.notchy-clip-none { font-size: 12.5px; color: rgba(255,255,255,0.5); padding: 24px 0; }
+.notchy-clip-preview { padding: 13px 15px; spacing: 11px; border-radius: 18px; background-color: #111113; border: 1px solid #232326; }
+.notchy-clip-preview-meta { spacing: 8px; }
+.notchy-clip-kind { font-size: 11.5px; font-weight: bold; padding: 2px 8px; border-radius: 9px; color: #d6d6da; background-color: #2a2a2e; }
+.notchy-clip-kind.link { color: #7ab8ff; background-color: #1d2633; }
+.notchy-clip-kind.image { color: #b9d3ee; background-color: #2f3d4c; }
+.notchy-clip-kind.color, .notchy-clip-kind.files { color: #f2a25c; background-color: #3a2a1c; }
+.notchy-clip-preview-where { font-size: 12px; color: rgba(255,255,255,0.55); }
+.notchy-clip-preview-content { spacing: 10px; }
+.notchy-clip-preview-text { font-size: 14.5px; color: #ececef; }
+.notchy-clip-link-card { padding: 12px; spacing: 12px; border-radius: 14px; background-color: #1a1a1d; border: 1px solid #2a2a2e; }
+.notchy-clip-link-avatar { width: 38px; height: 38px; border-radius: 10px; background-color: #1d2633; }
+.notchy-clip-link-letter { font-size: 17px; font-weight: bold; color: #7ab8ff; }
+.notchy-clip-link-host { font-size: 14.5px; font-weight: bold; color: #ffffff; }
+.notchy-clip-link-url { font-family: monospace; font-size: 12px; color: rgba(255,255,255,0.65); }
+.notchy-clip-picture { border-radius: 12px; background-color: #1a1a1d; background-size: contain; background-position: center; }
+.notchy-clip-swatch { border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); }
+.notchy-clip-formats { spacing: 8px; }
+.notchy-clip-format { height: 44px; padding: 0 10px; border-radius: 11px; background-color: #1c1c1e; text-align: left; }
+.notchy-clip-format:hover, .notchy-clip-format:focus { background-color: #2a2a2d; }
+.notchy-clip-format-cell { spacing: 1px; }
+.notchy-clip-format-name { font-size: 10.5px; color: rgba(255,255,255,0.5); }
+.notchy-clip-format-value { font-family: monospace; font-size: 11.5px; color: #ececef; }
+.notchy-clip-file { height: 32px; padding: 0 10px; spacing: 10px; border-radius: 10px; background-color: #1a1a1d; }
+.notchy-clip-file .notchy-file-ext { margin-bottom: 0; }
+.notchy-clip-file-name { font-size: 13px; color: #ececef; }
+.notchy-clip-preview-actions { spacing: 8px; }
+.notchy-clip-copy { height: 34px; padding: 0 14px; border-radius: 17px; background-color: rgba(255,255,255,0.92); color: #000000; }
+.notchy-clip-copy:hover, .notchy-clip-copy:focus { background-color: #ffffff; }
+.notchy-clip-plain { height: 34px; padding: 0 14px; border-radius: 17px; background-color: #1c1c1e; color: #d6d6da; }
+.notchy-clip-plain:hover, .notchy-clip-plain:focus { background-color: #2a2a2d; }
+.notchy-clip-copy-row { spacing: 8px; }
+.notchy-clip-copy-label { font-size: 13px; font-weight: bold; color: #000000; }
+.notchy-clip-plain-label { font-size: 13px; color: #d6d6da; }
+.notchy-button.notchy-round-button.notchy-clip-action { width: 34px; height: 34px; border-radius: 17px; background-color: #1c1c1e; color: #d6d6da; }
+.notchy-button.notchy-round-button.notchy-clip-action:hover { background-color: #2a2a2d; color: #ffffff; }
+.notchy-button.notchy-round-button.notchy-clip-action.favorite { color: #f2a25c; }
+.notchy-button.notchy-round-button.notchy-clip-action.danger { color: #ff8f84; }
+/* The history off: a small stack of copies, one line, a way to turn it on. */
+.notchy-clip-paused { spacing: 0; }
+.notchy-clip-ghost { border-radius: 9px; background-color: #141416; border: 1.5px solid #2c2c30; }
+.notchy-clip-ghost.front { background-color: #1c1c1f; border-color: #3a3a3e; }
+.notchy-clip-ghost-dot { border-radius: 4px; background-color: #f2a25c; }
+.notchy-clip-ghost-line { border-radius: 3px; background-color: #3a3a3e; }
+.notchy-clip-paused-title { font-size: 20px; font-weight: bold; color: #ffffff; padding-top: 18px; }
+.notchy-clip-paused-hint { font-size: 14px; color: #a3abb8; padding-top: 6px; }
+.notchy-button.notchy-clip-turn-on { margin-top: 18px; height: 38px; padding: 0 18px; border-radius: 19px; background-color: rgba(255,255,255,0.92); color: #000000; font-size: 13px; font-weight: bold; }
+.notchy-button.notchy-clip-turn-on:hover, .notchy-button.notchy-clip-turn-on:focus { background-color: #ffffff; color: #000000; }
+.notchy-clip-paused-note { font-size: 12px; color: rgba(255,255,255,0.5); padding-top: 10px; }
 .notchy-star { color: #ffb38a; }
 
 /* ── Calendar tab („Kalender“) ──────────────────────────────────────── */
@@ -316,13 +409,15 @@
 .notchy-hud-fill.notchy-airdrop-fill { background-color: #6cb4ff; }
 .notchy-button.notchy-round-button.notchy-airdrop-button.active { color: #ffffff; background-color: #0a84ff; }
 /* ── AirPods ─────────────────────────────────────────────────────────── */
-.notchy-airpods-card { spacing: 10px; padding-bottom: 16px; }
-.notchy-airpods-card-head { spacing: 10px; padding: 0 4px; }
-.notchy-airpods-card-title { font-size: 15px; font-weight: bold; color: #ffffff; }
+.notchy-airpods-card { spacing: 20px; padding: 10px 22px 18px 18px; }
+.notchy-airpods-card-column { spacing: 12px; }
+.notchy-airpods-glint { background-gradient-direction: horizontal; background-gradient-start: rgba(255,255,255,0); background-gradient-end: rgba(255,255,255,0.55); border-radius: 17px; }
+.notchy-airpods-card-head { spacing: 7px; }
+.notchy-airpods-card-title { font-size: 18px; font-weight: bold; color: #ffffff; }
 .notchy-airpods-card-status { spacing: 5px; padding: 3px 9px; border-radius: 11px; background-color: rgba(52,199,89,0.18); }
 .notchy-airpods-card-check { color: #34c759; }
 .notchy-airpods-card-status-text { font-size: 11.5px; color: rgba(255,255,255,0.85); }
-.notchy-airpods-products { spacing: 26px; padding-top: 4px; }
+.notchy-airpods-products { spacing: 18px; padding-top: 2px; }
 .notchy-airpods-card-value { font-size: 14px; font-weight: bold; color: #ffffff; font-feature-settings: "tnum"; margin-top: 6px; }
 .notchy-airpods-card-caption { font-size: 11px; color: rgba(255,255,255,0.55); }
 .notchy-airpods-badge { border-radius: 23px; background-color: rgba(255,255,255,0.12); }
@@ -335,6 +430,13 @@
 .notchy-airpods-bubble.notchy-dynamic { background-color: #000000; }
 .notchy-airpods-bubble.notchy-liquid { background-color: rgba(26,22,30,0.86); }
 #panel .notchy-airpods-bubble-button:hover .notchy-airpods-bubble, #panel .notchy-airpods-bubble-button:checked .notchy-airpods-bubble { background-color: #1c1c1e; }
+/* The Regal beside the notch while the capsule is busy: its symbol and a count. */
+#panel .notchy-shelf-bubble-button { -minimum-hpadding: 0; -natural-hpadding: 0 !important; padding: 0; margin: 0; border: 0 !important; background-color: transparent; box-shadow: none; }
+.notchy-shelf-bubble { border-radius: 999px; padding: 0 10px; spacing: 5px; color: #f2a25c; }
+.notchy-shelf-bubble.notchy-dynamic { background-color: #000000; }
+.notchy-shelf-bubble.notchy-liquid { background-color: rgba(26,22,30,0.86); }
+#panel .notchy-shelf-bubble-button:hover .notchy-shelf-bubble, #panel .notchy-shelf-bubble-button:focus .notchy-shelf-bubble { background-color: #1c1c1e; }
+.notchy-shelf-bubble-count { font-size: 12px; font-weight: bold; color: #f2a25c; }
 .notchy-airpods-menu { min-width: 300px; }
 .notchy-airpods-menu .notchy-airpods-menu-title { font-size: 14px; font-weight: bold; color: #ffffff; }
 .notchy-airpods-menu .notchy-airpods-menu-sub { font-size: 11.5px; color: rgba(255,255,255,0.6); }

@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 """Prewarmed native Wayland file receiver, shown at the Notchy surface."""
 import json
-from pathlib import Path
 import sys
 import gi
 
@@ -9,6 +8,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
 from gi.repository import Gdk, Gio, GLib, Gtk
 from i18n import _
+from icons import image
 
 BACKEND = sys.argv[1] if len(sys.argv) > 1 else 'wayland'
 
@@ -19,15 +19,22 @@ window.notchy-receiver, window.notchy-receiver > contents { background: transpar
 window.notchy-receiver *:drop(active), window.notchy-receiver:drop(active) { box-shadow: none; outline: none; }
 frame.notchy-drop > border { border: none; box-shadow: none; }
 frame.notchy-drop { background: transparent; border: none; border-radius: 0 0 30px 30px; padding: 0 12px 12px; }
-.notchy-zone { border-radius: 22px; border: 1.5px dashed rgba(255,200,170,0.6); background: rgba(255,179,138,0.08); }
-.notchy-zone.active { border-color: #ffb38a; background: rgba(255,179,138,0.16); }
-.notchy-zone image { color: #ffb38a; }
-/* AirDrop keeps Apple's blue, as in the Shell. */
-.notchy-zone.airdrop { border-color: rgba(110,180,255,0.6); background: rgba(10,132,255,0.10); }
-.notchy-zone.airdrop.active { border-color: #6cb4ff; background: rgba(10,132,255,0.22); }
-.notchy-zone.airdrop image { color: #6cb4ff; }
-.title { font-size: 13.5px; font-weight: 700; }
-.hint { font-size: 11.5px; color: rgba(255,255,255,0.6); }
+/* Two cards: the one under the pointer grows and lights up, the other keeps
+   its symbol and name. AirDrop keeps Apple's blue, as in the Shell. */
+.notchy-zone { border-radius: 20px; border: 1.5px solid #26262a; background: #141416; padding: 0 18px; }
+.notchy-zone .badge { border-radius: 20px; min-width: 40px; min-height: 40px; background: #2e2419; }
+.notchy-zone .badge image { color: #f2a25c; }
+.notchy-zone.airdrop .badge { background: #1d2633; }
+.notchy-zone.airdrop .badge image { color: #6cb4ff; }
+.notchy-zone.active { border-color: #f2a25c; background: rgba(242,162,92,0.13); }
+.notchy-zone.active .badge { min-width: 52px; min-height: 52px; border-radius: 26px; background: #f2a25c; }
+.notchy-zone.airdrop.active { border-color: #5aa9ff; background: rgba(90,169,255,0.13); }
+.notchy-zone.airdrop.active .badge { background: #5aa9ff; }
+.notchy-zone.active .badge image { color: #000000; }
+.title { font-size: 14px; font-weight: 700; color: #d6d6da; }
+.notchy-zone.active .title { font-size: 16.5px; color: #ffffff; }
+.hint { font-size: 12.5px; color: #c9c2ba; }
+.notchy-zone.airdrop .hint { color: #b9c7d8; }
 '''
 
 
@@ -54,12 +61,11 @@ class DropReceiver(Gtk.Application):
         zones = Gtk.Box(spacing=10)
         self.root = Gtk.Frame(child=zones, css_classes=['notchy-drop'], overflow=Gtk.Overflow.HIDDEN)
         self.window.set_child(self.root)
-        self.area = self.zone(zones, 'shelf', Gtk.Image.new_from_icon_name('document-save-symbolic'), _('Add to Shelf'), _('The original stays where it is'))
-        icon = Gio.FileIcon.new(Gio.File.new_for_path(str(Path(__file__).resolve().parent.parent / 'src' / 'icons' / 'notchy-airdrop-symbolic.svg')))
-        self.airdrop_zone = self.zone(zones, 'airdrop', Gtk.Image(gicon=icon), 'AirDrop', _('Send to an iPhone'))
-        self.airdrop_zone.set_hexpand(False)
-        self.airdrop_zone.set_size_request(150, -1)
+        self.area = self.zone(zones, 'shelf', image('document-save-symbolic'), (_('Shelf'), _('Add to Shelf')), None)
+        self.airdrop_zone = self.zone(zones, 'airdrop', image('notchy-airdrop-symbolic'), ('AirDrop', _('Send with AirDrop')), _('Send to an iPhone'))
         self.airdrop_zone.set_visible(False)
+        self.inside = {'shelf': False, 'airdrop': False}
+        self.arrange()
         # The whole window takes files into the Regal, as before the split; only
         # the AirDrop zone has a target of its own on top (the deepest one wins).
         target = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
@@ -71,13 +77,25 @@ class DropReceiver(Gtk.Application):
         self.proxy.connect('notify::g-name-owner', lambda *_: self.quit() if not self.proxy.get_name_owner() else None)
         self.call('DropReady', GLib.Variant('(s)', (BACKEND,)))
 
-    def zone(self, parent, kind, image, title, hint):
-        area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5, css_classes=['notchy-zone', kind], valign=Gtk.Align.FILL, vexpand=True, hexpand=True)
-        image.set_pixel_size(26)
-        image.set_margin_top(22)
-        area.append(image)
-        area.append(Gtk.Label(label=title, css_classes=['title']))
-        area.append(Gtk.Label(label=hint, css_classes=['hint'], ellipsize=3))
+    def zone(self, parent, kind, image, titles, hint):
+        area = Gtk.Box(css_classes=['notchy-zone', kind], valign=Gtk.Align.FILL, vexpand=True)
+        content = Gtk.Box(spacing=14, valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER, hexpand=True)
+        badge = Gtk.Box(css_classes=['badge'], valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER)
+        image.set_pixel_size(22)
+        image.set_hexpand(True)
+        image.set_halign(Gtk.Align.CENTER)
+        badge.append(image)
+        content.append(badge)
+        texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, valign=Gtk.Align.CENTER)
+        area.notchy_title = Gtk.Label(css_classes=['title'], ellipsize=3)
+        # The Regal's card says only what it does; AirDrop adds where it goes.
+        area.notchy_hint = Gtk.Label(label=hint or '', css_classes=['hint'], ellipsize=3, xalign=0)
+        area.notchy_has_hint = bool(hint)
+        texts.append(area.notchy_title)
+        texts.append(area.notchy_hint)
+        content.append(texts)
+        area.append(content)
+        area.notchy_content, area.notchy_texts, area.notchy_titles = content, texts, titles
         parent.append(area)
         if kind != 'airdrop':
             return area
@@ -87,6 +105,23 @@ class DropReceiver(Gtk.Application):
         target.connect('drop', lambda _t, value, _x, _y: self.drop(value, kind))
         area.add_controller(target)
         return area
+
+    # The card under the pointer (else the Regal's) is wide: its symbol, the
+    # action and a line beneath. The other one is narrow: symbol over name.
+    def arrange(self):
+        zones = [zone for zone in (self.area, self.airdrop_zone) if zone.get_visible()]
+        lit = next((zone for zone in zones if zone.has_css_class('active')), None)
+        wide = lit if lit is not None else self.area
+        for zone in (self.area, self.airdrop_zone):
+            expanded = zone is wide or len(zones) == 1
+            zone.set_hexpand(expanded)
+            zone.set_size_request(-1 if expanded else 170, -1)
+            zone.notchy_content.set_orientation(Gtk.Orientation.HORIZONTAL if expanded else Gtk.Orientation.VERTICAL)
+            zone.notchy_content.set_spacing(14 if expanded else 8)
+            zone.notchy_texts.set_halign(Gtk.Align.START if expanded else Gtk.Align.CENTER)
+            zone.notchy_title.set_xalign(0 if expanded else 0.5)
+            zone.notchy_title.set_label(zone.notchy_titles[1] if expanded else zone.notchy_titles[0])
+            zone.notchy_hint.set_visible(expanded and zone.notchy_has_hint)
 
     def call(self, method, values):
         self.proxy.call(method, values, Gio.DBusCallFlags.NONE, 3000, None, self.finished)
@@ -111,17 +146,29 @@ class DropReceiver(Gtk.Application):
                    if config.get('style') != 'liquid' else '')
             self.shade_provider.load_from_data(css.encode())
             self.airdrop_zone.set_visible(bool(config.get('airdrop')))
+            self.arrange()
             self.window.set_default_size(config['width'], config['height'])
             self.window.set_visible(True)
         else:
             self.window.set_visible(False)
-            for area in (self.area, self.airdrop_zone):
-                area.remove_css_class('active')
+            self.reset()
 
     def highlight(self, area, active):
-        area.add_css_class('active') if active else area.remove_css_class('active')
-        self.call('DropHover', GLib.Variant('(sb)', (BACKEND, active)))
+        # The whole window is the Regal's target and keeps the drag while the
+        # pointer is over the AirDrop card: that card wins, only one lights up.
+        self.inside['airdrop' if area is self.airdrop_zone else 'shelf'] = active
+        airdrop = self.inside['airdrop'] and self.airdrop_zone.get_visible()
+        self.airdrop_zone.add_css_class('active') if airdrop else self.airdrop_zone.remove_css_class('active')
+        self.area.add_css_class('active') if self.inside['shelf'] and not airdrop else self.area.remove_css_class('active')
+        self.arrange()
+        self.call('DropHover', GLib.Variant('(sb)', (BACKEND, self.inside['shelf'] or self.inside['airdrop'])))
         return Gdk.DragAction.COPY
+
+    def reset(self):
+        self.inside = {'shelf': False, 'airdrop': False}
+        for area in (self.area, self.airdrop_zone):
+            area.remove_css_class('active')
+        self.arrange()
 
     def drop(self, value, kind='shelf'):
         if not value or not value.get_files() or any(file.get_path() is None for file in value.get_files()):
@@ -135,8 +182,7 @@ class DropReceiver(Gtk.Application):
         except GLib.Error as error:
             print(f'Notchy drop receiver: {error.message}', file=sys.stderr)
             return False
-        for area in (self.area, self.airdrop_zone):
-            area.remove_css_class('active')
+        self.reset()
         return bool(reply.unpack()[0]) if kind == 'airdrop' else True
 
 

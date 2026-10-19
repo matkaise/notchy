@@ -45,7 +45,8 @@ export class AirPodsBubble {
         });
         this.sync(); this.fill();
     }
-    get wanted() { return Boolean(this.airpods.state?.connected) && this.settings.get_boolean('airpods-bubble'); }
+    // Not while the capsule itself shows them arriving or leaving (Island.showLink).
+    get wanted() { return Boolean(this.airpods.state?.connected) && this.settings.get_boolean('airpods-bubble') && !this.island.link; }
     get level() {
         const state = this.airpods.state; if (!state) return null;
         const {left, right, single} = state.battery;

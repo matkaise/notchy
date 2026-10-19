@@ -1,5 +1,6 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import St from 'gi://St';
 import Pango from 'gi://Pango';
 
@@ -11,7 +12,28 @@ export function label(text, cls = '', props = {}) {
 // Notchy's own icons (rounded transport glyphs) live in src/icons; everything
 // else comes from the icon theme.
 const ICONS = Gio.File.new_for_uri(import.meta.url).get_parent().get_parent().get_child('icons');
+// "adwaita:name": the symbol from Adwaita, which GNOME always installs, for
+// Notchy's own surfaces whatever the icon theme (a theme may draw a symbol off
+// centre, as Tela's package and save symbols are); else the theme's one.
+const adwaita = new Map();
+function adwaitaIcon(name) {
+    if (!adwaita.has(name)) {
+        let found = null;
+        for (const base of GLib.get_system_data_dirs()) {
+            const root = Gio.File.new_for_path(`${base}/icons/Adwaita/symbolic`);
+            for (const folder of ['actions', 'status', 'places', 'mimetypes', 'devices', 'categories', 'apps', 'emblems', 'ui']) {
+                const file = root.get_child(folder).get_child(`${name}.svg`);
+                if (file.query_exists(null)) { found = file; break; }
+            }
+            if (found) break;
+        }
+        adwaita.set(name, found);
+    }
+    const file = adwaita.get(name);
+    return file ? new Gio.FileIcon({file}) : new Gio.ThemedIcon({name});
+}
 export function gicon(name) {
+    if (name.startsWith('adwaita:')) return adwaitaIcon(name.slice(8));
     return name.startsWith('notchy-') ? new Gio.FileIcon({file: ICONS.get_child(`${name}.svg`)}) : new Gio.ThemedIcon({name});
 }
 export function icon(name, size = 18) { return new St.Icon({gicon: gicon(name), icon_size: size}); }
