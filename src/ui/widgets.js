@@ -17,7 +17,7 @@ export function gicon(name) {
 export function icon(name, size = 18) { return new St.Icon({gicon: gicon(name), icon_size: size}); }
 export function button(name, title, callback, cls = '') {
     const actor = new St.Button({style_class: `notchy-button ${cls}`, can_focus: true, accessible_name: title,
-        child: name ? icon(name, cls.includes('notchy-play') ? 30 : cls.includes('notchy-transport') ? 24 : cls.includes('notchy-mode') ? 20 : 18) : label(title), track_hover: true});
+        child: name ? icon(name, cls.includes('notchy-play') ? 24 : cls.includes('notchy-transport') ? 24 : cls.includes('notchy-mode') ? 20 : 18) : label(title), track_hover: true});
     actor.connect('clicked', callback); return actor;
 }
 export function textButton(title, callback, cls = '') { return button(null, title, callback, cls); }

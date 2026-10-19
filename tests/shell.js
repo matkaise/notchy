@@ -91,6 +91,12 @@ export async function run() {
 
     // Medien: MPRIS fixture, artwork, capsule live activity and the media tab.
     ext.settings.set_boolean('media-waveform', false);
+    if (!ext.media.state) {
+        island.open('media'); await Scripting.sleep(500);
+        assert(styled(island.body, 'notchy-quiet-title').length === 1 && styled(island.body, 'notchy-output-button').length === 1 && !styled(island.body, 'notchy-play').length,
+            'with nothing playing the media tab rests quietly and keeps the output button');
+        await screenshot('media-quiet'); island.close(true); await Scripting.sleep(200);
+    }
     const mock = Gio.Subprocess.new(['/usr/bin/python3', here('mock_mpris.py')], Gio.SubprocessFlags.NONE);
     await Scripting.sleep(500);
     assert(ext.media.state?.title === 'Paper Moons', 'MPRIS metadata discovered');
@@ -101,7 +107,7 @@ export async function run() {
     await Scripting.sleep(100);
     assert(styled(island.leftRow, 'notchy-mini-art').length === 1 && island.panelSurface.has_style_class_name('notchy-wide'), 'playing media frames the clock with its cover');
     island.open('media'); await Scripting.sleep(500); await screenshot('media-playing');
-    assert(styled(island.body, 'notchy-album').length === 1 && buttons(island.body, 'Pause').length === 1, 'media tab shows cover and transport');
+    assert(styled(island.body, 'notchy-cover')[0]?.style?.includes(ext.cover.file.get_path()) && buttons(island.body, 'Pause').length === 1, 'media tab shows the large cover and transport');
     const beforePause = ext.media.elapsed;
     await ext.media.call('PlayPause'); await Scripting.sleep(100);
     assert(!ext.media.state.playing, 'MPRIS pause works');
@@ -114,6 +120,16 @@ export async function run() {
     await ext.media.goTo(ext.media.queue[2].trackId); await Scripting.sleep(150);
     for (let i = 0; i < 30 && ext.cover.proc; i++) await Scripting.sleep(100);
     assert(!ext.cover.file && ext.media.state.title === 'Slow Orbit', 'invalid remote cover falls back without stale artwork');
+    await ext.media.goTo(ext.media.queue[0].trackId); await Scripting.sleep(150);
+    // Skipping: the player reports Stopped and no track for a moment (as Spotify
+    // does); the tab keeps the last track instead of flashing „nothing playing“.
+    island.open('media'); await Scripting.sleep(400);
+    ext.media.call('Next'); let flashed = false, dropped = false;
+    for (let i = 0; i < 14; i++) { await Scripting.sleep(50); flashed ||= styled(island.body, 'notchy-quiet-title').length > 0; dropped ||= !ext.media.state; }
+    await Scripting.sleep(300);
+    assert(!flashed && !dropped && ext.media.state?.title === 'Night Transit' && styled(island.body, 'notchy-track')[0]?.text === 'Night Transit',
+        'skipping keeps the player in the media tab through its brief gap without a track');
+    island.close(true); await Scripting.sleep(200);
     await ext.media.goTo(ext.media.queue[0].trackId); await Scripting.sleep(150);
     // The private test uses a synthesized tone, never the user's audio monitor.
     ext.spectrum.sync = () => {}; ext.settings.set_boolean('media-waveform', true); ext.spectrum.stop(); ext.spectrum.start('', true);
@@ -352,6 +368,23 @@ async function interactionRegressions(ext, path, screenshot) {
         panelBox.ease({translation_y: 0, duration: 250, mode: Clutter.AnimationMode.EASE_OUT_QUAD}); await Scripting.sleep(450);
         const [, capsuleY] = island.panelSurface.get_transformed_position();
         assert(island.ears.left.visible && island.ears.left.y === Math.round(capsuleY) && island.ears.right.y === Math.round(capsuleY), `the outward corners follow the bar's slide-in at login (${island.ears.left.y} vs ${Math.round(capsuleY)})`);
+        // A container around the capsule moving (at login the bar's centre box,
+        // once its indicators arrive) takes the curves along; so does the overview.
+        await move(20, 600); island.close(true); await Scripting.sleep(500);
+        const earsAligned = () => { const t = island.ears.target, [sx, sy] = t.get_transformed_position(), {left, right} = island.ears;
+            return t === island.panelSurface && left.visible && right.visible && left.x === Math.round(sx) - left.width && right.x === Math.round(sx + t.width) && left.y === Math.round(sy) && right.y === Math.round(sy); };
+        const earsAt = () => { const t = island.ears.target, [tx, ty] = t.get_transformed_position(); return `${t === island.surface ? 'open surface' : 'capsule'} at ${Math.round(tx)},${Math.round(ty)} w${t.width}; ears ${island.ears.left.x},${island.ears.left.y} w${island.ears.left.width} / ${island.ears.right.x}`; };
+        const pusher = new St.Widget({width: 60, height: 1});
+        Main.panel._centerBox.insert_child_at_index(pusher, 0); await Scripting.sleep(200);
+        const [pushedX] = island.panelSurface.get_transformed_position();
+        assert(earsAligned(), `the outward corners stay beside the capsule when the bar's centre box is laid out anew (${earsAt()})`);
+        pusher.destroy(); await Scripting.sleep(200);
+        assert(earsAligned(), 'the outward corners return with the capsule');
+        Main.overview.show(); await Scripting.sleep(900);
+        assert(Main.overview.visible && earsAligned(), `the overview keeps the outward corners beside the capsule (${earsAt()})`);
+        await screenshot('overview-corners');
+        Main.overview.hide(); await Scripting.sleep(900);
+        assert(earsAligned(), 'leaving the overview keeps the outward corners in place');
         // Autofocus in the Ablage must never pin the island.
         island.open('clipboard'); await Scripting.sleep(350);
         assert(!island.pinned && island.views.focusEntry.clutter_text.has_key_focus(), 'clipboard autofocus does not pin the island');

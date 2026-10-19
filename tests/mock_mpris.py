@@ -123,8 +123,14 @@ def method(_conn, _sender, _path, iface, name, parameters, invocation):
         _track, position = parameters.unpack(); props['Position'] = GLib.Variant('x', position); position_stamp = time.monotonic()
         bus.emit_signal(None, PATH, IFACE, 'Seeked', GLib.Variant('(x)', (position,)))
     elif name in ('Next', 'Previous'):
+        # Like Spotify and browsers: between two tracks the player briefly
+        # reports Stopped and no metadata, then the next track.
         ids = list(tracks); current = props['Metadata'].unpack()['mpris:trackid']; idx = ids.index(current)
-        go_to(ids[(idx + (1 if name == 'Next' else -1)) % len(ids)])
+        target, status = ids[(idx + (1 if name == 'Next' else -1)) % len(ids)], props['PlaybackStatus']
+        emit('PlaybackStatus', GLib.Variant('s', 'Stopped')); emit('Metadata', GLib.Variant('a{sv}', {}))
+        def resume():
+            go_to(target); emit('PlaybackStatus', status); return False
+        GLib.timeout_add(400, resume)
     invocation.return_value(None)
 
 

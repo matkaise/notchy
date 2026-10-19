@@ -38,6 +38,10 @@ const SEARCH_CHROME = 64 + 26 + 10;
 const RADAR = 84;
 // A snap layout's miniature screen.
 const SNAP_TILE = [76, 48];
+// The media tab's cover, as tall as the page allows.
+const COVER = 236;
+// Bar heights of the resting waveform shown while nothing plays.
+const QUIET_LINE = [4, 4, 4, 5, 4, 6, 4, 4, 5, 8, 5, 4, 4, 6, 4, 4, 5, 4, 7, 4, 4, 5, 4, 4, 6, 4, 4, 4];
 // Height of the calendar tab's two scrolling lists.
 const CAL_LIST_HEIGHT = 196;
 // AirPods noise control: symbol and name per mode.
@@ -175,71 +179,104 @@ export class Views {
         return this.mediaView();
     }
 
-    // Medien: large cover, title and artist, waveform, timeline, transport.
+    // Medien: a large cover beside the track — title and artist, waveform,
+    // timeline, transport, and where it plays with the playing app below.
     mediaView() {
-        // Droppy's player: cover, title and artist with the waveform, one
-        // timeline row, flat transport icons and the playing app on the right.
-        const root = box(true, {style_class: 'notchy-page notchy-media', y_expand: true});
         const state = this.settings.get_boolean('media-enabled') ? this.media.state : null;
         this.outputs.ensure();
-        if (this.outputPicker) return this.outputsView(root);
-        if (!state) {
-            root.add_child(emptyState('audio-x-generic-symbolic', _('Nothing Playing'), _('Start music in an app that supports MPRIS.'), null, null));
-            return root;
-        }
+        if (this.outputPicker) return this.outputsView(box(true, {style_class: 'notchy-page notchy-media', y_expand: true}));
+        if (!state) return this.quietView();
+        const root = box(false, {style_class: 'notchy-page notchy-media', y_expand: true});
+        // The cover fills the page's height; a click brings the playing app forward.
+        const cover = new St.Bin({style_class: 'notchy-cover', width: COVER, height: COVER});
+        const coverPath = this.cover.file?.get_path();
+        if (coverPath) cover.style = `background-image: url("${coverPath.replace(/["\\]/g, '\\$&')}");`;
+        else cover.child = new St.Icon({icon_name: 'audio-x-generic-symbolic', icon_size: 72, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        const coverButton = new St.Button({child: cover, can_focus: true, accessible_name: _('Open the playing app'), y_align: Clutter.ActorAlign.START, style_class: 'notchy-cover-button'});
+        coverButton.connect('clicked', () => this.media.raise()); root.add_child(coverButton);
+        const side = box(true, {style_class: 'notchy-media-side', x_expand: true, height: COVER, y_align: Clutter.ActorAlign.START});
         const top = box(false, {style_class: 'notchy-media-top'});
-        const art = new St.Icon({icon_name: 'audio-x-generic-symbolic', icon_size: 64, style_class: 'notchy-album'});
-        if (this.cover.file) art.gicon = new Gio.FileIcon({file: this.cover.file});
-        const artButton = new St.Button({child: art, can_focus: true, accessible_name: _('Open the playing app'), y_align: Clutter.ActorAlign.CENTER, style_class: 'notchy-album-button'});
-        artButton.connect('clicked', () => this.media.raise()); top.add_child(artButton);
-        const names = box(true, {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const names = box(true, {x_expand: true});
+        names.add_child(label(state.playing ? _('Now Playing') : _('Paused'), 'notchy-media-status'));
         names.add_child(label(state.title, 'notchy-track'));
         names.add_child(label(state.artist || state.album || state.name, 'notchy-artist'));
         top.add_child(names);
-        if (state.playing && this.settings.get_boolean('media-waveform')) top.add_child(new Waveform(this.spectrum, 30, 18));
-        root.add_child(top);
-        const timeline = box(false, {style_class: 'notchy-timeline'});
-        const elapsed = label(time(this.media.elapsed), 'notchy-time', {y_align: Clutter.ActorAlign.CENTER});
+        if (state.playing && this.settings.get_boolean('media-waveform')) { const wave = new Waveform(this.spectrum, 40, 28); wave.y_align = Clutter.ActorAlign.START; top.add_child(wave); }
+        side.add_child(top); side.add_child(new St.Widget({y_expand: true}));
+        // The timeline: the bar across the column, the times beneath its ends.
+        const timeline = box(true, {style_class: 'notchy-timeline'});
         const seek = new Slider(state.length ? Math.min(1, this.media.elapsed / state.length) : 0);
-        seek.reactive = state.canSeek; seek.add_style_class_name('notchy-seek'); seek.x_expand = true; seek.y_align = Clutter.ActorAlign.CENTER;
+        seek.reactive = state.canSeek; seek.add_style_class_name('notchy-seek'); seek.x_expand = true;
         seek.connect('drag-end', () => this.media.seek(seek.value));
-        const remaining = label(`−${time(Math.max(0, state.length - this.media.elapsed))}`, 'notchy-time notchy-time-end', {y_align: Clutter.ActorAlign.CENTER});
-        timeline.add_child(elapsed); timeline.add_child(seek); timeline.add_child(remaining); root.add_child(timeline);
+        const times = box(false), elapsed = label(time(this.media.elapsed), 'notchy-time', {x_expand: true});
+        const remaining = label(`−${time(Math.max(0, state.length - this.media.elapsed))}`, 'notchy-time notchy-time-end');
+        times.add_child(elapsed); times.add_child(remaining);
+        timeline.add_child(seek); timeline.add_child(times); side.add_child(timeline);
         this.pageLife.every(1000, () => { if (!seek._dragging) {
             seek.value = state.length ? Math.min(1, this.media.elapsed / state.length) : 0;
             elapsed.text = time(this.media.elapsed); remaining.text = `−${time(Math.max(0, state.length - this.media.elapsed))}`;
         }});
-        // A spacer as wide as the app tile keeps the transport exactly centred;
-        // overlapping layouts would let the tile swallow the transport's clicks.
-        const row = box(false, {x_expand: true, style_class: 'notchy-controls-row'});
-        row.add_child(new St.Widget({width: 30}));
-        const controls = box(false, {style_class: 'notchy-controls', x_expand: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        side.add_child(new St.Widget({y_expand: true}));
+        const controls = box(false, {style_class: 'notchy-controls', x_align: Clutter.ActorAlign.CENTER});
         const prev = button('notchy-backward-symbolic', _('Previous Track'), () => this.media.call('Previous'), 'notchy-transport'); prev.reactive = state.canPrevious; controls.add_child(prev);
-        controls.add_child(button(state.playing ? 'notchy-pause-symbolic' : 'notchy-play-symbolic', state.playing ? _('Pause') : _('Play'), () => this.media.call('PlayPause'), 'notchy-play'));
+        const play = button(state.playing ? 'notchy-pause-symbolic' : 'notchy-play-symbolic', state.playing ? _('Pause') : _('Play'), () => this.media.call('PlayPause'), 'notchy-play');
+        controls.add_child(play);
         const next = button('notchy-forward-symbolic', _('Next Track'), () => this.media.call('Next'), 'notchy-transport'); next.reactive = state.canNext; controls.add_child(next);
-        row.add_child(controls);
-        // The playing app, as a small tile on the right (Droppy shows the source there too).
+        side.add_child(controls); side.add_child(new St.Widget({y_expand: true}));
+        // Where the music plays (this computer or an AirPlay receiver) and the playing app.
+        const foot = box(false, {style_class: 'notchy-media-foot'});
+        foot.add_child(this.outputButton()); foot.add_child(new St.Widget({x_expand: true}));
         const app = state.desktopEntry ? Shell.AppSystem.get_default().lookup_app(`${state.desktopEntry}.desktop`) : null;
-        const source = new St.Button({style_class: 'notchy-source', can_focus: true, accessible_name: fmt(_('Open %s'), state.name), y_align: Clutter.ActorAlign.CENTER});
-        const sourceIcon = new St.Icon({icon_name: 'audio-x-generic-symbolic', icon_size: 20}); if (app) sourceIcon.gicon = app.get_icon();
-        source.set_child(sourceIcon); source.connect('clicked', () => this.media.raise()); row.add_child(source);
-        root.add_child(row);
-        // Where the music plays: this computer or an AirPlay receiver.
-        root.add_child(new St.Widget({y_expand: true}));
+        const sourceRow = box(false, {style_class: 'notchy-source-row'});
+        const sourceIcon = new St.Icon({icon_name: 'audio-x-generic-symbolic', icon_size: 20, y_align: Clutter.ActorAlign.CENTER}); if (app) sourceIcon.gicon = app.get_icon();
+        sourceRow.add_child(sourceIcon); sourceRow.add_child(label(shorten(app?.get_name() || state.name, 18), 'notchy-source-name', {y_align: Clutter.ActorAlign.CENTER}));
+        const source = new St.Button({style_class: 'notchy-source', child: sourceRow, can_focus: true, accessible_name: fmt(_('Open %s'), state.name), y_align: Clutter.ActorAlign.CENTER});
+        source.connect('clicked', () => this.media.raise()); foot.add_child(source);
+        side.add_child(foot);
+        root.add_child(side);
+        return root;
+    }
+
+    // Nothing playing: a resting waveform, one calm line, the music app to
+    // start and where it will play.
+    quietView() {
+        const root = box(true, {style_class: 'notchy-page notchy-quiet', y_expand: true});
+        const body = box(true, {x_expand: true, y_expand: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        const line = box(false, {style_class: 'notchy-quiet-line', x_align: Clutter.ActorAlign.CENTER});
+        for (const height of QUIET_LINE) line.add_child(new St.Widget({style_class: 'notchy-quiet-bar', width: 4, height, y_align: Clutter.ActorAlign.CENTER}));
+        body.add_child(line);
+        body.add_child(label(_('All Quiet'), 'notchy-quiet-title', {x_align: Clutter.ActorAlign.CENTER}));
+        const actions = box(false, {style_class: 'notchy-quiet-actions', x_align: Clutter.ActorAlign.CENTER});
+        // The music app is whatever opens an MP3 here.
+        const player = Gio.AppInfo.get_default_for_type('audio/mpeg', false);
+        const app = player?.get_id() ? Shell.AppSystem.get_default().lookup_app(player.get_id()) : null;
+        if (app) {
+            const row = box(false, {style_class: 'notchy-quiet-open-row'});
+            row.add_child(new St.Icon({gicon: app.get_icon(), icon_size: 18, y_align: Clutter.ActorAlign.CENTER}));
+            row.add_child(label(fmt(_('Open %s'), shorten(app.get_name(), 24)), '', {y_align: Clutter.ActorAlign.CENTER}));
+            const open = new St.Button({style_class: 'notchy-quiet-open', child: row, can_focus: true, y_align: Clutter.ActorAlign.CENTER});
+            open.connect('clicked', () => app.activate()); actions.add_child(open);
+        }
+        const output = this.outputButton(); output.add_style_class_name('large'); actions.add_child(output);
+        body.add_child(actions); root.add_child(body);
+        return root;
+    }
+
+    // The output button: where the music plays; a click opens the list.
+    outputButton() {
         const outputIcon = new St.Icon({icon_size: 15}), outputName = label('', 'notchy-output-name', {y_align: Clutter.ActorAlign.CENTER});
         const outputRow = box(false, {style_class: 'notchy-output-row'});
         outputRow.add_child(outputIcon); outputRow.add_child(outputName); outputRow.add_child(icon('pan-down-symbolic', 12));
-        const output = new St.Button({style_class: 'notchy-output-button', child: outputRow, can_focus: true, x_align: Clutter.ActorAlign.CENTER});
+        const output = new St.Button({style_class: 'notchy-output-button', child: outputRow, can_focus: true, y_align: Clutter.ActorAlign.CENTER});
         output.connect('clicked', () => { this.outputPicker = true; this.island.refresh(); });
         const drawOutput = () => {
             const active = this.outputs.active;
-            outputIcon.gicon = outputGicon(active); outputName.text = shorten(active?.name ?? _('No Output'), 40);
+            outputIcon.gicon = outputGicon(active); outputName.text = shorten(active?.name ?? _('No Output'), 28);
             output.accessible_name = fmt(_('Output: %s. Switch to AirPlay or another device'), outputName.text);
             active?.airplay ? output.add_style_class_name('airplay') : output.remove_style_class_name('airplay');
         };
         this.pageLife.cleanups.push(this.outputs.subscribe(drawOutput)); drawOutput();
-        root.add_child(output);
-        return root;
+        return output;
     }
 
     // AirPods connected: the capsule grows into a card as on an iPhone — the

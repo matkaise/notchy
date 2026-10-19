@@ -48,11 +48,26 @@ export class NotchEars {
         const island = this.island;
         return island.panelAttached ? island.surface : island.panelSurface;
     }
+    // The target's place on screen also changes when a container around it is
+    // allocated anew — at login the bar's centre box moves once its indicators
+    // arrive — which the target itself never reports: every ancestor is watched.
+    // Their allocation is reported while the bar is still being laid out, when
+    // positions on screen are not final yet, so the curves follow right after.
+    watchAncestors(target) {
+        const chain = [];
+        for (let actor = target?.get_parent(); actor; actor = actor.get_parent()) chain.push(actor);
+        if (this.chain && chain.length === this.chain.length && chain.every((actor, i) => actor === this.chain[i])) return;
+        this.chainLife?.dispose(); this.chainLife = new Lifetime(); this.chain = chain;
+        for (const actor of chain) this.chainLife.connect(actor, 'notify::allocation', () => this.queue());
+    }
+    queue() { if (!this.pending && !this.life.closed) this.pending = this.life.later(0, () => { this.pending = 0; this.sync(); }); }
     sync() {
         if (this.life.closed) return;
         const island = this.island, target = this.target;
+        this.watchAncestors(target);
         // Dynamic Glass hangs from the screen edge; Liquid Glass floats in the bar.
-        const shown = island.settings.get_string('style') === 'dynamic' && target?.mapped && !Main.overview.visible &&
+        // The overview keeps the bar and the capsule, so it keeps the curves too.
+        const shown = island.settings.get_string('style') === 'dynamic' && target?.mapped &&
             (!island.panelAttached || island.actor.visible);
         const [x, y] = shown ? target.get_transformed_position() : [NaN, NaN];
         // Before its first allocation the target has no position yet.
@@ -67,5 +82,5 @@ export class NotchEars {
         this.left.set_position(Math.round(x) - r, Math.round(y));
         this.right.set_position(Math.round(x + target.width), Math.round(y));
     }
-    dispose() { this.life.dispose(); this.left.destroy(); this.right.destroy(); }
+    dispose() { this.life.dispose(); this.chainLife?.dispose(); this.left.destroy(); this.right.destroy(); }
 }

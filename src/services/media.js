@@ -17,11 +17,13 @@ const TRACKS = 'org.mpris.MediaPlayer2.TrackList';
 const prop = (proxy, name, fallback) => proxy?.get_cached_property(name)?.deep_unpack() ?? fallback;
 const unpack = value => value instanceof GLib.Variant ? value.deep_unpack() : value;
 const active = proxy => mprisActive(prop(proxy, 'PlaybackStatus', 'Stopped'), prop(proxy, 'Metadata', {}));
+// How long the shown player keeps its last track while it reports none.
+const GAP = 1500;
 
 export class Media extends Emitter {
     constructor(settings) {
         super(); this.settings = settings; this.life = new Lifetime(); this.players = new Map(); this.pending = new Set();
-        this.name = ''; this.position = 0; this.positionAt = Date.now(); this.clockPlaying = false; this.clockRate = 1; this.clockTrack = ''; this.positionGeneration = 0;
+        this.name = ''; this.held = null; this.shown = null; this.lapsed = ''; this.gapTimer = 0; this.position = 0; this.positionAt = Date.now(); this.clockPlaying = false; this.clockRate = 1; this.clockTrack = ''; this.positionGeneration = 0;
         this.queue = []; this.queueSupported = false; this.queueEditable = false; this.queueLoading = false; this.queueError = ''; this.queueGeneration = 0;
         const queueSubscription = Gio.DBus.session.signal_subscribe(null, TRACKS, null, PATH, null, Gio.DBusSignalFlags.NONE,
             (_c, sender) => { if (sender === this.proxy?.get_name_owner()) this.loadQueue(); });
@@ -71,6 +73,17 @@ export class Media extends Emitter {
         // Only players with a track take part; a stopped, empty one (e.g. a
         // browser after its media tab closed) leaves the island.
         const live = [...this.players].filter(([_n, p]) => active(p.proxy));
+        // Skipping a track, players (Spotify, browsers) briefly report no
+        // metadata or Stopped. The shown player keeps its place and its last
+        // track for a moment, so the island does not flash „nothing playing“;
+        // only a player still without a track after that leaves.
+        const lapsed = old && this.players.has(old) && !live.some(([n]) => n === old);
+        if (lapsed && this.held === null && this.lapsed !== old && this.shown) {
+            this.held = this.shown; this.lapsed = old;
+            this.gapTimer = this.life.later(GAP, () => { this.gapTimer = 0; this.held = null; this.choose(); });
+        }
+        if (!lapsed) { this.lapsed = ''; this.release(); }
+        if (this.held) live.push([old, this.players.get(old)]);
         const has = name => live.some(([n]) => n === name);
         this.name = has(preferred) ? preferred :
             live.find(([_n, p]) => prop(p.proxy, 'PlaybackStatus', '') === 'Playing')?.[0] ??
@@ -84,12 +97,17 @@ export class Media extends Emitter {
             const rate = prop(this.proxy, 'Rate', 1); this.clockRate = Number.isFinite(rate) && rate !== 0 ? rate : 1;
             if (this.name && (switched || Object.hasOwn(properties, 'PlaybackStatus') || Object.hasOwn(properties, 'Rate'))) this.refreshPosition();
         }
+        if (this.held && this.name !== old) this.release();
+        if (!this.held) this.shown = this.name ? this.state : null;
         if (old !== this.name) this.loadQueue();
         this.changed();
     }
+    // Ends the hold on the last track: the player has a track again or another one is shown.
+    release() { this.held = null; if (this.gapTimer) this.life.cancel(this.gapTimer); this.gapTimer = 0; }
     get proxy() { return this.players.get(this.name)?.proxy; }
     get state() {
         if (!this.proxy) return null;
+        if (this.held) return this.held;
         const root = this.players.get(this.name)?.root ?? {};
         return {name: unpack(root.Identity) || this.name.replace('org.mpris.MediaPlayer2.', ''), ...mprisMetadata(prop(this.proxy, 'Metadata', {})),
             canRaise: Boolean(unpack(root.CanRaise)), desktopEntry: unpack(root.DesktopEntry) || '',

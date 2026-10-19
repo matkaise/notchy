@@ -87,23 +87,42 @@
 .notchy-entry { background-color: rgba(255,255,255,0.07); color: #ffffff; border: 0; border-radius: 17px; padding: 8px 12px; selection-background-color: #E95420; }
 
 /* ── Media tab („Medien“) ───────────────────────────────────────────── */
-/* Droppy's player: small cover, two-line title, one timeline row, flat
-   transport icons without circles, the source app as a quiet tile. */
-.notchy-media { padding: 4px 24px 10px; spacing: 14px; }
+/* A large cover beside the track; the column beside it holds title and
+   artist, the timeline with its times beneath, a round play button between
+   the skip buttons, and where it plays with the playing app at its foot. */
+.notchy-media { padding: 10px 30px 0; spacing: 26px; }
+.notchy-cover { border-radius: 18px; background-color: rgba(255,255,255,0.06); background-size: cover; color: rgba(255,255,255,0.3); }
+.notchy-cover-button { border-radius: 18px; }
+.notchy-cover-button:focus .notchy-cover { border: 2px solid rgba(255,255,255,0.5); }
+.notchy-media-side { padding: 4px 0 0; }
 .notchy-media-top { spacing: 14px; }
-.notchy-album { border-radius: 14px; color: rgba(255,255,255,0.6); background-color: rgba(255,255,255,0.06); }
-.notchy-track { font-size: 17px; font-weight: bold; color: #ffffff; }
-.notchy-artist { font-size: 14px; color: rgba(255,255,255,0.55); padding-top: 3px; }
-.notchy-timeline { spacing: 12px; }
-.notchy-seek { height: 12px; -barlevel-height: 4px; -barlevel-background-color: rgba(255,255,255,0.18); -barlevel-active-background-color: #ffffff; -slider-handle-radius: 0px; }
-.notchy-time { font-size: 12px; color: rgba(255,255,255,0.6); font-feature-settings: "tnum"; min-width: 38px; }
+.notchy-media-status { font-size: 11.5px; font-weight: bold; letter-spacing: 0.6px; color: rgba(255,255,255,0.5); padding-bottom: 4px; }
+.notchy-track { font-size: 24px; font-weight: bold; color: #ffffff; }
+.notchy-artist { font-size: 15px; color: rgba(255,255,255,0.6); padding-top: 4px; }
+.notchy-timeline { spacing: 6px; }
+.notchy-seek { height: 12px; -barlevel-height: 5px; -barlevel-background-color: rgba(255,255,255,0.16); -barlevel-active-background-color: #ffffff; -slider-handle-radius: 0px; }
+.notchy-time { font-size: 12px; color: rgba(255,255,255,0.55); font-feature-settings: "tnum"; min-width: 38px; }
 .notchy-time-end { text-align: right; }
-.notchy-controls { spacing: 34px; }
-.notchy-button.notchy-transport { width: 40px; height: 40px; padding: 0; border-radius: 12px; color: #ffffff; }
-.notchy-button.notchy-play { width: 44px; height: 44px; padding: 0; border-radius: 12px; color: #ffffff; background-color: transparent; }
-.notchy-button.notchy-transport:hover, .notchy-button.notchy-play:hover { background-color: rgba(255,255,255,0.08); }
-.notchy-source { width: 30px; height: 30px; border-radius: 8px; background-color: rgba(255,255,255,0.1); color: rgba(255,255,255,0.85); }
-.notchy-source:hover { background-color: rgba(255,255,255,0.18); }
+.notchy-controls { spacing: 26px; }
+.notchy-button.notchy-transport { width: 44px; height: 44px; padding: 0; border-radius: 22px; color: #ffffff; }
+.notchy-button.notchy-transport:hover, .notchy-button.notchy-transport:focus { background-color: rgba(255,255,255,0.08); }
+.notchy-button.notchy-play { width: 54px; height: 54px; padding: 0; border-radius: 27px; color: #000000; background-color: rgba(255,255,255,0.92); }
+.notchy-button.notchy-play:hover, .notchy-button.notchy-play:focus { background-color: #ffffff; }
+.notchy-media-foot { spacing: 10px; }
+.notchy-source { height: 30px; padding: 0 12px 0 6px; border-radius: 15px; color: rgba(255,255,255,0.7); background-color: rgba(255,255,255,0.06); transition-duration: 200ms; }
+.notchy-source:hover, .notchy-source:focus { color: #ffffff; background-color: rgba(255,255,255,0.12); }
+.notchy-source-row { spacing: 8px; }
+.notchy-source-name { font-size: 12px; }
+
+/* Nothing playing: a resting waveform, one calm line, the music app and the output. */
+.notchy-quiet { padding: 0 24px 6px; }
+.notchy-quiet-line { spacing: 4px; height: 40px; }
+.notchy-quiet-bar { border-radius: 2px; background-color: rgba(255,255,255,0.28); }
+.notchy-quiet-title { font-size: 22px; font-weight: bold; color: #ffffff; padding: 18px 0 24px; }
+.notchy-quiet-actions { spacing: 12px; }
+.notchy-quiet-open { height: 40px; padding: 0 18px 0 12px; border-radius: 20px; color: #000000; background-color: rgba(255,255,255,0.92); font-size: 13px; font-weight: bold; }
+.notchy-quiet-open:hover, .notchy-quiet-open:focus { background-color: #ffffff; }
+.notchy-quiet-open-row { spacing: 9px; }
 
 /* ── Shelf tab („Regal“, Shell copy of helper/tray.py) ─────────────── */
 .notchy-shelf-preview { spacing: 12px; }
@@ -250,6 +269,7 @@
 .notchy-output-button { height: 30px; padding: 0 12px; border-radius: 15px; color: rgba(255,255,255,0.7); background-color: rgba(255,255,255,0.06); transition-duration: 200ms; }
 .notchy-output-button:hover, .notchy-output-button:focus { color: #ffffff; background-color: rgba(255,255,255,0.12); }
 .notchy-output-button.airplay { color: #ffb38a; background-color: rgba(255,179,138,0.14); }
+.notchy-output-button.large { height: 40px; padding: 0 16px; border-radius: 20px; }
 .notchy-output-row { spacing: 7px; }
 .notchy-output-name { font-size: 12px; }
 .notchy-outputs { padding: 0 24px; spacing: 10px; }
