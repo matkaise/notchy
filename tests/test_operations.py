@@ -64,6 +64,28 @@ class OperationsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             operations.process('image', source.as_uri(), '$(noexec)')
 
+    def test_progress_is_measured_in_bytes_and_ends_complete(self):
+        source = Path(self.temp.name, 'big.bin'); source.write_bytes(os.urandom(3 * 1024 * 1024))
+        for action in ('zip', 'copy'):
+            reports = []
+            result = operations.process(action, source.as_uri(), report=reports.append)
+            self.assertTrue(operations.local_path(result['uri']).exists())
+            self.assertGreaterEqual(len(reports), 2, action)
+            self.assertEqual(reports, sorted(reports), f'{action}: progress only grows')
+            self.assertEqual(reports[-1], 1.0, f'{action}: the last report is complete')
+            self.assertTrue(all(0 <= value <= 1 for value in reports))
+        self.assertEqual(operations.local_path(operations.process('copy', source.as_uri())['uri']).read_bytes(), source.read_bytes(), 'without a reporter it works as before')
+
+    def test_progress_is_throttled_and_not_invented_for_empty_files(self):
+        empty = Path(self.temp.name, 'empty.txt'); empty.write_text('')
+        reports = []
+        operations.process('zip', empty.as_uri(), report=reports.append)
+        self.assertEqual(reports, [], 'nothing to measure: no progress at all')
+        progress = operations.Progress(reports.append, 1000)
+        for _ in range(1000):
+            progress.add(1)
+        self.assertLessEqual(len(reports), 101, 'at most one report per percent')
+
 
 if __name__ == '__main__':
     unittest.main()

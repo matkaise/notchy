@@ -52,13 +52,29 @@ app.connect('activate', () => {
             settings.set_string('launcher-commands', before);
             if (stored['system.suspend']?.enabled !== false) return fail(`switching suspend off stored ${JSON.stringify(stored)}`);
             print('PASS: a command switched off in the list is stored under its id');
+            // Live Activities: types, priorities with arrows, the agent control center's options.
+            if (!titles.includes('Live-Aktivitäten')) return fail(`the Live Activities page (${titles.join(', ')})`);
+            const priorityRows = widgets.filter(w => w instanceof Adw.ActionRow && /^\d\. /.test(w.title ?? ''));
+            if (priorityRows.length !== 7 || priorityRows[0].title !== '1. Braucht dich' || priorityRows[6].title !== '7. Hintergrundaktivitäten') return fail(`priority rows (${priorityRows.map(r => r.title).join(', ')})`);
+            priorityRows[5].up.emit('clicked');
+            const order = settings.get_strv('activities-priority');
+            if (order[4] !== 'media' || order[5] !== 'timer' || priorityRows[4].title !== '5. Medien') return fail(`moving media up stored ${order.join(', ')}`);
+            settings.reset('activities-priority');
+            const typeRow = widgets.find(w => w instanceof Adw.SwitchRow && w.title === 'Bildschirmaufnahme');
+            if (!typeRow) return fail('a switch per activity type');
+            typeRow.active = false;
+            if (!settings.get_strv('activities-disabled-types').includes('recording')) return fail('switching a type off is stored');
+            settings.reset('activities-disabled-types');
+            for (const title of ['Wenn ein Agent dich braucht', 'Wenn ein Agent seine Aufgabe erledigt hat', 'Position der Indikatoren', 'Höchstens sichtbare Indikatoren', 'Beendete Sitzungen auflisten für (Minuten)'])
+                if (!rows.includes(title)) return fail(`agent option „${title}“`);
+            print('PASS: Live Activities: types, the priority order (arrows store it) and the agent control center\'s notifications, position and limits');
             // The same pages in English, built with an English backend (the shared setting stays).
             i18n.setBackend(i18n.catalogBackend(null, {language: 'en', locale: 'en-US'}));
             const english = new Adw.PreferencesWindow({application: app, title: 'Notchy Test Preferences (English)'});
             prefs.fill(english, prefs.getSettings());
             const englishTitles = all(english).filter(w => w instanceof Adw.PreferencesPage).map(w => w.title);
             const englishCommands = all(prefs.commandsPage(prefs.getSettings())).filter(w => w instanceof Adw.ExpanderRow).map(r => r.title);
-            if (!['Appearance', 'Thunderstorm', 'AirPods', 'Agents', 'Clipboard', 'Shortcuts', 'About'].every(t => englishTitles.includes(t))) return fail(`English pages (${englishTitles.join(', ')})`);
+            if (!['Appearance', 'Thunderstorm', 'Live Activities', 'AirPods', 'Agents', 'Clipboard', 'Shortcuts', 'About'].every(t => englishTitles.includes(t))) return fail(`English pages (${englishTitles.join(', ')})`);
             if (!['Shut Down', 'Lock Screen', 'Do Not Disturb'].every(t => englishCommands.includes(t))) return fail(`English commands (${englishCommands.slice(0, 8).join(', ')})`);
             const englishExpanders = all(english).filter(w => w instanceof Adw.ExpanderRow).map(w => w.title);
             if (!englishExpanders.includes('Kind regards') || !englishExpanders.includes('Wikipedia')) return fail(`English defaults (${englishExpanders.join(', ')})`);

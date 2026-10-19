@@ -482,3 +482,55 @@
 .notchy-agent-switch { padding: 3px 10px; border-radius: 10px; font-size: 11px; color: #ffffff; background-color: rgba(255,255,255,0.12); }
 .notchy-agent-switch:hover, .notchy-agent-switch:focus { background-color: rgba(255,255,255,0.22); }
 .notchy-airpods-card-value.stale { color: rgba(255,255,255,0.55); font-weight: normal; }
+
+/* Smart Live Activities: the notch's activity (src/ui/activityViews.js). */
+.notchy-act-icon { color: rgba(255,255,255,0.92); }
+.notchy-act-icon.done { color: #34c759; }
+.notchy-act-icon.error { color: #ff453a; }
+.notchy-act-icon.waiting { color: #ff9f0a; }
+.notchy-act-icon.paused { color: rgba(255,255,255,0.5); }
+.notchy-act-text { font-size: 12px; font-weight: bold; color: #ffffff; max-width: 150px; }
+.notchy-act-text.value { font-feature-settings: "tnum"; min-width: 30px; }
+.notchy-act-text.clock { font-feature-settings: "tnum"; color: #ffb38a; }
+.notchy-act-text.clock.paused { color: rgba(255,255,255,0.5); }
+.notchy-act-text.done { color: #34c759; }
+.notchy-act-text.error { color: #ff453a; }
+.notchy-act-text.waiting { color: #ff9f0a; }
+.notchy-act-fill { background-color: #6cb4ff; }
+.notchy-act-rec { width: 9px; height: 9px; border-radius: 5px; background-color: #ff453a; margin: 0 3px; }
+
+/* The Activities tab and the Agent Control Center. */
+.notchy-activities { spacing: 8px; }
+.notchy-act-head { spacing: 6px; }
+.notchy-act-summary { font-size: 13px; font-weight: bold; color: #ffffff; }
+.notchy-act-chip { padding: 3px 10px; border-radius: 10px; font-size: 11px; color: #ffffff; background-color: rgba(255,255,255,0.1); }
+.notchy-act-chip:hover, .notchy-act-chip:focus { background-color: rgba(255,255,255,0.2); }
+.notchy-act-list { spacing: 2px; }
+.notchy-act-section { font-size: 10.5px; font-weight: bold; color: rgba(255,255,255,0.45); padding: 6px 4px 2px 4px; }
+.notchy-act-agent { spacing: 8px; padding: 4px 6px; }
+.notchy-act-agent-name { font-size: 12.5px; font-weight: bold; color: #ffffff; }
+.notchy-act-agent-sub { font-size: 11px; color: rgba(255,255,255,0.55); }
+.notchy-act-agent.waiting .notchy-act-agent-sub { color: #ff9f0a; }
+.notchy-act-agent.error .notchy-act-agent-sub { color: #ff453a; }
+.notchy-act-row { spacing: 10px; padding: 5px 6px; border-radius: 12px; }
+.notchy-act-row:hover { background-color: rgba(255,255,255,0.05); }
+.notchy-act-row.session { padding-left: 14px; }
+.notchy-act-row.ended { opacity: 0.6; }
+.notchy-act-row-icon { color: rgba(255,255,255,0.85); }
+.notchy-act-row-icon.attention, .notchy-act-dot.waiting { color: #ff9f0a; }
+.notchy-act-row-icon.error, .notchy-act-dot.error { color: #ff453a; }
+.notchy-act-row-icon.completed, .notchy-act-dot.completed { color: #34c759; }
+.notchy-act-dot { color: rgba(255,255,255,0.35); }
+.notchy-act-dot.working { color: #6cb4ff; }
+.notchy-act-row-title { font-size: 12.5px; font-weight: bold; color: #ffffff; }
+.notchy-act-row-sub { font-size: 11px; color: rgba(255,255,255,0.58); }
+.notchy-act-row.waiting .notchy-act-row-sub, .notchy-act-row.attention .notchy-act-row-sub { color: #ff9f0a; }
+.notchy-act-row-time { font-size: 11px; color: rgba(255,255,255,0.5); font-feature-settings: "tnum"; text-align: right; }
+.notchy-act-progress { height: 4px; border-radius: 2px; background-color: rgba(255,255,255,0.15); margin-top: 4px; }
+.notchy-act-progress-fill { height: 4px; border-radius: 2px; background-color: #6cb4ff; }
+.notchy-act-buttons { spacing: 4px; }
+.notchy-act-button { padding: 3px 10px; border-radius: 10px; font-size: 11px; color: #ffffff; background-color: rgba(255,255,255,0.12); }
+.notchy-act-button.round { padding: 4px; border-radius: 999px; }
+.notchy-act-button:hover, .notchy-act-button:focus { background-color: rgba(255,255,255,0.22); }
+.notchy-act-empty { spacing: 6px; }
+.notchy-agent-row-time { text-align: right; }

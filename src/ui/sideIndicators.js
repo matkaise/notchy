@@ -36,7 +36,7 @@ export class SideIndicators {
             [island.actor, ['notify::visible']], [Main.overview, ['showing', 'hidden']], [island.panelSurface, ['notify::width']]]) {
             for (const signal of signals) this.life.connect(actor, signal, relayout);
         }
-        this.life.connect(this.settings, 'changed', (_s, key) => { if (key.startsWith('agents-') || key === 'style') this.queue(); });
+        this.life.connect(this.settings, 'changed', (_s, key) => { if (key.startsWith('agents-') || key.startsWith('activities-') || key === 'indicators-max' || key === 'style') this.queue(); });
     }
     // A "+N" button per side; its menu lists what did not fit.
     group(side) {
@@ -110,7 +110,7 @@ export class SideIndicators {
         });
         // The "+N" group is planned with exactly the size it is drawn with.
         const size = Math.max(22, Main.panel.height - (this.settings.get_string('style') === 'liquid' ? 6 : 4)), groupWidth = Math.max(size, 30);
-        const plan = planSides(measured, this.capacity, this.sides, {auto: this.settings.get_boolean('agents-auto-layout'), spacing: SPACING, groupWidth});
+        const plan = planSides(measured, this.capacity, this.sides, {auto: this.settings.get_boolean('agents-auto-layout'), spacing: SPACING, groupWidth, max: this.settings.get_int('indicators-max')});
         for (const [id, side] of plan.sides) this.sides.set(id, side);
         const placed = new Set();
         for (const side of ['left', 'right']) {

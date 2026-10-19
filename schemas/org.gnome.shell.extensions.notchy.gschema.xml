@@ -52,7 +52,24 @@
     <key name="agents-show-idle" type="b"><default>true</default><summary>Show agents that are ready but have no task</summary></key>
     <key name="agents-completion-animation" type="b"><default>true</default><summary>Play a short animation when an agent finishes a task</summary></key>
     <key name="agents-completed-seconds" type="i"><default>8</default><range min="2" max="120"/><summary>How long a finished task is shown as completed before the agent counts as idle</summary></key>
-    <key name="toggle-search" type="as"><default>['&lt;Super&gt;space']</default><summary>Thunderstorm search in the island</summary></key>
+    <key name="activities-enabled" type="b"><default>true</default><summary>Smart Live Activities: the closed notch shows the most important running activity (transfers, timers, recordings, agents that need you, media) and more of them beside it</summary></key>
+  <key name="activities-disabled-types" type="as"><default>[]</default><summary>Activity types not shown: transfer, operation, airdrop, timer, recording, agent, media, accessory, custom</summary></key>
+  <key name="activities-priority" type="as"><default>['attention', 'error', 'completed', 'transfer', 'timer', 'media', 'background']</default><summary>Order of the priority classes for the notch, most important first: attention (needs you), error, completed, transfer, timer (timers and recordings), media, background</summary></key>
+  <key name="activities-completed-seconds" type="i"><default>4</default><range min="1" max="60"/><summary>How long a finished activity stays in the notch and the list (failed ones at least 20 s)</summary></key>
+  <key name="activities-animations" type="b"><default>true</default><summary>Short animations when activities finish, fail or change</summary></key>
+  <key name="activities-group" type="b"><default>true</default><summary>Summarise similar activities (two downloads become "2 transfers")</summary></key>
+  <key name="activities-indicators" type="b"><default>true</default><summary>Show further important activities as small indicators beside the notch</summary></key>
+  <key name="activities-sound" type="b"><default>true</default><summary>Play a sound when a timer runs out</summary></key>
+  <key name="pomodoro-work-minutes" type="i"><default>25</default><range min="5" max="120"/><summary>Length of a Pomodoro focus phase in minutes</summary></key>
+  <key name="pomodoro-break-minutes" type="i"><default>5</default><range min="1" max="60"/><summary>Length of a Pomodoro break in minutes</summary></key>
+  <key name="agents-notify-waiting" type="b"><default>true</default><summary>Notify when an agent needs an approval or an answer</summary></key>
+  <key name="agents-notify-completed" type="b"><default>false</default><summary>Notify when an agent finished a task</summary></key>
+  <key name="agents-notify-error" type="b"><default>true</default><summary>Notify when an agent's task failed</summary></key>
+  <key name="agents-notify-sound" type="b"><default>false</default><summary>Play a sound with agent notifications</summary></key>
+  <key name="agents-history-minutes" type="i"><default>10</default><range min="0" max="240"/><summary>How long ended agent sessions stay listed in the control center (0 = not at all)</summary></key>
+  <key name="agents-position" type="s"><default>'auto'</default><choices><choice value="auto"/><choice value="left"/><choice value="right"/></choices><summary>Where agent indicators go beside the notch: automatic, left or right (a side chosen per agent wins)</summary></key>
+  <key name="indicators-max" type="i"><default>0</default><range min="0" max="12"/><summary>Maximum number of indicators beside the notch; further ones join the "+N" group (0 = as many as fit)</summary></key>
+  <key name="toggle-search" type="as"><default>['&lt;Super&gt;space']</default><summary>Thunderstorm search in the island</summary></key>
     <key name="toggle-island" type="as"><default>['&lt;Super&gt;&lt;Control&gt;space']</default><summary>Toggle island</summary></key>
     <key name="toggle-clipboard" type="as"><default>['&lt;Super&gt;&lt;Shift&gt;space']</default><summary>Open clipboard</summary></key>
     <key name="toggle-basket" type="as"><default>['&lt;Super&gt;&lt;Shift&gt;b']</default><summary>Open floating basket</summary></key>

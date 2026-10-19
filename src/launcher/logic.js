@@ -10,7 +10,7 @@ import {_, N_, pgettext, ngettext, language, formatNumber as localeNumber, forma
 const KIND_LABELS = {
     app: N_('App'), command: N_('Command'), link: N_('Link'), window: N_('Window'), file: N_('File'), folder: N_('Folder'), shelf: N_('Shelf'),
     recent: N_('Recent'), emoji: N_('Emoji'), char: N_('Character'), clipboard: N_('Clipboard'), snippet: N_('Snippet'), unit: N_('Conversion'),
-    calc: N_('Calculator'), web: N_('Web'), indexed: N_('Indexed'), basic: N_('Basic search'),
+    calc: N_('Calculator'), timer: N_('Timer'), web: N_('Web'), indexed: N_('Indexed'), basic: N_('Basic search'),
 };
 // The kind of a result as its row shows it.
 export const kindLabel = kind => (KIND_LABELS[kind] ? _(KIND_LABELS[kind]) : String(kind ?? ''));

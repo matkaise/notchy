@@ -88,8 +88,13 @@ export async function run() {
     if (GLib.getenv('NOTCHY_TEST_LAYOUT_ONLY')) {
         await layoutRegressions(ext, path, screenshot);
         await scrollbarRegressions(ext, path, screenshot);
-        await agentRegressions(ext, path, screenshot); ext.disable();
+        await agentRegressions(ext, path, screenshot);
+        await activityRegressions(ext, path, screenshot); ext.disable();
         print('NOTCHY_LAYOUT_TEST_OK'); return;
+    }
+    if (GLib.getenv('NOTCHY_TEST_ACTIVITIES_ONLY')) {
+        await activityRegressions(ext, path, screenshot); ext.disable();
+        print('NOTCHY_ACTIVITIES_TEST_OK'); return;
     }
     if (GLib.getenv('NOTCHY_TEST_DROP_ONLY')) {
         ext.settings.set_boolean('clipboard-enabled', true);
@@ -358,6 +363,7 @@ export async function run() {
     await layoutRegressions(ext, path, screenshot);
     await scrollbarRegressions(ext, path, screenshot);
     await agentRegressions(ext, path, screenshot);
+    await activityRegressions(ext, path, screenshot);
     // The AirPods leaving at the end of the agent phase show their pill a moment; the Regal's arrival may still be open.
     mock.force_exit(); for (let i = 0; i < 60 && (ext.media.state || ext.islands[0].toastState || ext.islands[0].link || ext.islands[0].peeking); i++) await Scripting.sleep(100); assert(ext.media.state === null && !styled(ext.islands[0].leftRow, 'notchy-mini-art').length && styled(ext.islands[0].rightRow, 'notchy-shelf-pill').length === 1, `MPRIS player removal empties the capsule but for the Regal's count (${ext.media.state?.title ?? 'no state'}, ${ext.islands[0].panelSurface.get_style_class_name()})`);
     await Scripting.sleep(300);
@@ -1244,7 +1250,7 @@ async function languageRegressions(ext, path, screenshot, {press, chord, waitFor
     const island = ext.islands[0], state = () => island.views.searchState, titles = () => state().results.map(r => r.title);
     try {
         assert(i18n.language() === 'en' && island !== oldIsland && oldIsland.life.closed, 'switching to English rebuilds the island in English');
-        assert(island.navButtons.map(([, b]) => b.accessible_name).join('|') === '1 · Media|2 · Shelf|3 · Clipboard|4 · Calendar', `the tabs are named in English (${island.navButtons.map(([, b]) => b.accessible_name)})`);
+        assert(island.navButtons.map(([, b]) => b.accessible_name).join('|') === '1 · Media|2 · Shelf|3 · Clipboard|4 · Calendar|5 · Activities', `the tabs are named in English (${island.navButtons.map(([, b]) => b.accessible_name)})`);
         island.toggle('search'); await Scripting.sleep(400);
         const entry = island.views.focusEntry;
         assert(entry.hint_text.startsWith('Apps, commands'), `the search field speaks English (${entry.hint_text})`);
@@ -1848,4 +1854,167 @@ async function scrollbarRegressions(ext, path, screenshot) {
         island.close(true); await Scripting.sleep(500);
         for (const uri of added) ext.shelf.remove(uri);
     } finally { ext.settings.set_boolean('clipboard-enabled', recording); ext.settings.set_boolean('hover-open', true); }
+}
+
+// Smart Live Activities and the Agent Control Center (activities.js, activityViews.js,
+// activityBubble.js): reports over D-Bus, the arbiter's choice in the closed notch,
+// side indicators, the Activities tab updating in place, timers, a recording,
+// progress from other apps, external actions, settings, and clean disable/enable.
+async function activityRegressions(ext, path, screenshot) {
+    let island = ext.islands[0];
+    const BUS = 'org.gnome.Shell.Extensions.Notchy', PATH = '/org/gnome/Shell/Extensions/Notchy';
+    const waitFor = async (condition, ms = 3000) => { for (let i = 0; i < ms / 50 && !condition(); i++) await Scripting.sleep(50); return condition(); };
+    const call = (method, signature = null, values = null) => new Promise((resolve, reject) => Gio.DBus.session.call(BUS, PATH, BUS, method, signature ? new GLib.Variant(signature, values) : null,
+        null, Gio.DBusCallFlags.NONE, 3000, null, (c, r) => { try { resolve(c.call_finish(r).deep_unpack()); } catch (e) { reject(e); } }));
+    const report = async fields => (await call('ReportActivity', '(s)', [JSON.stringify(fields)]))[0];
+    const agent = async fields => (await call('AgentEvent', '(s)', [JSON.stringify({time: Date.now(), ...fields})]))[0];
+    const timer = async command => JSON.parse((await call('Timer', '(s)', [JSON.stringify(command)]))[0]);
+    const focusType = () => ext.activities.focus?.type ?? null;
+    const capsuleText = () => [...styled(island.leftRow, 'notchy-act-text'), ...styled(island.rightRow, 'notchy-act-text')].map(a => a.text).join(' ');
+    const centred = () => { const [x] = island.panelSurface.get_transformed_position(); return Math.abs(x + island.panelSurface.width / 2 - (island.monitor.x + island.monitor.width / 2)) <= 1; };
+    const signals = [];
+    const subscriptions = ['LiveActivitiesChanged', 'ActivityAction'].map(name => Gio.DBus.session.signal_subscribe(BUS, BUS, name, PATH, null, Gio.DBusSignalFlags.NONE,
+        (_c, _s, _p, _i, signal, parameters) => signals.push([signal, parameters.deep_unpack()])));
+    const saved = {completed: ext.settings.get_int('activities-completed-seconds'), hover: ext.settings.get_boolean('hover-open'), style: ext.settings.get_string('style')};
+    const stopScreencast = Main.screenshotUI.stopScreencast;
+    try {
+        ext.settings.set_boolean('hover-open', false);
+        ext.settings.set_int('activities-completed-seconds', 1);
+        island.close(true); await waitFor(() => !island.toastState && !island.hudState && !island.link && !island.peeking, 5000);
+        // Validation over D-Bus: a refused report says why and changes nothing.
+        for (const bad of [{name: 'x'}, {id: 'a', name: 'x', progress: 2}, {id: 'a', name: 'x', type: 'agent'}, {id: 'a', name: 'x', actions: [{id: 'pause', label: 'x'}]}])
+            assert((await report(bad)).length > 0, `ReportActivity refuses ${JSON.stringify(bad)}`);
+        assert(!ext.activities.store.list().some(a => a.source === 'external'), 'refused reports leave nothing behind');
+        // A download with real progress takes the notch (after the media had its minimum time).
+        assert(await report({id: 'iso', name: 'Ubuntu ISO', type: 'transfer', progress: 0.4, total: 5e9, actions: [{id: 'open', label: 'Öffnen'}]}) === '', 'a valid report is accepted');
+        assert(await waitFor(() => focusType() === 'transfer', 5000), `the transfer takes the closed notch (${focusType()})`);
+        // Transient overlays (the AirPods leaving at the end of the agent phase, a toast) borrow the notch first.
+        await waitFor(() => !island.link && !island.toastState && !island.hudState && !island.peeking, 6000);
+        await Scripting.sleep(300);
+        const track = styled(island.rightRow, 'notchy-act-track')[0];
+        assert(track && capsuleText().includes('40 %') && centred(), `the closed notch shows the transfer's symbol, bar and percentage, centred (${capsuleText()}; ${island.rightRow.get_children().map(c => c.get_style_class_name?.() ?? c.notchyKey).join(', ')}; link ${Boolean(island.link)}, toast ${Boolean(island.toastState)}, hud ${Boolean(island.hudState)}, peek ${island.peekKind}, centred ${centred()})`);
+        await screenshot('activity-transfer');
+        await report({id: 'iso', name: 'Ubuntu ISO', type: 'transfer', progress: 0.68, total: 5e9, actions: [{id: 'open', label: 'Öffnen'}]}); await Scripting.sleep(400);
+        assert(styled(island.rightRow, 'notchy-act-track')[0] === track && capsuleText().includes('68 %'), 'a progress update keeps the bar\'s actor and grows it');
+        const live = JSON.parse((await call('GetLiveActivities'))[0]);
+        assert(live.enabled && live.activities.some(a => a.id === 'iso' && a.progress === 0.68 && a.class === 'transfer') && signals.some(([s]) => s === 'LiveActivitiesChanged'),
+            'GetLiveActivities lists it and LiveActivitiesChanged reports changes');
+        // A second activity of lower rank waits beside the notch.
+        const started = await timer({action: 'start', duration: '5m', name: 'Tee'});
+        assert(started.ok && started.timer.remaining <= 300, 'Timer starts a countdown over D-Bus');
+        await waitFor(() => island.sides.sideOf('activity:timer:timer') !== null, 3000);
+        assert(island.sides.sideOf('activity:timer:timer') !== null && focusType() === 'transfer', 'the timer waits beside the notch while the transfer has it');
+        // Urgent: an agent waiting for the user interrupts at once.
+        await agent({provider: 'claude', session: 'act-1', event: 'start', project: 'Notchy', source: 'cli'});
+        const before = Date.now();
+        await agent({provider: 'claude', session: 'act-1', event: 'update', state: 'waiting', source: 'cli'});
+        assert(await waitFor(() => ext.activities.focus?.cls === 'attention', 1500) && Date.now() - before < 1500, 'an agent that needs you takes the notch at once');
+        await Scripting.sleep(250);
+        assert(styled(island.leftRow, 'notchy-act-icon').some(a => a.has_style_class_name('waiting')) && capsuleText().includes('Claude Code'), `the notch names the waiting agent (${capsuleText()})`);
+        await screenshot('activity-agent-waiting');
+        // Its notification: the agent, the project and the state — no prompt.
+        const notes = ext.notifier.source?.notifications ?? [];
+        assert(notes.some(n => n.title === 'Claude Code braucht dich · Notchy'), `a waiting agent sends a notification (${notes.map(n => n.title).join(', ')})`);
+        await agent({provider: 'claude', session: 'act-1', event: 'update', state: 'working', source: 'cli'});
+        if (island.peeking) island.close(true);
+        assert(await waitFor(() => focusType() === 'transfer', 5000), 'answered: the notch returns to the interrupted transfer');
+        // Completed: a check, then it leaves after its linger; the timer gets the notch.
+        await report({id: 'iso', name: 'Ubuntu ISO', type: 'transfer', state: 'completed'});
+        assert(await waitFor(() => ext.activities.focus?.cls === 'completed', 1500), 'a finished transfer shows as done');
+        assert(styled(island.leftRow, 'notchy-act-icon').some(a => a.has_style_class_name('done')), 'with a green check');
+        assert(await waitFor(() => focusType() === 'timer', 5000), 'after its moment the timer takes the notch');
+        await Scripting.sleep(300);
+        assert(/\d:\d\d/.test(capsuleText()) && island.secondHand, `the timer's remaining time ticks in the notch (${capsuleText()})`);
+        const clock = capsuleText(); await Scripting.sleep(1300);
+        assert(capsuleText() !== clock, 'its clock moves once a second');
+        assert((await call('InvokeActivity', '(ss)', [`timer:${started.timer.id}`, 'pause']))[0] === '', 'pause through InvokeActivity');
+        await Scripting.sleep(300);
+        assert(!island.secondHand && styled(island.rightRow, 'notchy-act-text').some(a => a.has_style_class_name('paused')), 'a paused timer stops the second hand');
+        const resumed = await timer({action: 'resume'});
+        // Ticks again once nothing borrows the notch (a toast, the HUD, the AirPods pill stop the second hand while shown).
+        assert(resumed.ok && await waitFor(() => island.secondHand, 4000), `resumed, it ticks again (focus ${focusType()}, toast ${Boolean(island.toastState)}, hud ${Boolean(island.hudState)}, link ${Boolean(island.link)}, ${JSON.stringify(resumed)})`);
+        // A recording in GNOME's own recorder: red dot and running time; Stop ends it.
+        Main.screenshotUI.stopScreencast = async () => Main.screenshotUI._setScreencastInProgress(false);
+        Main.screenshotUI._setScreencastInProgress(true);
+        assert(await waitFor(() => ext.activities.store.get('recording'), 1500), 'a running screen recording is an activity');
+        const recording = ext.activities.list().find(a => a.id === 'recording');
+        assert(recording.actions.some(a => a.id === 'stop') && ext.activities.invoke('recording', 'stop') === '', 'its Stop calls GNOME\'s recorder');
+        assert(await waitFor(() => !ext.activities.store.get('recording'), 1500), 'stopped, it leaves');
+        Main.screenshotUI.stopScreencast = stopScreencast;
+        // Progress another app publishes (LauncherEntry), event-driven, from its own process.
+        const publisher = () => {
+            const proc = Gio.Subprocess.new(['/usr/bin/python3', here('mock_launcher_entry.py')], Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE);
+            const input = proc.get_stdin_pipe(), output = new Gio.DataInputStream({base_stream: proc.get_stdout_pipe()});
+            return {proc, send: line => new Promise(resolve => { input.write_all(new TextEncoder().encode(`${line}\n`), null); output.read_line_async(0, null, (o, r) => { o.read_line_finish_utf8(r); resolve(); }); }),
+                close: () => new Promise(resolve => { input.close(null); proc.wait_async(null, () => resolve()); })};
+        };
+        const files = publisher(), entryId = 'entry:org.gnome.Nautilus.desktop';
+        await files.send('show org.gnome.Nautilus.desktop 0.5');
+        assert(await waitFor(() => ext.activities.store.get(entryId)?.progress === 0.5, 2000), 'an app\'s LauncherEntry progress becomes a transfer');
+        await files.send('progress org.gnome.Nautilus.desktop 0.75');
+        assert(await waitFor(() => ext.activities.store.get(entryId)?.progress === 0.75, 2000), 'its partial updates move the progress');
+        await files.send('hide org.gnome.Nautilus.desktop');
+        assert(await waitFor(() => !ext.activities.store.get(entryId), 2000), 'hidden half-way it leaves quietly, never „done“');
+        await files.send('show org.gnome.Nautilus.desktop 0.3');
+        assert(await waitFor(() => ext.activities.store.get(entryId), 2000), 'shown again');
+        await files.close();
+        assert(await waitFor(() => !ext.activities.store.get(entryId), 3000), 'an app that quits takes its progress along');
+        // The Activities tab: agents and activities, rows updated in place, the keyboard kept.
+        await report({id: 'build', name: 'Build', type: 'operation', progress: 0.1, actions: [{id: 'open', label: 'Öffnen'}]});
+        island.toggle('activities'); await Scripting.sleep(700);
+        assert(island.expanded && island.page === 'activities' && island.navButtons[4][1].has_style_class_name('active'), 'the fifth tab is Activities');
+        const page = () => island.views.pageLife && styled(island.body, 'notchy-activities')[0];
+        const rowFor = name => styled(island.body, 'notchy-act-row').find(r => styled(r, 'notchy-act-row-title')[0]?.text === name);
+        assert(page() && rowFor('Build') && rowFor('Tee') && rowFor('Notchy'), 'it lists the build, the timer and the agent session');
+        const heads = styled(island.body, 'notchy-act-agent'), list = styled(island.body, 'notchy-act-list')[0].get_children();
+        const claudeHead = heads.find(h => styled(h, 'notchy-act-agent-name')[0]?.text === 'Claude Code');
+        assert(claudeHead && list[list.indexOf(claudeHead) + 1] === rowFor('Notchy'), `the agent heads its sessions (control center: ${heads.map(h => styled(h, 'notchy-act-agent-name')[0]?.text).join(', ')})`);
+        await screenshot('activities-tab');
+        const buildRow = rowFor('Build'), open = buttons(buildRow, 'Öffnen')[0];
+        open.grab_key_focus();
+        for (let i = 2; i <= 6; i++) { await report({id: 'build', name: 'Build', type: 'operation', progress: i / 10, actions: [{id: 'open', label: 'Öffnen'}]}); await Scripting.sleep(120); }
+        await agent({provider: 'claude', session: 'act-1', event: 'update', state: 'waiting', source: 'cli'}); await Scripting.sleep(300);
+        assert(rowFor('Build') === buildRow && open.has_key_focus(), 'status changes update rows in place; the focused button keeps the keyboard');
+        assert(island.page === 'activities' && island.expanded, 'an urgent agent does not close an open tab');
+        // An action an app declared reaches it as a signal.
+        open.emit('clicked', 1); await Scripting.sleep(300);
+        assert(signals.some(([s, args]) => s === 'ActivityAction' && args[0] === 'build' && args[1] === 'open'), 'a declared action reaches its app as ActivityAction');
+        island.close(true); await Scripting.sleep(400);
+        await agent({provider: 'claude', session: 'act-1', event: 'end', source: 'cli'});
+        // Opening and closing the notch keeps its width and place.
+        await waitFor(() => !island.peeking, 3000);
+        const width = island.compactWidth;
+        for (let i = 0; i < 8; i++) { island.open('activities'); await Scripting.sleep(150); island.close(); await Scripting.sleep(350); }
+        await Scripting.sleep(400);
+        assert(Math.abs(island.compactWidth - width) <= 1 && centred() && !island.sizeTarget && !island.morphing, `repeated open and close keep the notch's width (${width} → ${island.compactWidth}) and centre`);
+        // Both glass styles draw the activity.
+        for (const style of ['liquid', 'dynamic']) {
+            ext.settings.set_string('style', style); await Scripting.sleep(400);
+            assert(centred() && styled(island.leftRow, 'notchy-act-icon').length > 0, `${style}: the activity in the closed notch, centred`);
+            await screenshot(`activity-${style}`);
+        }
+        // Switched off: the notch behaves as before, the indicators go.
+        ext.settings.set_boolean('activities-enabled', false); await Scripting.sleep(400);
+        assert(!ext.activities.focus && !styled(island.leftRow, 'notchy-act-icon').length && !island.activityIndicators.bubbles.size, 'Smart Live Activities off: the notch as before, no activity indicators');
+        ext.settings.set_boolean('activities-enabled', true); await Scripting.sleep(400);
+        ext.settings.set_strv('activities-disabled-types', ['operation']); await Scripting.sleep(300);
+        assert(!ext.activities.list().some(a => a.type === 'operation'), 'a type switched off is not shown');
+        ext.settings.reset('activities-disabled-types');
+        // Disable and enable: no leftover clocks, the running timer survives.
+        const life = ext.activities.life, timersLife = ext.timers.life;
+        ext.disable();
+        assert(life.closed && life.sources.size === 0 && timersLife.closed && timersLife.sources.size === 0, 'disabling ends the manager\'s and the timers\' clocks');
+        ext.enable(); await Scripting.sleep(800); island = ext.islands[0];
+        assert(ext.timers.list().some(t => t.name === 'Tee' && t.state === 'running'), 'a running timer survives disable and enable');
+        for (let i = 0; i < 3; i++) { const cycle = ext.activities.life; ext.disable(); assert(cycle.closed && cycle.sources.size === 0, `cycle ${i + 1}: no timer or signal leaks`); ext.enable(); await Scripting.sleep(300); }
+        island = ext.islands[0];
+    } finally {
+        for (const id of subscriptions) Gio.DBus.session.signal_unsubscribe(id);
+        Main.screenshotUI.stopScreencast = stopScreencast;
+        try { Main.screenshotUI._setScreencastInProgress(false); } catch { /* Gone. */ }
+        for (const t of ext.timers?.list() ?? []) ext.timers.cancel(t.id);
+        for (const id of ['iso', 'build']) await call('EndActivity', '(s)', [id]).catch(() => null);
+        ext.settings?.set_int('activities-completed-seconds', saved.completed); ext.settings?.set_boolean('hover-open', saved.hover); ext.settings?.set_string('style', saved.style);
+        ext.settings?.reset('activities-enabled');
+    }
 }

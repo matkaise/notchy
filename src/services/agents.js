@@ -1,9 +1,10 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Shell from 'gi://Shell';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Emitter, Lifetime} from '../lifecycle.js';
-import {AgentRegistry, parseEvent, hookEvent, PROVIDERS, COMPLETED_MS} from './agentModel.js';
-import {_} from '../i18n/core.js';
+import {AgentRegistry, parseEvent, hookEvent, pickWindow, statusText, providerName, PROVIDERS, COMPLETED_MS} from './agentModel.js';
+import {_, fmt} from '../i18n/core.js';
 
 // How often running agent processes are checked while sessions with a
 // process exist. No timer runs without sessions.
@@ -76,10 +77,31 @@ export class Agents extends Emitter {
     apply(event) {
         const {changed, session, transition} = this.registry.apply(event);
         if (session?.connected && !session.hadWindow && this.hostWindows(session).length) session.hadWindow = true;
-        if (transition && session) this.emit({type: transition, session});
+        if (transition && session) { this.emit({type: transition, session}); this.notify(transition, session); }
         if (changed) { this.schedule(); this.changed(); }
         return '';
     }
+    // Notifications for what needs the user or just ended (Settings → Agents):
+    // the agent, its project folder's name and its state — never a prompt or
+    // anything the agent wrote. Not while that agent's own window has the
+    // focus (you are looking at it already). A click switches to the window
+    // when it can be named for sure.
+    notify(transition, session) {
+        const kind = transition === 'appeared' ? session.task : transition;
+        if (!['waiting', 'completed', 'error'].includes(kind) || !this.settings.get_boolean(`agents-notify-${kind}`)) return;
+        const window = this.window(session);
+        if (window && window.has_focus?.()) return;
+        const name = providerName(session.provider), project = session.project ? ` · ${session.project}` : '';
+        const title = kind === 'waiting' ? fmt(_('%s needs you'), name) + project : kind === 'error' ? fmt(_('%s: task failed'), name) + project : fmt(_('%s finished its task'), name) + project;
+        const body = kind === 'waiting' ? [statusText(session), window ? _('Click to switch to the agent') : _('Answer in the agent’s window')].filter(Boolean).join(' · ') : statusText(session);
+        const sound = this.settings.get_boolean('agents-notify-sound') ? (kind === 'completed' ? 'complete' : kind === 'error' ? 'dialog-error' : 'message-new-instant') : null;
+        // While Smart Live Activities show it in the notch, the notification is not a second banner.
+        const activities = this.extension.activities, quiet = Boolean(activities?.enabled && activities.typeEnabled('agent') && this.extension.activeIsland?.());
+        this.extension.notifier?.send({title, body, icon: PROVIDERS[session.provider]?.icon ?? 'notchy-agent-symbolic', urgent: kind === 'waiting', sound, quiet,
+            activate: () => { const target = this.window(session); if (target) Main.activateWindow(target); }});
+    }
+    // Ended sessions the control center still lists (Settings → Agents: minutes, 0 = none).
+    recent(now = Date.now()) { return this.registry.recent(now, this.settings.get_int('agents-history-minutes') * 60000).filter(h => this.providerEnabled(h.provider)); }
     end(provider, session) { if (this.registry.end(provider, session)) { this.emit({type: 'ended', session: this.registry.get(provider, session)}); this.schedule(); this.changed(); } }
     get sessions() { return this.registry.list(); }
     providers() {
@@ -120,8 +142,8 @@ export class Agents extends Emitter {
         return [];
     }
     // The window that belongs to a session, when one can be named for sure:
-    // its app has exactly one window.
-    window(session) { const windows = this.hostWindows(session); return windows.length === 1 ? windows[0] : null; }
+    // its app has exactly one window, or exactly one of them names the session's project.
+    window(session) { return pickWindow(this.hostWindows(session), session.project); }
     // Closing an app's window while it keeps running in the background (a
     // desktop app in the tray) leaves its agent process alive and sends no
     // session end. A session whose app had a window and has none for a few

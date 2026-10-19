@@ -9,6 +9,8 @@ import {matchScore, bestScore, formatNumber, parseConversion, unitSymbol, quickl
     defaultQuicklinks, defaultSnippets, savedOrDefault, CLIPBOARD_PREFIX, SNIPPET_PREFIX, EMOJI_PREFIX} from './logic.js';
 import {COMMANDS, canonicalId, commandById, parseCommandConfig, effective, commandScore, commandBonus, available, SHORTCUT_SCORE} from './commands.js';
 import {EMOJI, emojiCategoryLabel, emojiCategoryTerms} from './emoji.js';
+import {parseTimerQuery} from '../services/timerModel.js';
+import {formatClock} from '../services/activityModel.js';
 import {_, fmt} from '../i18n/core.js';
 
 // Thunderstorm's sources. Each provider turns a query into results:
@@ -73,6 +75,22 @@ export class UnitsProvider {
                 actions: [copyAction('unit.copy', _('Copy Result'), () => ctx.copy(text, fmt(_('%s copied'), both))),
                     copyAction('unit.copyWithUnit', _('Copy with Unit'), () => ctx.copy(both, fmt(_('%s copied'), both)))]};
         });
+    }
+}
+
+// Timers in the notch: "timer 10 min", "timer 1h30 Pizza", "countdown 90s",
+// "pomodoro". The duration comes first, an optional name after it.
+export class TimerProvider {
+    constructor(extension) { this.extension = extension; }
+    search(query) {
+        const timers = this.extension.timers, parsed = timers ? parseTimerQuery(query) : null;
+        if (!parsed) return [];
+        const start = () => { const result = timers.start(parsed); if (typeof result === 'string') this.extension.activeIsland()?.toast('dialog-warning-symbolic', result); };
+        const title = parsed.pomodoro ? _('Start a Pomodoro') : fmt(_('Start a timer: %s'), formatClock(parsed.ms));
+        const subtitle = parsed.pomodoro ? fmt(_('%1$d min focus, %2$d min break'), this.extension.settings.get_int('pomodoro-work-minutes'), this.extension.settings.get_int('pomodoro-break-minutes'))
+            : parsed.name || _('Counts down in the notch');
+        return [{id: parsed.pomodoro ? 'timer:pomodoro' : 'timer:start', kind: 'timer', title, subtitle, icon: 'alarm-symbolic', accent: true, score: 1900,
+            actions: [{id: 'timer.start', title: _('Start Timer'), icon: 'alarm-symbolic', run: start}]}];
     }
 }
 

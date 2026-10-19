@@ -85,6 +85,8 @@ export const TOMBSTONE_MS = 2 * 60 * 1000;
 // Events may arrive slightly out of order (hooks run as separate processes);
 // an event older than the newest one applied is ignored for the state.
 export const CLOCK_SLACK_MS = 0;
+// At most this many ended sessions are remembered for the control center.
+export const HISTORY_LIMIT = 24;
 
 const PROVIDER_RE = /^[a-z0-9][a-z0-9._-]{0,31}$/;
 const clean = (text, max) => String(text ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, max);
@@ -121,9 +123,10 @@ export function parseEvent(input, now = Date.now()) {
 }
 
 // The sessions and their states. apply() returns what changed:
-// {changed: bool, session, transition: 'appeared' | 'completed' | 'ended' | null}.
+// {changed: bool, session, transition: 'appeared' | 'completed' | 'waiting' | 'error' | 'ended' | null}.
+// A session that appears waiting or failed reports 'appeared'.
 export class AgentRegistry {
-    constructor() { this.sessions = new Map(); this.ended = new Map(); this.generations = 0; }
+    constructor() { this.sessions = new Map(); this.ended = new Map(); this.generations = 0; this.history = []; }
     key(provider, session) { return `${provider}\u0000${session}`; }
     get(provider, session) { return this.sessions.get(this.key(provider, session)) ?? null; }
     // Whether an event may (re)open a session that ended: a start, or an
@@ -137,6 +140,16 @@ export class AgentRegistry {
     bury(key, session, now) {
         this.ended.set(key, {at: now, lastEvent: Math.max(session.lastEvent, session.endEvent ?? 0)});
         if (this.ended.size > 256) this.ended.delete(this.ended.keys().next().value);
+        // The control center lists ended sessions a while (Settings → Agents).
+        this.history = this.history.filter(h => !(h.provider === session.provider && h.id === session.id && h.generation === session.generation));
+        this.history.push({provider: session.provider, id: session.id, project: session.project, started: session.started, ended: now,
+            task: session.task, orphaned: Boolean(session.orphaned), generation: session.generation});
+        if (this.history.length > HISTORY_LIMIT) this.history.shift();
+    }
+    // Ended sessions within `keepMs`, newest first; older ones are forgotten.
+    recent(now = Date.now(), keepMs = 0) {
+        this.history = this.history.filter(h => now - h.ended < Math.max(keepMs, 0));
+        return [...this.history].reverse();
     }
     apply(event, now = Date.now()) {
         const key = this.key(event.provider, event.session);
@@ -185,6 +198,8 @@ export class AgentRegistry {
                 this.bury(key, session, now);
             } else if (event.state) {
                 if (event.state === 'completed' && session.task !== 'completed') transition = transition ?? 'completed';
+                // Needs the user, or failed: notifications (src/services/agents.js) follow these.
+                else if ((event.state === 'waiting' || event.state === 'error') && session.task !== event.state) transition = transition ?? event.state;
                 session.task = event.state;
                 session.completedAt = event.state === 'completed' ? now : 0;
                 if (event.state === 'working' || event.state === 'waiting') session.lastActivity = event.time;
@@ -264,6 +279,19 @@ export class AgentRegistry {
     toJSON() { return this.list().map(s => ({...s, state: shownState(s), statusText: statusText(s)})); }
 }
 export const shownState = session => (session.connected ? session.task : 'disconnected');
+
+// The one window a session runs in, among its app's windows ([{title}]):
+// the only window, or the only one whose title names the session's project
+// folder (terminals and editors show it). Anything ambiguous gives null —
+// Notchy never brings a window forward it is not sure about.
+export function pickWindow(windows, project = '') {
+    if (windows.length === 1) return windows[0];
+    const name = String(project ?? '').trim().toLowerCase();
+    if (!name || name.length < 2) return null;
+    const words = title => String(title ?? '').toLowerCase().split(/[\s/\\:|·—–()[\]"'«»]+/);
+    const named = windows.filter(window => words(window.title ?? window.get_title?.()).includes(name));
+    return named.length === 1 ? named[0] : null;
+}
 
 // Claude Code, Codex and Antigravity hook payloads → Notchy events. Only what
 // a status needs is taken: the session id, the event, a tool's name, the

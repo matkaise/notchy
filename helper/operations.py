@@ -2,6 +2,7 @@
 """Local file actions. Never interpolate paths into a shell command."""
 import json
 import os
+import time
 from pathlib import Path
 import shutil
 import signal
@@ -59,6 +60,86 @@ def execute(args, timeout=600):
         active_process = None
 
 
+class Progress:
+    """Real progress of one action, as lines on stdout ("progress 0.42").
+
+    Only what is measured is reported: bytes copied or packed, FFmpeg's own
+    position in the video. Reports are throttled (a percent or a quarter
+    second); the final JSON result follows as the last line."""
+
+    def __init__(self, emit=None, total=0):
+        self.emit, self.total, self.done, self.last, self.at = emit, total, 0, -1.0, 0.0
+
+    def add(self, count):
+        self.done += count
+        if self.total > 0:
+            self.set(self.done / self.total)
+
+    def set(self, value):
+        value = max(0.0, min(1.0, value))
+        now = time.monotonic()
+        if self.emit and (value - self.last >= 0.01 or (now - self.at >= 0.25 and value != self.last)):
+            self.last, self.at = value, now
+            self.emit(value)
+
+
+def size_of(path):
+    """Bytes a ZIP of `path` reads (symlinks are not followed, as in add_to_zip)."""
+    if path.is_symlink():
+        return 0
+    if path.is_dir():
+        total = 0
+        for root, dirs, files in os.walk(path, followlinks=False):
+            dirs[:] = [name for name in dirs if not (Path(root) / name).is_symlink()]
+            total += sum((Path(root) / name).stat().st_size for name in files if not (Path(root) / name).is_symlink())
+        return total
+    return path.stat().st_size
+
+
+def copy_with_progress(source, destination, progress, chunk=1 << 20):
+    with open(source, 'rb') as reader, open(destination, 'wb') as writer:
+        while block := reader.read(chunk):
+            writer.write(block)
+            progress.add(len(block))
+
+
+def zip_file(archive, path, name, progress):
+    info = zipfile.ZipInfo.from_file(path, name)
+    info.compress_type = archive.compression
+    with open(path, 'rb') as reader, archive.open(info, 'w') as writer:
+        while block := reader.read(1 << 20):
+            writer.write(block)
+            if progress:
+                progress.add(len(block))
+
+
+def execute_video(args, duration, progress, offset, share, timeout=3600):
+    """FFmpeg with -progress on stdout: its out_time against the video's length."""
+    global active_process
+    with tempfile.TemporaryFile(mode='w+') as errors:
+        active_process = subprocess.Popen(args[:1] + ['-progress', 'pipe:1', '-nostats'] + args[1:], stdout=subprocess.PIPE, stderr=errors,
+                                          text=True, start_new_session=True)
+        started = time.monotonic()
+        try:
+            for line in active_process.stdout:
+                if line.startswith('out_time_us=') and duration > 0:
+                    try:
+                        progress.set(offset + share * min(1.0, int(line.split('=', 1)[1]) / 1e6 / duration))
+                    except ValueError:
+                        pass
+                if time.monotonic() - started > timeout:
+                    raise ValueError(_('Processing the file failed.'))
+            active_process.wait(timeout=max(1, timeout - (time.monotonic() - started)))
+            if active_process.returncode:
+                errors.seek(0)
+                raise ValueError(errors.read()[-600:] or _('Processing the file failed.'))
+        finally:
+            if active_process.poll() is None:
+                os.killpg(active_process.pid, signal.SIGKILL)
+                active_process.wait()
+            active_process = None
+
+
 def output_path(source, suffix):
     directory = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'notchy' / 'exports'
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -67,7 +148,7 @@ def output_path(source, suffix):
     return Path(name)
 
 
-def add_to_zip(archive, source):
+def add_to_zip(archive, source, progress=None):
     # No symlink following, no recursion into a linked directory.
     if source.is_dir():
         for root, dirs, files in os.walk(source, followlinks=False):
@@ -75,12 +156,13 @@ def add_to_zip(archive, source):
             for name in files:
                 path = Path(root) / name
                 if not path.is_symlink():
-                    archive.write(path, Path(source.name) / path.relative_to(source))
+                    zip_file(archive, path, str(Path(source.name) / path.relative_to(source)), progress)
     elif not source.is_symlink():
-        archive.write(source, source.name)
+        zip_file(archive, source, source.name, progress)
 
 
-def process(action, uri, option=''):
+def process(action, uri, option='', report=None):
+    """One action; `report(value)` receives real progress between 0 and 1 where it is measured."""
     source = local_path(uri)
     destination = None
     if action == 'zip-many':
@@ -90,17 +172,19 @@ def process(action, uri, option=''):
             raise ValueError(_('No files selected.'))
         # Translators: the file name (without .zip) of an archive of several files.
         destination = output_path(Path(_('Archive')), '.zip')
+        progress = Progress(report, sum(size_of(item) for item in sources))
         with zipfile.ZipFile(destination, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
             for item in sources:
-                add_to_zip(archive, item)
+                add_to_zip(archive, item, progress)
         return {'uri': destination.as_uri(), 'message': ngettext('%(count)d file compressed · %(name)s is in the Shelf', '%(count)d files compressed · %(name)s is in the Shelf', len(sources)) % {'count': len(sources), 'name': destination.name}}
     if action == 'copy':
         destination = output_path(source, source.suffix)
-        shutil.copyfile(source, destination)
+        copy_with_progress(source, destination, Progress(report, source.stat().st_size))
     elif action == 'zip':
         destination = output_path(source, '.zip')
+        progress = Progress(report, size_of(source))
         with zipfile.ZipFile(destination, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
-            add_to_zip(archive, source)
+            add_to_zip(archive, source, progress)
     elif action == 'image':
         if option not in ('png', 'jpg', 'webp', 'tiff', 'bmp', 'gif'):
             raise ValueError(_('Unsupported picture format.'))
@@ -145,8 +229,10 @@ def process(action, uri, option=''):
         with tempfile.TemporaryDirectory(prefix='notchy-ffmpeg-') as temp:
             args = [executable('ffmpeg'), '-nostdin', '-y', '-i', str(source), '-c:v', 'libx264',
                     '-b:v', str(bitrate), '-passlogfile', str(Path(temp, 'pass'))]
-            execute(args + ['-pass', '1', '-an', '-f', 'null', '/dev/null'], timeout=3600)
-            execute(args + ['-pass', '2', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', str(destination)], timeout=3600)
+            # Two passes over the video: each is half of the work.
+            progress = Progress(report)
+            execute_video(args + ['-pass', '1', '-an', '-f', 'null', '/dev/null'], duration, progress, 0.0, 0.5)
+            execute_video(args + ['-pass', '2', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', str(destination)], duration, progress, 0.5, 0.5)
         return {'uri': destination.as_uri(), 'message': _('Video compressed (%s MB). The target size is an approximation.') % number(destination.stat().st_size / 1048576)}
     else:
         raise ValueError(_('Unknown action.'))
@@ -157,7 +243,9 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, terminate)
     signal.signal(signal.SIGINT, terminate)
     try:
-        print(json.dumps(process(*sys.argv[1:4]), ensure_ascii=False))
+        def report(value):
+            print(f'progress {value:.4f}', flush=True)
+        print(json.dumps(process(*sys.argv[1:4], report=report), ensure_ascii=False), flush=True)
     except Exception as error:
         print(str(error), file=sys.stderr)
         sys.exit(1)

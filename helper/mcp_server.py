@@ -36,8 +36,22 @@ TOOLS = [
     {'name': 'agent_end', 'description': 'End an agent session beside the notch.',
      'inputSchema': {'type': 'object', 'properties': {'agent': {'type': 'string'}, 'session': {'type': 'string'}}, 'required': ['agent', 'session'], 'additionalProperties': False},
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
+    {'name': 'live_activity', 'description': 'Show or update a live activity in the local notch, for example a download, a build or a conversion. '
+     'Give progress (0 to 1) only when it is really measured, and remaining seconds only when known. It expires after ttl seconds without an update (default 3600).',
+     'inputSchema': {'type': 'object', 'properties': {'id': {'type': 'string', 'pattern': '^[A-Za-z0-9][A-Za-z0-9._:@-]{0,95}$'}, 'name': {'type': 'string', 'minLength': 1, 'maxLength': 60},
+                                                      'type': {'type': 'string', 'enum': ['transfer', 'operation', 'timer', 'recording', 'custom']},
+                                                      'state': {'type': 'string', 'enum': ['running', 'waiting', 'paused', 'completed', 'error']},
+                                                      'progress': {'type': 'number', 'minimum': 0, 'maximum': 1}, 'remaining': {'type': 'number', 'minimum': 0, 'maximum': 86400},
+                                                      'description': {'type': 'string', 'maxLength': 140}, 'ttl': {'type': 'number', 'minimum': 5, 'maximum': 86400}},
+                     'required': ['id', 'name'], 'additionalProperties': False},
+     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
+    {'name': 'live_activity_end', 'description': 'Remove a live activity from the local notch.',
+     'inputSchema': {'type': 'object', 'properties': {'id': {'type': 'string'}}, 'required': ['id'], 'additionalProperties': False},
+     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
 ]
 AGENT_RE = re.compile(r'^[a-z0-9][a-z0-9._-]{0,31}$')
+LIVE_ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:@-]{0,95}$')
+LIVE_FIELDS = {'id', 'name', 'type', 'state', 'progress', 'remaining', 'description', 'ttl'}
 
 
 class Bridge:
@@ -58,6 +72,8 @@ class Bridge:
         fields = {'list_shelf': set(), 'add_files': {'paths'}, 'set_activity': {'name', 'status', 'progress'}, 'clear_activity': {'name'}}
         if name in ('agent_status', 'agent_end'):
             return self.agent(name, arguments)
+        if name in ('live_activity', 'live_activity_end'):
+            return self.live(name, arguments)
         if name not in fields:
             raise ValueError('Unknown tool.')
         if set(arguments) != fields[name]:
@@ -84,6 +100,28 @@ class Bridge:
         self.call('SetActivity', GLib.Variant('(ssd)', (title, status, progress)))
         return {'updated': title}
 
+
+    def live(self, name, arguments):
+        allowed = LIVE_FIELDS if name == 'live_activity' else {'id'}
+        required = {'id', 'name'} if name == 'live_activity' else {'id'}
+        if not required <= set(arguments) or set(arguments) - allowed:
+            raise ValueError('Missing or unexpected arguments.')
+        if not isinstance(arguments['id'], str) or not LIVE_ID_RE.match(arguments['id']):
+            raise ValueError('Invalid activity id.')
+        if name == 'live_activity_end':
+            return {'ended': bool(self.call('EndActivity', GLib.Variant('(s)', (arguments['id'],)))[0])}
+        for key in ('progress', 'remaining', 'ttl'):
+            value = arguments.get(key)
+            if value is not None and (not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value)):
+                raise ValueError(f'Invalid {key}.')
+        for key in ('name', 'type', 'state', 'description'):
+            if key in arguments and not isinstance(arguments[key], str):
+                raise ValueError(f'Invalid {key}.')
+        # Notchy validates the rest (ranges, types, states) and answers with the reason.
+        error = self.call('ReportActivity', GLib.Variant('(s)', (json.dumps(arguments),)))[0]
+        if error:
+            raise ValueError(error)
+        return {'reported': arguments['id']}
 
     def agent(self, name, arguments):
         required, optional = ({'agent', 'session', 'state'}, {'status', 'project', 'progress'}) if name == 'agent_status' else ({'agent', 'session'}, set())

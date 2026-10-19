@@ -9,7 +9,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {box, label, gicon} from './widgets.js';
 import {Lifetime} from '../lifecycle.js';
 import {PROVIDERS, stateText, shownState, statusText} from '../services/agentModel.js';
-import {_, fmt, ngettext, duration} from '../i18n/core.js';
+import {_, fmt, ngettext, duration, relativeTime} from '../i18n/core.js';
 
 // Ring colours per state (RGBA).
 const COLOR = {working: [0.42, 0.71, 1, 1], waiting: [1, 0.62, 0.04, 1], error: [1, 0.27, 0.23, 1], completed: [0.2, 0.78, 0.35, 1], idle: [1, 1, 1, 0.22], disconnected: [1, 1, 1, 0.12]};
@@ -84,7 +84,10 @@ export class AgentBubble {
     get preferredSide() {
         let sides = {};
         try { sides = JSON.parse(this.settings.get_string('agents-side')) ?? {}; } catch { sides = {}; }
-        return ['left', 'right'].includes(sides[this.provider]) ? sides[this.provider] : null;
+        if (['left', 'right'].includes(sides[this.provider])) return sides[this.provider];
+        // Settings → Agents: all indicators on one side, or automatic.
+        const position = this.settings.get_string('agents-position');
+        return position === 'left' || position === 'right' ? position : null;
     }
     // An animation that always ends in its final state: should Clutter stop it
     // half-way (the actor moved, unmapped, lost its frame clock), the values are
@@ -183,6 +186,11 @@ export class AgentBubble {
         column.add_child(this.menuTitle); column.add_child(this.menuSub);
         head.add_child(column); menu.addMenuItem(head);
         this.rowSection = new PopupMenu.PopupMenuSection(); menu.addMenuItem(this.rowSection);
+        // The overview of every agent and activity (the island's Activities tab).
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        this.overview = new PopupMenu.PopupMenuItem(_('All Agents and Activities'));
+        this.overview.connect('activate', () => { menu.close(); this.island.open('activities'); });
+        menu.addMenuItem(this.overview);
     }
     syncMenu() {
         const group = this.group; if (!group) return;
@@ -222,15 +230,18 @@ export class AgentBubble {
             row.dot.set_style_class_name(`notchy-agent-dot ${state}`);
             const title = session.project || fmt(_('Session %s'), session.id.length > 18 ? session.id.slice(0, 8) : session.id);
             if (row.title.text !== title) row.title.text = title;
-            const sub = [stateText(state), statusText(session)].filter(Boolean).join(' · ');
+            // What it waits for, and where it can be answered: Notchy approves nothing itself.
+            const window = this.button.menu.isOpen ? this.agents.window(session) : null;
+            const hint = state === 'waiting' ? (window ? _('Answer in the agent’s window') : _('Answer where the agent runs')) : '';
+            const sub = [stateText(state), statusText(session), hint].filter(Boolean).join(' · ');
             if (row.sub.text !== sub) row.sub.text = sub;
-            row.time.text = duration(now - session.started);
+            // Running time, and when it last did something.
+            row.time.text = `${duration(now - session.started)}\n${relativeTime(session.lastEvent || session.started, now)}`;
             // Real progress only; no invented numbers.
             const known = session.progress !== null && session.progress !== undefined && state === 'working';
             row.progress.visible = known;
             if (known) row.fill.width = Math.round(Math.max(0, Math.min(1, session.progress)) * Math.max(1, row.progress.width || 200));
             // "Switch to the agent" only when its window is known for sure.
-            const window = this.button.menu.isOpen ? this.agents.window(session) : null;
             row.go.visible = Boolean(window);
             row.item.reactive = Boolean(window);
         }

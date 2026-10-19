@@ -32,6 +32,10 @@ import {FileSearch} from './src/services/filesearch.js';
 import {Launcher} from './src/launcher/launcher.js';
 import {AirPods} from './src/services/airpods.js';
 import {Agents} from './src/services/agents.js';
+import {Notifier} from './src/services/notifier.js';
+import {Timers} from './src/services/timers.js';
+import {LauncherEntry} from './src/services/launcherEntry.js';
+import {Activities} from './src/services/activities.js';
 import {startTranslations} from './src/i18n/gnome.js';
 import {_, fmt, language} from './src/i18n/core.js';
 
@@ -72,6 +76,11 @@ export default class Notchy extends Extension {
             this.drops = new Drops(this); this.snap = new Snap(this);
             this.files = new FileSearch(this, this.settings); this.launcher = new Launcher(this, this.files);
             this.airpods = new AirPods(this, this.settings);
+            // Smart Live Activities: the sources above, external progress and
+            // timers meet in one manager (src/services/activities.js).
+            this.notifier = new Notifier(); this.timers = new Timers(this, this.settings); this.launcherEntry = new LauncherEntry();
+            this.activities = new Activities(this, this.settings);
+            this.companion.watchActivities(this.activities);
             this._rebuild();
             this.life.connect(Main.layoutManager, 'monitors-changed', () => this._rebuild());
             // A language chosen in the preferences: when the interface language
@@ -99,7 +108,8 @@ export default class Notchy extends Extension {
         for (const island of this.islands) island.dispose(); this.islands = [];
         // Notchy lives in the top bar, which GNOME shows on the primary monitor.
         const services = {cover: this.cover, spectrum: this.spectrum, calendar: this.calendar, notifications: this.notifications, productivity: this.productivity, settings: this.settings, store: this.store, shelf: this.shelf, clipboard: this.clipboard,
-            media: this.media, system: this.system, outputs: this.outputs, airdrop: this.airdrop, operations: this.operations, companion: this.companion, launcher: this.launcher, airpods: this.airpods, agents: this.agents};
+            media: this.media, system: this.system, outputs: this.outputs, airdrop: this.airdrop, operations: this.operations, companion: this.companion, launcher: this.launcher, airpods: this.airpods, agents: this.agents,
+            activities: this.activities, timers: this.timers};
         this.services = services;
         const monitor = Main.layoutManager.primaryMonitor;
         if (monitor) this.islands.push(new Island(this, monitor, services));
@@ -196,6 +206,7 @@ export default class Notchy extends Extension {
         this.radial?.dispose(); this.capture?.dispose();
         this.injections?.clear(); this.injections = null; this.life?.dispose();
         for (const island of this.islands ?? []) island.dispose(); this.islands = [];
+        this.activities?.dispose(); this.activities = null; this.timers?.dispose(); this.timers = null; this.launcherEntry?.dispose(); this.launcherEntry = null; this.notifier?.dispose(); this.notifier = null;
         this.files?.dispose(); this.files = this.launcher = null; this.airpods?.dispose(); this.airpods = null;
         this.companion?.dispose(); this.operations?.dispose(); this.clipboard?.dispose(); this.cover?.dispose(); this.cover = null; this.spectrum?.dispose(); this.spectrum = null; this.outputs?.dispose(); this.outputs = null; this.snap?.dispose(); this.snap = null; this.airdrop?.dispose(); this.airdrop = null; this.media?.dispose(); this.system?.dispose(); this.productivity?.dispose(); this.agents?.dispose(); this.agents = null; this.calendar?.dispose(); this.calendar = null; this.notifications?.dispose(); this.notifications = null; this.shelf?.dispose(); this.store?.dispose();
         this.companion = this.operations = this.clipboard = this.media = this.system = this.shelf = this.store = this.life = this.settings = null;

@@ -6,6 +6,7 @@ import Gtk from 'gi://Gtk';
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 import {quicklinkTarget, fold, defaultQuicklinks, defaultSnippets, savedOrDefault} from './src/launcher/logic.js';
 import {CATEGORIES, COMMANDS, PRIORITIES, parseCommandConfig, effective, updateCommandConfig, aliasCollisions, sanitizeOverride} from './src/launcher/commands.js';
+import {CLASSES, sanitizeOrder, classText, typeText} from './src/services/activityModel.js';
 import {startTranslations} from './src/i18n/gnome.js';
 import {_, fmt, ngettext} from './src/i18n/core.js';
 
@@ -99,6 +100,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
         sync();
         this.thunderstormPage(window, settings, page, group, toggle, number);
         this.airpodsPage(settings, page, group, toggle, number);
+        this.activitiesPage(settings, page, group, toggle, number);
         this.agentsPage(window, settings, page, group, toggle, number);
         const privacy = page(_('Clipboard'), 'edit-paste-symbolic');
         const history = group(privacy, _('History'), _('Stored locally. Recording and keeping it across sessions are off at first.'));
@@ -391,6 +393,64 @@ export default class NotchyPreferences extends ExtensionPreferences {
             null, Gio.DBusCallFlags.NONE, 10000, null, (c, r) => { try { c.call_finish(r); } catch (e) { status.subtitle = fmt(_('Starting failed: %s'), e.message); } refresh(); }));
         refresh();
     }
+    // Smart Live Activities: what the notch shows, in which order, how long.
+    activitiesPage(settings, page, group, toggle, number) {
+        const live = page(_('Live Activities'), 'view-list-bullet-symbolic');
+        const main = group(live, _('Smart Live Activities'), _('The closed notch shows the most important running activity: an agent that needs you, a failure, something that just finished, a transfer, a timer or recording, the music. More of them appear beside the notch, all of them in the Activities tab. Progress is only shown where it is really measured.'));
+        toggle(main, 'activities-enabled', _('Smart Live Activities'), _('Off: the notch shows music and simple activities as before.'));
+        toggle(main, 'activities-indicators', _('Further activities beside the notch'));
+        toggle(main, 'activities-group', _('Summarise similar activities'), _('Two downloads become “2 transfers”.'));
+        toggle(main, 'activities-animations', _('Animations'), _('A check when something finishes, a short shake when it fails, growing progress.'));
+        number(main, 'activities-completed-seconds', _('Show finished activities for (seconds)'), 1, 60, 1, _('Failed ones stay at least 20 seconds.'));
+        toggle(main, 'activities-sound', _('Sound when a timer runs out'));
+        const types = group(live, _('Activity Types'));
+        const TYPES = [['transfer', _('Downloads and progress of other apps (Chrome, Files, Transmission …)')], ['operation', _('File work started in Notchy (ZIP, conversion, copies)')],
+            ['airdrop', _('AirDrop transfers')], ['timer', _('Timers and Pomodoro')], ['recording', _('Screen recordings')], ['agent', _('AI agents that need you, finished or failed')],
+            ['media', _('Music and media')], ['accessory', _('AirPods (in the list)')], ['custom', _('Activities of other apps and scripts (notchyctl, D-Bus, MCP)')]];
+        for (const [type, subtitle] of TYPES) {
+            const row = new Adw.SwitchRow({title: typeText(type), subtitle, active: !settings.get_strv('activities-disabled-types').includes(type)});
+            row.connect('notify::active', () => {
+                const off = new Set(settings.get_strv('activities-disabled-types'));
+                row.active ? off.delete(type) : off.add(type);
+                settings.set_strv('activities-disabled-types', [...off]);
+            });
+            types.add(row);
+        }
+        // The order of the classes, most important first; arrows move a class.
+        const order = group(live, _('Priorities'), _('What the notch shows when several activities run, most important first. Activities that need you and failures always show at once; others wait until the shown one had its moment.'));
+        const rows = [];
+        const draw = () => {
+            const current = sanitizeOrder(settings.get_strv('activities-priority'));
+            current.forEach((cls, index) => {
+                const row = rows[index];
+                row.title = `${index + 1}. ${classText(cls)}`; row.cls = cls;
+                row.up.sensitive = index > 0; row.down.sensitive = index < current.length - 1;
+            });
+        };
+        const move = (index, delta) => {
+            const current = sanitizeOrder(settings.get_strv('activities-priority')), target = index + delta;
+            if (target < 0 || target >= current.length) return;
+            [current[index], current[target]] = [current[target], current[index]];
+            settings.set_strv('activities-priority', current); draw();
+        };
+        CLASSES.forEach((_cls, index) => {
+            const row = new Adw.ActionRow({title: ''});
+            row.up = new Gtk.Button({icon_name: 'go-up-symbolic', valign: Gtk.Align.CENTER, tooltip_text: _('Higher')}); row.up.add_css_class('flat');
+            row.down = new Gtk.Button({icon_name: 'go-down-symbolic', valign: Gtk.Align.CENTER, tooltip_text: _('Lower')}); row.down.add_css_class('flat');
+            row.up.connect('clicked', () => move(index, -1)); row.down.connect('clicked', () => move(index, 1));
+            row.add_suffix(row.up); row.add_suffix(row.down); order.add(row); rows.push(row);
+        });
+        const reset = new Adw.ActionRow({title: _('Default order')});
+        const resetButton = new Gtk.Button({label: _('Reset'), valign: Gtk.Align.CENTER});
+        resetButton.connect('clicked', () => { settings.reset('activities-priority'); draw(); });
+        reset.add_suffix(resetButton); order.add(reset);
+        draw();
+        const timers = group(live, _('Pomodoro'), _('Start timers in Thunderstorm (“timer 10 min tea”, “pomodoro”), in the Activities tab or with notchyctl timer.'));
+        number(timers, 'pomodoro-work-minutes', _('Focus (minutes)'), 5, 120, 5);
+        number(timers, 'pomodoro-break-minutes', _('Break (minutes)'), 1, 60, 1);
+        const other = group(live, _('For Your Own Apps'), _('Other apps and scripts report activities over D-Bus (ReportActivity), with notchyctl live or the MCP tools live_activity and live_activity_end. Details in docs/ACTIVITIES.md.'));
+        other.add(new Adw.ActionRow({title: "notchyctl live report --id build --name 'Build' --progress 0.4", subtitle_selectable: true, subtitle: _('Ends with notchyctl live end build, or after its lifetime.')}));
+    }
     // AI agents beside the notch, and the optional hook adapters. Nothing in an
     // agent's own configuration changes without a click and a confirmation.
     agentsPage(window, settings, page, group, toggle, number) {
@@ -402,6 +462,17 @@ export default class NotchyPreferences extends ExtensionPreferences {
         toggle(main, 'agents-completion-animation', _('Short animation when a task is done'));
         number(main, 'agents-completed-seconds', _('Show “Done” for (seconds)'), 2, 120, 1, _('After that, the agent counts as ready.'));
         const SIDES = ['auto', 'left', 'right'];
+        const position = new Adw.ComboRow({title: _('Position of the indicators'), subtitle: _('A side chosen per agent below wins.'), model: Gtk.StringList.new([_('Automatic'), _('Left'), _('Right')]),
+            selected: Math.max(0, SIDES.indexOf(settings.get_string('agents-position')))});
+        position.connect('notify::selected', () => settings.set_string('agents-position', SIDES[position.selected] ?? 'auto'));
+        main.add(position);
+        number(main, 'indicators-max', _('Maximum visible indicators'), 0, 12, 1, _('Beside the notch, for agents, AirPods, activities and the Shelf; further ones join the “+N” group. 0 = as many as fit.'));
+        number(main, 'agents-history-minutes', _('List ended sessions for (minutes)'), 0, 240, 5, _('In the Activities tab. 0 = not at all.'));
+        const notes = group(agents, _('Notifications'), _('Only the agent, its project folder’s name and its state are shown — never a prompt or what the agent wrote. Not while the agent’s own window has the focus. While Smart Live Activities show it in the notch, it goes quietly into the message list.'));
+        toggle(notes, 'agents-notify-waiting', _('When an agent needs you'), _('An approval or a question. Notchy approves nothing itself: a click switches to the agent.'));
+        toggle(notes, 'agents-notify-completed', _('When an agent finished its task'));
+        toggle(notes, 'agents-notify-error', _('When an agent’s task failed'));
+        toggle(notes, 'agents-notify-sound', _('With a sound'));
         const readSides = () => { try { return JSON.parse(settings.get_string('agents-side')) ?? {}; } catch { return {}; } };
         const hooks = group(agents, _('Integrations'), _('Set Up adds Notchy’s hook adapter to the agent’s configuration beside your existing hooks and makes a backup first. Remove takes out exactly these entries again.'));
         const ctl = `${this.path}/scripts/notchyctl`;

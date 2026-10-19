@@ -13,5 +13,5 @@ PY
 # compiled into locale/ for the tests below (and for running from the source tree).
 python3 scripts/i18n.py check
 python3 scripts/i18n.py compile locale >/dev/null
-node --test tests/model.test.js tests/launcher.test.js tests/airpods.test.js tests/agents.test.js tests/i18n.test.js tests/commands.test.js
+node --test tests/model.test.js tests/launcher.test.js tests/airpods.test.js tests/agents.test.js tests/i18n.test.js tests/commands.test.js tests/activities.test.js
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py'

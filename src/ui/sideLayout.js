@@ -17,8 +17,11 @@
 // - Nothing is ever drawn beyond `capacity`, not even the group: a side too
 //   narrow for the group shows nothing at all (groups.side is false), rather
 //   than covering GNOME's or another extension's panel items.
+// - `max` (Settings: maximum visible indicators, 0 = as many as fit) caps how
+//   many show at once; the least urgent beyond it join the „+N“ group of
+//   their side, so a waiting agent stays in sight.
 
-export function planSides(items, capacity, previous = new Map(), {auto = true, spacing = 6, groupWidth = 30} = {}) {
+export function planSides(items, capacity, previous = new Map(), {auto = true, spacing = 6, groupWidth = 30, max = 0} = {}) {
     const ordered = [...items].sort((a, b) => a.order - b.order);
     const sides = new Map(), used = {left: 0, right: 0}, count = {left: 0, right: 0};
     const room = {left: capacity.left ?? capacity, right: capacity.right ?? capacity};
@@ -57,11 +60,13 @@ export function planSides(items, capacity, previous = new Map(), {auto = true, s
         }
     }
     const groups = {left: false, right: false};
+    // Beyond the maximum: the least urgent (the newest of equal ones) are grouped.
+    const forced = new Set(max > 0 ? [...ordered].sort((a, b) => b.priority - a.priority || a.order - b.order).slice(max).map(i => i.id) : []);
     for (const side of ['left', 'right']) {
         const members = onSide(side);
-        if (used[side] <= room[side]) continue;
+        if (used[side] <= room[side] && !members.some(i => forced.has(i.id))) continue;
         // Keep the most urgent that fit beside a "+N" group.
-        const keep = [...members].sort((a, b) => b.priority - a.priority || a.order - b.order);
+        const keep = [...members].filter(i => !forced.has(i.id)).sort((a, b) => b.priority - a.priority || a.order - b.order);
         const visible = new Set();
         let width = 0;
         if (groupWidth <= room[side]) {

@@ -14,7 +14,9 @@ class BridgeTest(mcp.Bridge):
 
     def call(self, method, parameters=None):
         self.calls.append((method, parameters.unpack() if parameters else None))
-        return ('[]',) if method == 'GetItems' else ('',) if method == 'AgentEvent' else ()
+        if method == 'EndActivity':
+            return (True,)
+        return ('[]',) if method == 'GetItems' else ('',) if method in ('AgentEvent', 'ReportActivity') else ()
 
 
 class MCPTest(unittest.TestCase):
@@ -24,7 +26,7 @@ class MCPTest(unittest.TestCase):
         self.assertIn('error', before)
         response = server.handle({'jsonrpc':'2.0', 'id':2, 'method':'initialize', 'params':{'protocolVersion':'2025-11-25'}})
         self.assertEqual(response['result']['protocolVersion'], '2025-11-25')
-        self.assertEqual(len(server.handle({'jsonrpc':'2.0','id':3,'method':'tools/list'})['result']['tools']),6)
+        self.assertEqual(len(server.handle({'jsonrpc':'2.0','id':3,'method':'tools/list'})['result']['tools']),8)
         self.assertIn('error',server.handle({'jsonrpc':'2.0','id':4,'method':'arbitrary-command'}))
 
     def test_activity_validates_parameters_and_never_executes(self):
@@ -57,3 +59,28 @@ class AgentToolTest(unittest.TestCase):
                      {'agent': 'a', 'session': 's', 'state': 'working', 'progress': 3}, {'agent': 'a', 'session': 's', 'state': 'working', 'shell': 'x'}, {'agent': 'a', 'session': 's'}]:
             with self.assertRaises(ValueError):
                 bridge.tool('agent_status', args)
+
+
+class LiveActivityToolTest(unittest.TestCase):
+    def test_live_activity_is_forwarded_as_one_report(self):
+        bridge = BridgeTest()
+        self.assertEqual(bridge.tool('live_activity', {'id': 'build-1', 'name': 'Build', 'type': 'operation', 'progress': 0.25, 'remaining': 30})['reported'], 'build-1')
+        method, (payload,) = bridge.calls[0]
+        self.assertEqual(method, 'ReportActivity')
+        self.assertEqual(json.loads(payload), {'id': 'build-1', 'name': 'Build', 'type': 'operation', 'progress': 0.25, 'remaining': 30})
+        self.assertEqual(bridge.tool('live_activity_end', {'id': 'build-1'}), {'ended': True})
+        self.assertEqual(bridge.calls[1], ('EndActivity', ('build-1',)))
+
+    def test_live_activity_rejects_bad_arguments_before_calling(self):
+        bridge = BridgeTest()
+        for args in [{'name': 'x'}, {'id': 'a b', 'name': 'x'}, {'id': 'a', 'name': 'x', 'progress': float('nan')}, {'id': 'a', 'name': 'x', 'progress': True},
+                     {'id': 'a', 'name': 'x', 'command': 'rm -rf'}, {'id': 'a', 'name': 3}]:
+            with self.assertRaises(ValueError):
+                bridge.tool('live_activity', args)
+        self.assertEqual(bridge.calls, [])
+
+    def test_notchys_refusal_reaches_the_client(self):
+        bridge = BridgeTest()
+        bridge.call = lambda method, parameters=None: ('Progress must be between 0 and 1',)
+        with self.assertRaises(ValueError):
+            bridge.tool('live_activity', {'id': 'a', 'name': 'x', 'progress': 2})

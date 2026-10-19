@@ -26,6 +26,13 @@ const XML = `<node><interface name="${BUS_NAME}">
  <method name="SetActivity"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="d" direction="in"/></method>
  <method name="ClearActivity"><arg type="s" direction="in"/></method>
  <method name="GetActivities"><arg type="s" direction="out"/></method>
+ <method name="ReportActivity"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+ <method name="EndActivity"><arg type="s" direction="in"/><arg type="b" direction="out"/></method>
+ <method name="GetLiveActivities"><arg type="s" direction="out"/></method>
+ <method name="InvokeActivity"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+ <method name="Timer"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+ <signal name="LiveActivitiesChanged"><arg type="s"/></signal>
+ <signal name="ActivityAction"><arg type="s"/><arg type="s"/></signal>
 ${AGENT_DBUS}
  <method name="AirDropAsk"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="u" direction="in"/><arg type="b" direction="out"/></method>
  <method name="AirDropSend"><arg type="s" direction="in"/><arg type="b" direction="out"/></method>
@@ -46,6 +53,17 @@ export class Companion extends Emitter {
             SetActivity: (name, status, progress) => productivity.setActivity(name, status, progress),
             ClearActivity: name => productivity.clearActivity(name),
             GetActivities: () => JSON.stringify([...productivity.activities.values()]),
+            // Smart Live Activities (src/services/activities.js): reports from other apps,
+            // the whole list, an action, timers. Unavailable parts answer with a message.
+            ReportActivity: json => extension.activities?.report(json) ?? _('Live activities are not available'),
+            EndActivity: id => extension.activities?.end(id) ?? false,
+            GetLiveActivities: () => JSON.stringify(extension.activities?.toJSON() ?? {enabled: false, focus: null, activities: []}),
+            InvokeActivity: (id, action) => {
+                const activities = extension.activities; if (!activities) return _('Live activities are not available');
+                activities.flush();
+                return activities.invoke(activities.store.get(`ext:${id}`) ? `ext:${id}` : id, action);
+            },
+            Timer: json => JSON.stringify(this.timerCommand(json)),
             // Structured agent sessions (notchyctl agent …, the MCP bridge, hook adapters).
             AgentEvent: json => extension.agents?.report(json) ?? _('Agent indicators are not available'),
             AgentHook: (provider, json) => extension.agents?.hook(provider, json) ?? _('Agent indicators are not available'),
@@ -85,6 +103,33 @@ export class Companion extends Emitter {
             this._positionWindow(window); this.trackPopup(window);
             this.life.later(100, () => { try { this._positionWindow(window); } catch { /* Window already closed. */ } });
         });
+    }
+    // The manager's changes and the actions external reporters declared, as signals.
+    watchActivities(activities) {
+        if (!activities) return;
+        this.unsubActivities = activities.subscribe(() => { if (!this.life.closed) this.dbus.emit_signal('LiveActivitiesChanged', new GLib.Variant('(s)', [JSON.stringify(activities.toJSON())])); });
+        this.unsubActions = activities.onAction((id, action) => { if (!this.life.closed) this.dbus.emit_signal('ActivityAction', new GLib.Variant('(ss)', [id, action])); });
+    }
+    // Timer(json): {action: start, duration ("25m"), name} | {action: start, pomodoro: true} | {action: pause|resume|cancel, id} | {action: list}.
+    timerCommand(json) {
+        const timers = this.extension.timers;
+        if (!timers) return {ok: false, error: _('Timers are not available')};
+        let command;
+        try { command = JSON.parse(json); } catch { return {ok: false, error: _('Not valid JSON')}; }
+        if (!command || typeof command !== 'object') return {ok: false, error: _('Not valid JSON')};
+        const shown = timer => ({id: timer.id, name: timer.name, kind: timer.kind, phase: timer.phase, cycle: timer.cycle, state: timer.state, remaining: Math.round(timers.set.remaining(timer) / 1000)});
+        switch (command.action) {
+        case 'start': {
+            const timer = timers.start({duration: command.duration === undefined ? undefined : String(command.duration), name: command.name === undefined ? '' : String(command.name), pomodoro: command.pomodoro === true});
+            return typeof timer === 'string' ? {ok: false, error: timer} : {ok: true, timer: shown(timer)};
+        }
+        case 'pause': case 'resume': case 'cancel': {
+            const id = String(command.id ?? '') || timers.list().find(t => t.state !== 'completed')?.id;
+            return timers[command.action](id) ? {ok: true} : {ok: false, error: _('No such timer')};
+        }
+        case 'list': return {ok: true, timers: timers.list().map(shown)};
+        default: return {ok: false, error: _('Unknown timer action')};
+        }
     }
     _positionWindow(window) {
         if (!this.life.closed && this.shelfProc && window.get_title() === 'Notchy Files' && window.get_gtk_application_id() === 'org.notchy.FileTray') {
@@ -254,6 +299,6 @@ export class Companion extends Emitter {
         const airdrop = this.extension.airdrop;
         return {available: Boolean(airdrop?.available), receiving: Boolean(airdrop?.receiving), state: airdrop?.state ?? 'off', sending: Boolean(airdrop?.sendProc)};
     }
-    dispose() { for (const window of [...this.popups.keys()]) this.untrackPopup(window); this.closeShelf(); this.life.dispose(); this.unsub(); this.unsubAirDrop?.(); this.unsubAgents?.(); this.dbus.unexport(); Gio.bus_unown_name(this.owner);
+    dispose() { for (const window of [...this.popups.keys()]) this.untrackPopup(window); this.closeShelf(); this.life.dispose(); this.unsub(); this.unsubAirDrop?.(); this.unsubAgents?.(); this.unsubActivities?.(); this.unsubActions?.(); this.dbus.unexport(); Gio.bus_unown_name(this.owner);
         this.proc?.force_exit(); this.proc = null; this.shelfProc?.force_exit(); this.shelfProc = null; }
 }

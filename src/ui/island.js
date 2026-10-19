@@ -13,6 +13,8 @@ import {Views} from './views.js';
 import {AirPodsBubble} from './airpodsBubble.js';
 import {AgentIndicators} from './agentBubble.js';
 import {ShelfBubble} from './shelfBubble.js';
+import {ActivityIndicators} from './activityBubble.js';
+import {compactParts, entryTicks} from './activityViews.js';
 import {SideIndicators} from './sideIndicators.js';
 import {Waveform} from './waveform.js';
 import {box, label, icon, gicon, button} from './widgets.js';
@@ -21,12 +23,12 @@ import {_, N_, fmt, ngettext, formatPercent} from '../i18n/core.js';
 
 // Bottom tab bar (Droppy for GNOME): page, icon, label.
 export const TABS = [['media', 'audio-x-generic-symbolic', N_('Media')], ['shelf', 'package-x-generic-symbolic', N_('Shelf')],
-    ['clipboard', 'edit-paste-symbolic', N_('Clipboard')], ['calendar', 'x-office-calendar-symbolic', N_('Calendar')]];
+    ['clipboard', 'edit-paste-symbolic', N_('Clipboard')], ['calendar', 'x-office-calendar-symbolic', N_('Calendar')], ['activities', 'view-list-bullet-symbolic', N_('Activities')]];
 const TAB_INDEX = Object.fromEntries(TABS.map(([page], i) => [page, i]));
 // Content heights per tab; the surface morphs between them.
 // Every tab has the same height, so switching tabs never makes the island jump.
 export const PAGE_HEIGHT = 300;
-export const CONTENT_HEIGHT = {media: PAGE_HEIGHT, shelf: PAGE_HEIGHT, clipboard: PAGE_HEIGHT, calendar: PAGE_HEIGHT};
+export const CONTENT_HEIGHT = {media: PAGE_HEIGHT, shelf: PAGE_HEIGHT, clipboard: PAGE_HEIGHT, calendar: PAGE_HEIGHT, activities: PAGE_HEIGHT};
 // A compact, icon-only tab pill (as in Droppy); labels remain accessible names.
 export const DROP_HEIGHT = 132;
 export const TAB_WIDTH = 46, TAB_HEIGHT = 30, TAB_INSET = 3, TABBAR_HEIGHT = 50;
@@ -191,7 +193,7 @@ export class Island {
             // The page may claim Esc first (an AirDrop question declines with it).
             if (this.views.keyPress?.(event) === Clutter.EVENT_STOP) return Clutter.EVENT_STOP;
             if (key === Clutter.KEY_Escape) { this.close(); return Clutter.EVENT_STOP; }
-            // Entries consume typed digits first; elsewhere 1–4 select a tab.
+            // Entries consume typed digits first; elsewhere 1–5 select a tab.
             const tab = TABS[key - Clutter.KEY_1];
             if (this.expanded && !this.peeking && tab) { this.open(tab[0]); return Clutter.EVENT_STOP; }
             return Clutter.EVENT_PROPAGATE;
@@ -215,6 +217,8 @@ export class Island {
         this.life.cleanups.push(this.shelf.subscribe(() => { this.shelfArrived(); this.updateCompact(); if (this.expanded && this.page === 'shelf') this.refresh(); }));
         this.life.cleanups.push(this.productivity.subscribe(() => this.updateCompact()));
         this.life.cleanups.push(this.operations.subscribe(() => this.updateCompact()));
+        // Smart Live Activities: the manager's choice for the notch, and its changes.
+        if (this.activities) this.life.cleanups.push(this.activities.subscribe(() => this.updateCompact()));
         this.life.cleanups.push(this.companion.subscribe(() => this.syncVisibility()));
         if (this.airdrop) this.life.cleanups.push(this.airdrop.subscribe(() => this.syncAirDrop()));
         if (this.airpods) {
@@ -227,6 +231,7 @@ export class Island {
         if (this.airpods) this.airpodsBubble = new AirPodsBubble(this);
         if (this.agents) this.agentIndicators = new AgentIndicators(this);
         this.shelfBubble = new ShelfBubble(this);
+        if (this.activities) this.activityIndicators = new ActivityIndicators(this);
         this.applyStyle(); this.updateCompact(); this.position(); this.syncVisibility(); this.syncAirDrop();
     }
     buildPanel() {
@@ -498,10 +503,16 @@ export class Island {
         if (this.dropActive || this.extension.drops?.dragging) return;
         if (this.hovered) {
             this.cancelCollapse(); this.life.cancel(this.hoverTimeout);
-            if (!this.expanded && !this.dateMenu.menu.isOpen && this.settings.get_boolean('hover-open')) this.hoverTimeout = this.life.later(this.settings.get_int('hover-delay'), () => { this.hoverTimeout = 0; if (this.hovered && !this.dateMenu.menu.isOpen && !this.dropActive && !this.extension.drops?.dragging) this.open(); });
+            if (!this.expanded && !this.dateMenu.menu.isOpen && this.settings.get_boolean('hover-open')) this.hoverTimeout = this.life.later(this.settings.get_int('hover-delay'), () => { this.hoverTimeout = 0; if (this.hovered && !this.dateMenu.menu.isOpen && !this.dropActive && !this.extension.drops?.dragging) this.open(this.defaultPage); });
         } else { this.life.cancel(this.hoverTimeout); this.hoverTimeout = 0; this.scheduleCollapse(); }
     }
-    open(page = 'media') {
+    // The page the island opens on: the Activities tab while the notch shows
+    // an activity (a transfer, a timer, an agent that needs you …), else media.
+    get defaultPage() {
+        const focus = this.activities?.focus;
+        return focus && focus.type !== 'media' && !focus.members.some(m => m.legacy) ? 'activities' : 'media';
+    }
+    open(page = this.defaultPage) {
         if (this.life.closed || this.dropActive) return; this.cancelCollapse(); this.life.cancel(this.hoverTimeout); this.hoverTimeout = 0;
         this.foldWidth = undefined;
         const fromPeek = this.peeking; this.endPeek(); this.clearHud();
@@ -605,7 +616,7 @@ export class Island {
     // an explicit toggle does, so Esc and 1–4 work right away.
     toggle(page) {
         if (this.expanded && !this.peeking && (!page || this.page === page)) { this.close(); return; }
-        this.open(page);
+        this.open(page ?? this.defaultPage);
         if (this.expanded && !this.views.focusEntry?.has_key_focus?.() && !this.views.focusEntry?.clutter_text?.has_key_focus()) this.actor.grab_key_focus();
     }
     cancelCollapse() { this.life.cancel(this.collapseTimeout); this.collapseTimeout = 0; }
@@ -621,7 +632,10 @@ export class Island {
         if (this.life.closed) return;
         const state = this.settings.get_boolean('media-enabled') ? this.media.state : null;
         const activity = [...this.productivity.activities.values()].sort((a, b) => b.updated - a.updated)[0];
-        const hud = this.hudState, toast = this.toastState, airdrop = !hud && !toast ? this.airdropActivity : null;
+        // With Smart Live Activities the manager decides what the notch shows
+        // (activities.js); HUD, toasts and the AirPods pill still borrow it briefly.
+        const managed = Boolean(this.activities?.enabled), focus = managed ? this.activities.focus : null;
+        const hud = this.hudState, toast = this.toastState, airdrop = !hud && !toast && (!managed || focus?.type === 'airdrop') ? this.airdropActivity : null;
         const center = {y_align: Clutter.ActorAlign.CENTER};
         const text = (key, cls, value) => ({key, make: () => label(value, cls, center), update: a => { if (a.text !== String(value)) a.text = String(value); }});
         const glyph = (key, cls, size, source) => ({key, make: () => new St.Icon({icon_size: size, style_class: cls, ...center}), update: a => setIcon(a, source)});
@@ -657,9 +671,14 @@ export class Island {
             right = hud.level === null ? [text('hud-text', 'notchy-hud-text', hud.text)]
                 : [track('hud-track', `notchy-hud-fill${hud.level > 1 ? ' boost' : ''}`, hud.level / (hud.max > 0 ? hud.max : 1)), text('hud-value', 'notchy-hud-value', Math.round(hud.level * 100))];
             wide = true;
+        } else if (focus && focus.type !== 'media' && focus.type !== 'airdrop' && !focus.members.some(m => m.legacy)) {
+            // The most important activity: a transfer's progress, a timer's
+            // remaining time, a recording's red dot, an agent that needs you.
+            ({left, right} = compactParts(focus, {agents: this.agents, animate: this.settings.get_boolean('activities-animations') && this.settings.get_int('animation-duration') > 0}));
+            wide = true;
         } else {
             if (state) { left = [glyph('art', 'notchy-mini-art', 20, this.cover.file ?? 'audio-x-generic-symbolic')]; wide = true; }
-            if (activity || this.operations.busy) right.push(text('activity', 'notchy-activity-text', activity ? activity.status : _('Processing…')));
+            if (activity || (!managed && this.operations.busy)) right.push(text('activity', 'notchy-activity-text', activity ? activity.status : _('Processing…')));
             if (state?.playing && this.settings.get_boolean('media-waveform')) right.push({key: 'waveform', make: () => new Waveform(this.spectrum, 22, 13)});
             else if (state) right.push(glyph('media-state', '', 14, state.playing ? 'audio-volume-high-symbolic' : 'media-playback-pause-symbolic'));
             // The Regal's file count beside the clock while nothing else is
@@ -677,6 +696,14 @@ export class Island {
         this.shelfBubble?.sync();
         this.compactFlags = {wide, hud: Boolean(hud), toasting: Boolean(toast && !hud)};
         this.syncCapsuleClass(); this.syncCompactGeometry();
+        this.syncSecondHand(focus);
+    }
+    // A timer's or a recording's time in the notch moves once a second, and
+    // only while one is shown; nothing ticks otherwise.
+    syncSecondHand(focus) {
+        const ticks = entryTicks(focus) && !this.hudState && !this.toastState && !(this.link && !this.hudState);
+        if (ticks && !this.secondHand) this.secondHand = this.life.every(1000, () => this.updateCompact());
+        else if (!ticks && this.secondHand) { this.life.cancel(this.secondHand); this.secondHand = 0; }
     }
     // AirDrop as a live activity: what the radio is doing right now.
     get airdropActivity() {
@@ -910,6 +937,7 @@ export class Island {
         this.queuedNotifications = []; this.releaseNotifications(this.waitingNotifications ?? []);
         if (this.nativeShelf) this.companion.closeShelf();
         this.agentIndicators?.dispose(); this.agentIndicators = null;
+        this.activityIndicators?.dispose(); this.activityIndicators = null;
         this.airpodsBubble?.dispose(); this.airpodsBubble = null;
         this.shelfBubble?.dispose(); this.shelfBubble = null;
         this.sides?.dispose(); this.sides = null;

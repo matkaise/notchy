@@ -3,7 +3,7 @@ import {rank, recordUse, recentUses, fileQuery, EMOJI_PREFIX, CLIPBOARD_PREFIX, 
 import {migrateHistory} from './commands.js';
 import {_} from '../i18n/core.js';
 import {CalculatorProvider, UnitsProvider, QuicklinkProvider, WebSearchProvider, AppsProvider, SystemProvider, WindowProvider,
-    ClipboardProvider, SnippetProvider, EmojiProvider, ShelfProvider, FileProvider, launchUri} from './providers.js';
+    ClipboardProvider, SnippetProvider, EmojiProvider, ShelfProvider, FileProvider, TimerProvider, launchUri} from './providers.js';
 
 // The providers the explicit file mode asks (the file index and the Regal).
 const FILE_PROVIDERS = ['shelf', 'file'];
@@ -12,7 +12,7 @@ export const FILE_DEBOUNCE = 140;
 // At most this many results in the list (it scrolls beyond the visible rows).
 const TOTAL = 24;
 // At most this many of one kind in a mixed list (kinds are ids, see logic.js).
-const PER_KIND = {app: 4, file: 4, folder: 3, command: 4, window: 3, emoji: 3, char: 2, clipboard: 3, snippet: 3, link: 3, shelf: 2, unit: 3, calc: 1, web: 1};
+const PER_KIND = {app: 4, file: 4, folder: 3, command: 4, window: 3, emoji: 3, char: 2, clipboard: 3, snippet: 3, link: 3, shelf: 2, unit: 3, calc: 1, timer: 1, web: 1};
 
 // Thunderstorm's engine: the providers, the usage history (frecency, recent
 // results) and one Session per opened search field.
@@ -26,7 +26,7 @@ export class Launcher {
         if (JSON.stringify(this.history) !== JSON.stringify(history)) this.store.write('launcher-history', this.history);
         // Provider order breaks ties between equal scores.
         this.providers = {
-            calc: new CalculatorProvider(), units: new UnitsProvider(), link: new QuicklinkProvider(this.settings), app: new AppsProvider(),
+            calc: new CalculatorProvider(), timer: new TimerProvider(extension), units: new UnitsProvider(), link: new QuicklinkProvider(this.settings), app: new AppsProvider(),
             cmd: new SystemProvider(extension), win: new WindowProvider(extension), clip: new ClipboardProvider(extension),
             snippet: new SnippetProvider(this.settings), emoji: new EmojiProvider(), shelf: new ShelfProvider(extension),
             file: new FileProvider(extension, files), web: new WebSearchProvider(this.settings),

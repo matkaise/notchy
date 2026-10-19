@@ -44,6 +44,8 @@ elif [[ -n "${NOTCHY_TEST_LAUNCHER_ONLY:-}" ]]; then
     grep -q NOTCHY_LAUNCHER_TEST_OK tests/output/shell.log
 elif [[ -n "${NOTCHY_TEST_LAYOUT_ONLY:-}" ]]; then
     grep -q NOTCHY_LAYOUT_TEST_OK tests/output/shell.log
+elif [[ -n "${NOTCHY_TEST_ACTIVITIES_ONLY:-}" ]]; then
+    grep -q NOTCHY_ACTIVITIES_TEST_OK tests/output/shell.log
 elif [[ -n "${NOTCHY_TEST_AIRPODS_ONLY:-}" ]]; then
     grep -q NOTCHY_AIRPODS_TEST_OK tests/output/shell.log
 else
