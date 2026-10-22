@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {ActivityStore, Arbiter, activity, parseReport, groupEntries, classOf, sanitizeOrder, entryTitle, formatClock, remainingOf, ticking, sidePriority,
     CLASSES, MIN_DISPLAY_MS, COMPLETED_MS, ERROR_MS} from '../src/services/activityModel.js';
 import {TimerSet, parseDuration, parseTimerQuery, timerName} from '../src/services/timerModel.js';
-import {launcherEntryUpdate, LauncherEntries, STALE_MS} from '../src/services/progressModel.js';
+import {launcherEntryUpdate, LauncherEntries, STALE_MS, Downloads, downloadName, DOWNLOAD_STALE_MS, DOWNLOAD_DONE_MS} from '../src/services/progressModel.js';
 import {AgentRegistry, parseEvent, hookEvent, pickWindow} from '../src/services/agentModel.js';
 import {planSides} from '../src/ui/sideLayout.js';
 import {useLanguage} from './i18n-helper.js';
@@ -215,10 +215,23 @@ test('progress other apps publish (LauncherEntry): only what they say', () => {
     assert.ok(entries.update(launcherEntryUpdate('application://google-chrome.desktop', {progress: 0.2, 'progress-visible': true}), ':1.5', T));
     assert.ok(entries.update(launcherEntryUpdate('application://google-chrome.desktop', {progress: 0.6}), ':1.5', T + 1000), 'partial updates keep the rest');
     assert.equal(entries.list(T + 1000)[0].progress, 0.6);
-    // Hidden after a complete value: finished; hidden half-way: it just leaves (a cancel is no success).
-    entries.update(launcherEntryUpdate('application://google-chrome.desktop', {progress: 1}), ':1.5', T + 2000);
-    entries.update(launcherEntryUpdate('application://google-chrome.desktop', {'progress-visible': false}), ':1.5', T + 2100);
+    // A complete value is finished at once (Files keeps 100 % visible for seconds); hiding it changes nothing more.
+    assert.ok(entries.update(launcherEntryUpdate('application://google-chrome.desktop', {progress: 1}), ':1.5', T + 2000));
+    assert.equal(entries.list(T + 2000)[0].state, 'completed');
+    assert.ok(!entries.update(launcherEntryUpdate('application://google-chrome.desktop', {'progress-visible': false}), ':1.5', T + 2100));
     assert.equal(entries.list(T + 2100)[0].state, 'completed');
+    // The next operation starts fresh.
+    entries.update(launcherEntryUpdate('application://google-chrome.desktop', {progress: 0.1, 'progress-visible': true}), ':1.5', T + 3000);
+    assert.equal(entries.list(T + 3000)[0].state, 'running');
+    // Files' real sequence: a stale 1 before it shows, then 0.54 … 1, hidden 3.6 s later.
+    const files = new LauncherEntries(), app = 'application://org.gnome.Nautilus.desktop';
+    for (const [at, props] of [[0, {progress: 1}], [1400, {progress: 0.54, 'progress-visible': true}], [1600, {progress: 0.62}], [1800, {progress: 0.77}], [2200, {progress: 1}], [5800, {'progress-visible': false}]]) {
+        files.update(launcherEntryUpdate(app, props), ':1.9', T + at);
+        if (at === 0) assert.equal(files.list(T).length, 0, 'a value before it is visible shows nothing');
+        if (at === 1800) assert.equal(files.list(T + at)[0].progress, 0.77);
+        if (at === 2200) assert.equal(files.list(T + at)[0].state, 'completed', 'done the moment it reaches 100 %');
+    }
+    assert.equal(files.list(T + 5800)[0].state, 'completed');
     entries.update(launcherEntryUpdate('application://org.gnome.Nautilus.desktop', {progress: 0.3, 'progress-visible': true}), ':1.9', T);
     entries.update(launcherEntryUpdate('application://org.gnome.Nautilus.desktop', {'progress-visible': false}), ':1.9', T + 10);
     assert.ok(!entries.list(T + 10).some(e => e.app === 'org.gnome.Nautilus.desktop'));
@@ -227,6 +240,43 @@ test('progress other apps publish (LauncherEntry): only what they say', () => {
     assert.ok(entries.vanished(':1.7') && !entries.list(T).some(e => e.app === 'transmission.desktop'));
     entries.update(launcherEntryUpdate('application://x.desktop', {progress: 0.1, 'progress-visible': true}), ':1.8', T);
     assert.ok(!entries.list(T + STALE_MS + 1).some(e => e.app === 'x.desktop'));
+});
+
+test('browser downloads from the Downloads folder: names, sizes, done, cancelled, stalled', () => {
+    assert.deepEqual(downloadName('ubuntu.iso.crdownload'), {temp: true, name: 'ubuntu.iso'});
+    assert.deepEqual(downloadName('Unconfirmed 123456.crdownload'), {temp: true, name: null});
+    assert.deepEqual(downloadName('foto.jpg.part'), {temp: true, name: 'foto.jpg'});
+    assert.deepEqual(downloadName('foto.jpg'), {temp: false, name: 'foto.jpg'});
+    assert.equal(downloadName('.part').temp, false);
+    // Chrome: an unconfirmed name, renamed once it is known, growing, renamed to its final name.
+    const d = new Downloads();
+    assert.ok(d.seen('Unconfirmed 42.crdownload', 0, T));
+    assert.equal(d.list(T)[0].name, null);
+    assert.ok(d.renamed('Unconfirmed 42.crdownload', 'ubuntu.iso.crdownload', T + 100));
+    const id = d.list(T + 100)[0].id;
+    assert.ok(d.seen('ubuntu.iso.crdownload', 5e8, T + 1000));
+    assert.deepEqual(d.list(T + 1000).map(e => [e.id, e.name, e.bytes, e.state]), [[id, 'ubuntu.iso', 5e8, 'running']], 'the same download, its bytes so far');
+    assert.ok(!d.seen('ubuntu.iso.crdownload', 5e8, T + 1500), 'the same size again changes nothing');
+    assert.ok(d.renamed('ubuntu.iso.crdownload', 'ubuntu.iso', T + 2000));
+    assert.equal(d.list(T + 2000)[0].state, 'completed', 'renamed to its final name: finished');
+    assert.equal(d.nextWake(T + 2000), DOWNLOAD_DONE_MS);
+    assert.equal(d.list(T + 2000 + DOWNLOAD_DONE_MS).length, 0, 'a finished one leaves after a while');
+    // Firefox: a .part beside an empty placeholder; cancelled by deleting it.
+    assert.ok(!d.seen('bild.png', 0, T), 'final files are not downloads');
+    d.seen('bild.png.part', 1000, T);
+    assert.ok(d.deleted('bild.png.part', T + 10) && d.list(T + 10).length === 0, 'deleted: cancelled, never „done“');
+    // A leftover from before (an interrupted download): remembered, not shown, until it grows.
+    const left = new Downloads();
+    assert.ok(!left.seen('alt.iso.crdownload', 21647876, T, {initial: true}));
+    assert.equal(left.list(T).length, 0);
+    assert.ok(!left.renamed('alt.iso.crdownload', 'alt.iso', T + 5), 'a leftover renamed is not reported as a finished download');
+    left.seen('neu.zip.crdownload', 10, T, {initial: true});
+    assert.ok(left.seen('neu.zip.crdownload', 20, T + 50) && left.list(T + 50).length === 1, 'a leftover that grows again is shown');
+    // Stalled (paused): it goes quiet after a while and comes back when it grows.
+    assert.equal(left.nextWake(T + 50), DOWNLOAD_STALE_MS);
+    assert.equal(left.list(T + 50 + DOWNLOAD_STALE_MS).length, 0);
+    left.seen('neu.zip.crdownload', 30, T + 60 + DOWNLOAD_STALE_MS);
+    assert.equal(left.list(T + 60 + DOWNLOAD_STALE_MS).length, 1);
 });
 
 test('agents: parallel sessions, late events, crashes and the history of ended sessions', () => {

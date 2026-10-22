@@ -4,7 +4,8 @@ import {ActivityStore, Arbiter, activity, parseReport, groupEntries, sanitizeOrd
     COMPLETED_MS, MIN_DISPLAY_MS} from './activityModel.js';
 import {PROVIDERS, statusText} from './agentModel.js';
 import {actionText} from './operations.js';
-import {_, fmt, formatPercent, onLanguageChanged} from '../i18n/core.js';
+import {showInFolder, launchUri} from '../launcher/providers.js';
+import {_, fmt, formatPercent, formatBytes, onLanguageChanged} from '../i18n/core.js';
 
 // Types that get a small indicator of their own beside the notch while
 // another activity has the notch (agents have theirs already, music and the
@@ -35,11 +36,11 @@ export class Activities extends Emitter {
         this.collectors = {
             agents: () => this.agentActivities(), legacy: () => this.legacyActivities(), operations: () => this.operationActivities(),
             airdrop: () => this.airdropActivities(), media: () => this.mediaActivities(), recording: () => this.recordingActivities(),
-            timers: () => this.timerActivities(), progress: () => this.progressActivities(), accessory: () => this.accessoryActivities(),
+            timers: () => this.timerActivities(), progress: () => this.progressActivities(), downloads: () => this.downloadActivities(), accessory: () => this.accessoryActivities(),
         };
         const watch = (service, source) => { if (service?.subscribe) this.life.cleanups.push(service.subscribe(() => this.queue(source))); };
         watch(extension.agents, 'agents'); watch(extension.productivity, 'legacy'); watch(extension.operations, 'operations'); watch(extension.airdrop, 'airdrop');
-        watch(extension.media, 'media'); watch(extension.timers, 'timers'); watch(extension.launcherEntry, 'progress'); watch(extension.airpods, 'accessory');
+        watch(extension.media, 'media'); watch(extension.timers, 'timers'); watch(extension.launcherEntry, 'progress'); watch(extension.downloads, 'downloads'); watch(extension.airpods, 'accessory');
         try { this.life.connect(Main.screenshotUI, 'notify::screencast-in-progress', () => this.queue('recording')); } catch (e) { console.warn(`Notchy activities: no screen recording state (${e.message})`); }
         this.life.connect(settings, 'changed', (_s, key) => {
             if (key.startsWith('activities-')) { if (key === 'activities-enabled') this.arbiter.reset(); this.refresh(); }
@@ -150,6 +151,12 @@ export class Activities extends Emitter {
             Main.screenshotUI.stopScreencast?.().catch?.(e => console.warn(`Notchy: ${e.message}`));
             return '';
         case 'media': ext.media?.call('PlayPause'); return '';
+        case 'downloads': {
+            const entry = ext.downloads?.list().find(e => e.id === item.download), file = entry ? ext.downloads.file(entry) : null;
+            if (!file?.query_exists(null)) return _('The file is no longer there');
+            if (action === 'open') launchUri(file.get_uri()); else showInFolder(file.get_uri());
+            return '';
+        }
         case 'agents': {
             const session = ext.agents?.registry.get(item.provider, item.session), window = session ? ext.agents.window(session) : null;
             if (!window) return _('The agent’s window cannot be named for sure');
@@ -222,6 +229,13 @@ export class Activities extends Emitter {
             return activity({id: `entry:${entry.app}`, type: 'transfer', app: entry.app, name: app?.get_name() ?? entry.app.replace(/\.desktop$/, ''),
                 description: _('Progress reported by the app'), state: entry.state, progress: entry.progress, started: entry.started, icon: 'folder-download-symbolic'});
         });
+    }
+    // Browser downloads (src/services/downloads.js): the bytes so far, no percentage —
+    // no browser tells the total.
+    downloadActivities() {
+        return (this.extension.downloads?.list() ?? []).map(entry => activity({id: `download:${entry.id}`, type: 'transfer', download: entry.id, name: entry.name ?? _('Download'),
+            description: entry.state === 'running' ? formatBytes(entry.bytes) : '', state: entry.state, started: entry.started, icon: 'folder-download-symbolic',
+            actions: entry.state === 'completed' ? [{id: 'open', label: _('Open')}, {id: 'show', label: _('Show in Folder')}] : []}));
     }
     accessoryActivities() {
         const state = this.settings.get_boolean('airpods-enabled') ? this.extension.airpods?.state : null;

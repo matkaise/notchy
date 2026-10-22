@@ -99,7 +99,8 @@ export function compactParts(entry, {agents = null, animate = true, now = Date.n
     const progress = entry.count === 1 ? progressOf(lead, now) : entry.progress;
     if (progress !== null) return {left: [glyph('kind', '', icon)], right: [track(progress), text('value', 'value', formatPercent(Math.round(progress * 100)))]};
     // Running without a measured progress: its name, never a made-up bar.
-    const words = entry.count > 1 ? title : lead.description && lead.type === 'custom' ? `${title} · ${lead.description}` : title;
+    // A download shows its size so far beside its name.
+    const words = entry.count > 1 ? title : lead.description && (lead.type === 'custom' || lead.download) ? `${title} · ${lead.description}` : title;
     return {left: [glyph('kind', '', icon)], right: [text('name', '', words)]};
 }
 // Whether the notch's entry needs a second hand (a timer, a recording).
