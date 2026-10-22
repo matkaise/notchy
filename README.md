@@ -8,7 +8,7 @@ The user interface speaks **German and English** and follows the GNOME/system la
 
 ## Requirements
 
-- GNOME Shell **50** on Wayland. Notchy integrates into the top bar of the primary monitor.
+- GNOME Shell **48, 49, 50 or 51** on Wayland (GNOME 47 is prepared but not yet declared), from one package ([docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) lists what differs between releases and how each was tested). Notchy integrates into the top bar of the primary monitor.
 - GJS, GTK 4.10 or newer, libadwaita, Python 3 and PyGObject.
 - PipeWire 1.x for AirPlay output (uses PipeWire's `raop-discover` module and Avahi).
 - Optional, for AirDrop: a MediaTek MT7921/MT7922 Wi-Fi card, Bluetooth, and the [airdrop-mt7921](https://github.com/jedbillyb/airdrop-mt7921) backend (see [AirDrop](#airdrop)).
@@ -175,6 +175,7 @@ Translations: `python3 scripts/i18n.py update` extracts the strings (`_()`, `N_(
 bash scripts/check.sh
 bash scripts/pack.sh
 bash scripts/test-shell.sh
+bash scripts/test-matrix.sh   # every supported GNOME release, in containers
 ```
 
 `check.sh` checks JavaScript syntax, the GSettings schema, Python syntax and the translation catalogs (complete, current, placeholders), compiles them, and runs the domain, launcher (ranking, units, quicklinks), system command configuration, translation and locale formatting, AirPods battery cache, agent session and side-layout tests (Node) and the file-operation, file-search, AAP, agent hook adapter and setup, context-menu, translation, cover, spectrum and MCP tests (Python). `test-shell.sh` starts GNOME Shell 50 headless with its own D-Bus and temporary XDG directories; log and screenshots end up in `tests/output`. Details: [docs/TESTING.md](docs/TESTING.md); current state: [docs/VALIDATION_STATE.md](docs/VALIDATION_STATE.md).

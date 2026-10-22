@@ -3,8 +3,9 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import Pango from 'gi://Pango';
+import {boxOrientation} from '../compat/index.js';
 
-export const box = (vertical = false, props = {}) => new St.BoxLayout({orientation: vertical ? Clutter.Orientation.VERTICAL : Clutter.Orientation.HORIZONTAL, ...props});
+export const box = (vertical = false, props = {}) => new St.BoxLayout({...boxOrientation(vertical), ...props});
 export function label(text, cls = '', props = {}) {
     const actor = new St.Label({text: String(text), style_class: cls, ...props});
     actor.clutter_text.ellipsize = Pango.EllipsizeMode.END; return actor;

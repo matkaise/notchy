@@ -8,6 +8,7 @@ import {ANC_ICON, ancName, airpodsParts, productCell, partReading} from './views
 import {settingsPanel} from '../launcher/providers.js';
 import {_, fmt, formatPercent} from '../i18n/core.js';
 import {Lifetime} from '../lifecycle.js';
+import {onSwitchToggled} from '../compat/index.js';
 
 // AirPods keep their place right of the notch and stay visible before agents.
 const PRIORITY = 6;
@@ -132,18 +133,18 @@ export class AirPodsBubble {
         this.talk = null;
         if (state.conversation !== null) {
             this.talk = new PopupMenu.PopupSwitchMenuItem(_('Conversation Awareness'), Boolean(state.conversation));
-            this.talk.connect('toggled', (_i, on) => airpods.setConversationAwareness(on).catch(failed));
+            onSwitchToggled(this.talk, on => airpods.setConversationAwareness(on).catch(failed));
             menu.addMenuItem(this.talk);
         }
         // The ear pause: the daemon's setting with airpods-helper, Notchy's own otherwise.
         this.pause = null;
         if (pause === 'helper') {
             this.pause = new PopupMenu.PopupSwitchMenuItem(_('Pause When Taken Out'), Boolean(state.pauseOnRemoval));
-            this.pause.connect('toggled', (_i, on) => airpods.setPauseOnRemoval(on).catch(failed));
+            onSwitchToggled(this.pause, on => airpods.setPauseOnRemoval(on).catch(failed));
             menu.addMenuItem(this.pause);
         } else if (pause === 'aap') {
             this.pause = new PopupMenu.PopupSwitchMenuItem(_('Pause When Taken Out'), this.settings.get_boolean('airpods-ear-pause'));
-            this.pause.connect('toggled', (_i, on) => this.settings.set_boolean('airpods-ear-pause', on));
+            onSwitchToggled(this.pause, on => this.settings.set_boolean('airpods-ear-pause', on));
             menu.addMenuItem(this.pause);
         }
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());

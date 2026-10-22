@@ -7,7 +7,16 @@ import re
 import signal
 import gi
 gi.require_version('Gst', '1.0')
-from gi.repository import Gst, GLib, GLibUnix
+from gi.repository import Gst, GLib
+
+# Unix signal sources: GLibUnix.signal_add since GLib 2.84 (GNOME 48+, where
+# GLib.unix_signal_add is deprecated); older GLib only has the latter.
+try:
+    gi.require_version('GLibUnix', '2.0')
+    from gi.repository import GLibUnix
+    unix_signal_add = GLibUnix.signal_add
+except (ValueError, ImportError, AttributeError):
+    unix_signal_add = GLib.unix_signal_add
 
 
 def levels(magnitudes):
@@ -76,7 +85,7 @@ def run(device=None, test=False, frames=0):
             loop.quit()
     bus = pipeline.get_bus(); bus.add_signal_watch(); bus.connect('message', message)
     for signum in (signal.SIGTERM, signal.SIGINT):
-        GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, signum, lambda: loop.quit() or GLib.SOURCE_REMOVE)
+        unix_signal_add(GLib.PRIORITY_DEFAULT, signum, lambda: loop.quit() or GLib.SOURCE_REMOVE)
     pipeline.set_state(Gst.State.PLAYING)
     try:
         loop.run()

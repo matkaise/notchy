@@ -2,8 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 version="$(gnome-shell --version)"
-if [[ "$version" != 'GNOME Shell 50.'* && "$version" != 'GNOME Shell 50' ]]; then
-    printf 'Notchy currently targets GNOME Shell 50. Found: %s\n' "$version" >&2
+# The releases Notchy supports are the ones metadata.json declares
+# (docs/COMPATIBILITY.md); GNOME itself refuses any other.
+major="$(sed -E 's/[^0-9]*([0-9]+).*/\1/' <<<"$version")"
+supported="$(python3 -c 'import json; print(" ".join(json.load(open("metadata.json"))["shell-version"]))')"
+if [[ " $supported " != *" $major "* ]]; then
+    printf 'Notchy supports GNOME Shell %s. Found: %s\n' "$supported" "$version" >&2
     exit 1
 fi
 bash scripts/pack.sh

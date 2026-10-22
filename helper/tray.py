@@ -629,7 +629,9 @@ class Tray(Gtk.Application):
             try:
                 pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(thumb, 256, 256, True)
                 picture = Gtk.Picture(paintable=Gdk.Texture.new_for_pixbuf(pixbuf), content_fit=Gtk.ContentFit.COVER)
-            except GLib.Error:
+            # An unreadable image raises GLib.Error; the gdk-pixbuf of GNOME 48's
+            # Ubuntu returns NULL instead, which PyGObject turns into TypeError.
+            except (GLib.Error, TypeError):
                 picture = None
         if picture:
             card.set_child(picture)

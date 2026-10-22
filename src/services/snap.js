@@ -6,6 +6,7 @@ import {TilePreview} from 'resource:///org/gnome/shell/ui/windowManager.js';
 import {Lifetime} from '../lifecycle.js';
 import {_} from '../i18n/core.js';
 import {zoneRect} from '../model.js';
+import {isMaximized, maximize, unmaximize} from '../compat/index.js';
 
 // Snap layouts in the notch: dragging a window up to the clock opens the
 // island with a row of layouts; releasing over a zone places the window
@@ -71,8 +72,8 @@ export class Snap {
     place(window, zone) {
         if (this.life.closed || !window.get_compositor_private()) return;
         const island = this.island, monitor = island?.monitor.index ?? window.get_monitor();
-        if (zone.every((v, i) => v === [0, 0, 1, 1][i])) { window.maximize(); return; }
-        if (window.is_maximized()) window.unmaximize();
+        if (zone.every((v, i) => v === [0, 0, 1, 1][i])) { maximize(window); return; }
+        if (isMaximized(window)) unmaximize(window);
         const rect = zoneRect(Main.layoutManager.getWorkAreaForMonitor(monitor), zone);
         window.move_resize_frame(true, rect.x, rect.y, rect.width, rect.height);
         island?.toast('view-grid-symbolic', _('Window arranged'));

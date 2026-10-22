@@ -408,7 +408,11 @@ export class Island {
     }
     centeredX(width) {
         let center = this.monitor.x + this.monitor.width / 2;
-        if (this.panelButton?.mapped) { const [x] = this.panelButton.get_transformed_position(); center = x + this.panelButton.width / 2; }
+        // While the bar is first laid out (GNOME 48 enabling Notchy at login)
+        // its transformed position is not known yet (NaN): the monitor's
+        // centre stands in until the allocation arrives.
+        if (this.panelButton?.mapped) { const [x] = this.panelButton.get_transformed_position(), mid = x + this.panelButton.width / 2; if (Number.isFinite(mid)) center = mid; }
+        if (!Number.isFinite(width)) width = 0;
         return Math.round(Math.max(this.monitor.x + 16, Math.min(this.monitor.x + this.monitor.width - width - 16, center - width / 2)));
     }
     attachPanelHeader() {

@@ -12,6 +12,7 @@ import {EMOJI, emojiCategoryLabel, emojiCategoryTerms} from './emoji.js';
 import {parseTimerQuery} from '../services/timerModel.js';
 import {formatClock} from '../services/activityModel.js';
 import {_, fmt} from '../i18n/core.js';
+import {isMaximized, maximize, unmaximize} from '../compat/index.js';
 
 // Thunderstorm's sources. Each provider turns a query into results:
 //   {id, kind, title, subtitle?, icon | gicon, score, bonus?, actions: [{id, title, icon, run, shortcut?}], confirm?, revive?}
@@ -275,17 +276,17 @@ export class WindowProvider {
         const manager = global.workspace_manager, time = () => global.get_current_time();
         const area = () => Main.layoutManager.getWorkAreaForMonitor(window.get_monitor());
         const place = zone => () => {
-            if (window.is_maximized()) window.unmaximize();
+            if (isMaximized(window)) unmaximize(window);
             const rect = zoneRect(area(), zone); window.move_resize_frame(true, rect.x, rect.y, rect.width, rect.height); window.activate(time());
         };
         const halves = SNAP_LAYOUTS[0].zones, thirds = SNAP_LAYOUTS[2].zones;
         const neighbour = direction => manager.get_active_workspace().get_neighbor(direction);
         return {
-            'window.maximize': () => { window.maximize(); window.activate(time()); },
-            'window.restore': () => { window.unmaximize(); window.activate(time()); },
+            'window.maximize': () => { maximize(window); window.activate(time()); },
+            'window.restore': () => { unmaximize(window); window.activate(time()); },
             'window.left': place(halves[0]), 'window.right': place(halves[1]), 'window.centerThird': place(thirds[1]),
             'window.center': () => {
-                const a = area(), frame = window.get_frame_rect(); if (window.is_maximized()) window.unmaximize();
+                const a = area(), frame = window.get_frame_rect(); if (isMaximized(window)) unmaximize(window);
                 window.move_frame(true, Math.round(a.x + (a.width - frame.width) / 2), Math.round(a.y + (a.height - frame.height) / 2)); window.activate(time());
             },
             'window.minimize': () => window.minimize(),

@@ -7,6 +7,7 @@ import {Lifetime} from '../lifecycle.js';
 import {planSides} from './sideLayout.js';
 import {box, label} from './widgets.js';
 import {_} from '../i18n/core.js';
+import {panelBoxes} from '../compat/index.js';
 
 // Gap between the indicators and GNOME's other panel items.
 const MARGIN = 16;
@@ -28,11 +29,11 @@ export class SideIndicators {
         this.rightRow = box(false, {style_class: 'notchy-side-row', x_expand: true, x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.CENTER});
         this.left = new St.Bin({style_class: 'notchy-side notchy-side-left', child: this.leftRow, y_expand: true, visible: false});
         this.right = new St.Bin({style_class: 'notchy-side notchy-side-right', child: this.rightRow, y_expand: true, visible: false});
-        const center = Main.panel._centerBox, notchy = island.panelButton.container;
+        const boxes = panelBoxes(), center = boxes.center, notchy = island.panelButton.container;
         center.insert_child_below(this.left, notchy); center.insert_child_above(this.right, notchy);
         this.groups = {left: this.group('left'), right: this.group('right')};
         const relayout = () => this.queue();
-        for (const [actor, signals] of [[Main.panel._leftBox, ['notify::width']], [Main.panel._rightBox, ['notify::width']], [Main.panel, ['notify::width', 'notify::height']],
+        for (const [actor, signals] of [[boxes.left, ['notify::width']], [boxes.right, ['notify::width']], [Main.panel, ['notify::width', 'notify::height']],
             [island.actor, ['notify::visible']], [Main.overview, ['showing', 'hidden']], [island.panelSurface, ['notify::width']]]) {
             for (const signal of signals) this.life.connect(actor, signal, relayout);
         }
@@ -83,7 +84,7 @@ export class SideIndicators {
     // capsule, less GNOME's left and right boxes and anything else in the
     // centre box, less a margin.
     get capacity() {
-        const panel = Main.panel, center = panel._centerBox;
+        const panel = Main.panel, {left: leftBox, center, right: rightBox} = panelBoxes();
         const ours = new Set([this.left, this.right, this.island.panelButton.container]);
         const others = center.get_children().filter(child => !ours.has(child) && child.visible).reduce((sum, child) => sum + child.get_preferred_width(-1)[1], 0);
         const capsule = this.island.panelAttached ? this.island.panelPlaceholder?.width ?? 0 : this.island.panelSurface.get_preferred_width(-1)[1];
@@ -93,8 +94,8 @@ export class SideIndicators {
         const area = monitor ? Main.layoutManager.getWorkAreaForMonitor(monitor.index) : null;
         const offset = monitor && area ? 2 * (area.x - monitor.x) + area.width - monitor.width : 0;
         const middle = (panel.width + offset) / 2, half = (capsule + others) / 2;
-        const left = middle - half - panel._leftBox.get_preferred_width(-1)[1];
-        const right = panel.width - (middle + half) - panel._rightBox.get_preferred_width(-1)[1];
+        const left = middle - half - leftBox.get_preferred_width(-1)[1];
+        const right = panel.width - (middle + half) - rightBox.get_preferred_width(-1)[1];
         return Math.max(0, Math.floor(Math.min(left, right) - MARGIN - PAD));
     }
     get shown() { return !this.island.actor.visible && !this.island.life.closed; }

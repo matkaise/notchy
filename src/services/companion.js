@@ -7,6 +7,7 @@ import {Emitter, Lifetime} from '../lifecycle.js';
 import {AGENT_DBUS} from './agents.js';
 import {helperLauncher} from '../i18n/gnome.js';
 import {_, fmt} from '../i18n/core.js';
+import {unmaximize} from '../compat/index.js';
 
 export const BUS_NAME = 'org.gnome.Shell.Extensions.Notchy';
 export const BUS_PATH = '/org/gnome/Shell/Extensions/Notchy';
@@ -158,7 +159,7 @@ export class Companion extends Emitter {
         }
         if (this.life.closed || window.get_title() !== 'Notchy File Tray' || (window.get_gtk_application_id() !== 'org.notchy.FileTray' && window.get_wm_class() !== 'org.notchy.FileTray') || !this.trayPosition) return;
         const {x, y, width, height} = this.trayPosition;
-        window.unmaximize(); window.make_above(); window.stick();
+        unmaximize(window); window.make_above(); window.stick();
         window.move_resize_frame(false, Math.round(x), Math.round(y), width, height);
     }
     // A popup of the native Regal (its context menu, a tooltip) is its own

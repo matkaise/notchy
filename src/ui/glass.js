@@ -1,9 +1,8 @@
 import Clutter from 'gi://Clutter';
-import Cogl from 'gi://Cogl';
-import GObject from 'gi://GObject';
 import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Lifetime} from '../lifecycle.js';
+import {shaderEffect} from '../compat/index.js';
 
 // Liquid glass. GNOME's background blur reads the framebuffer it paints into,
 // so inside any offscreen effect (rounding, shading) it only sees emptiness.
@@ -52,14 +51,8 @@ float glow = smoothstep(-16.0, 0.0, d);
 col += vec3(rim * glow * (0.03 + 0.05 * light));
 cogl_color_out = vec4(col * alpha, alpha);`;
 
-export const LiquidGlassEffect = GObject.registerClass(class NotchyLiquidGlassEffect extends Shell.GLSLEffect {
-    _init() {
-        super._init();
-        this.locations = Object.fromEntries(['size', 'pad', 'radii', 'tint', 'refraction', 'rim', 'saturation'].map(name => [name, this.get_uniform_location(name)]));
-    }
-    vfunc_build_pipeline() { this.add_glsl_snippet(Cogl.SnippetHook.FRAGMENT, DECLARATIONS, CODE, true); }
-    set(name, values) { this.set_uniform_float(this.locations[name], values.length, values); }
-});
+// Shell.GLSLEffect up to GNOME 50, Clutter.ShaderEffect from 51 (src/compat).
+export const LiquidGlassEffect = shaderEffect('NotchyLiquidGlassEffect', DECLARATIONS, CODE, ['size', 'pad', 'radii', 'tint', 'refraction', 'rim', 'saturation']);
 
 export const GLASS = {
     // Tints are non-premultiplied rgb + amount mixed over the blurred backdrop.
@@ -94,8 +87,8 @@ export class GlassLayer {
     }
     style(name, radii) {
         const glass = GLASS[name] ?? GLASS.dynamic;
-        this.glass.set('tint', glass.tint); this.glass.set('refraction', [glass.refraction]); this.glass.set('rim', [glass.rim]);
-        this.glass.set('saturation', [glass.saturation]); this.glass.set('radii', radii); this.glass.set('pad', [this.pad]);
+        this.glass.setUniform('tint', glass.tint); this.glass.setUniform('refraction', [glass.refraction]); this.glass.setUniform('rim', [glass.rim]);
+        this.glass.setUniform('saturation', [glass.saturation]); this.glass.setUniform('radii', radii); this.glass.setUniform('pad', [this.pad]);
         this.blur.radius = glass.blur;
     }
     rebuild() {
@@ -126,7 +119,7 @@ export class GlassLayer {
         for (const [clone, child] of this.clones) this.positionClone(clone, child);
         const [panelX, panelY] = Main.layoutManager.panelBox.get_transformed_position();
         this.panel.set_position(Math.round(panelX) - stageX, Math.round(panelY) - stageY);
-        this.glass.set('size', [w, h]);
+        this.glass.setUniform('size', [w, h]);
     }
     destroy() { this.cloneLife?.dispose(); this.life.dispose(); this.actor.destroy(); }
 }

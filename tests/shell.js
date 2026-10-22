@@ -21,6 +21,32 @@ function regalTile(regal, i) {
 function assert(condition, message) { if (!condition) throw Error(message); print(`PASS: ${message}`); }
 function styled(actor, cls) { return [actor, ...actor.get_children().flatMap(child => styled(child, cls))].filter(a => a.has_style_class_name?.(cls)); }
 function buttons(actor, name) { return [actor, ...actor.get_children().flatMap(child => buttons(child, name))].filter(a => a instanceof St.Button && a.accessible_name === name); }
+// Clutter's seat for virtual input: through the stage's context, as
+// clutter_get_default_backend() is gone in GNOME 51 (src/compat/clutter.js).
+const seat = () => global.stage.get_context().get_backend().get_default_seat();
+// Thunderstorm's files (NOTCHY_FALLBACK_ROOTS points at the folder). Made
+// before the first search: the helper keeps its simple-search list for five
+// minutes, so a list read while the folder was still missing would hide them.
+function thunderstormFixtures(path) {
+    const root = `${path}/thunderstorm`; GLib.mkdir_with_parents(`${root}/Berichte`, 0o700); GLib.mkdir_with_parents(`${root}/.geheim`, 0o700);
+    const files = ['Bericht Quartal.pdf', 'Notizen zum bericht.txt', '.geheim/bericht privat.txt'].map(name => `${root}/${name}`);
+    for (const file of files) GLib.file_set_contents(file, 'fixture');
+    // 30 files named after an installed app, to rank against the app itself.
+    const chromeFiles = Array.from({length: 30}, (_, i) => `${root}/${i === 0 ? 'chrome' : i % 2 ? `chrome export ${i}.json` : `Chrome Lesezeichen ${i}.html`}`);
+    for (const file of chromeFiles) GLib.file_set_contents(file, 'fixture');
+    return {root, files, chromeFiles};
+}
+// A new virtual pointer's first absolute motion sometimes lands on only one
+// axis (seen on GNOME 50 and 51); move again until it is where it was sent.
+async function pointTo(pointer, x, y) {
+    for (let i = 0; i < 5; i++) {
+        pointer.notify_absolute_motion(GLib.get_monotonic_time(), x, y); await Scripting.sleep(60);
+        const [px, py] = global.get_pointer(); if (Math.abs(px - x) <= 1 && Math.abs(py - y) <= 1) return;
+    }
+}
+// The actor with the keyboard focus, or null. Mutter 47 answers the stage
+// itself when nothing has it; from 48 on, null.
+function keyFocus() { const focus = global.stage.get_key_focus(); return focus === global.stage ? null : focus; }
 const here = name => Gio.File.new_for_uri(import.meta.url).get_parent().get_child(name).get_path();
 const clipboardText = () => new Promise(resolve => St.Clipboard.get_default().get_text(St.ClipboardType.CLIPBOARD, (_c, text) => resolve(text)));
 
@@ -59,9 +85,14 @@ export async function run() {
     assert(island.panelSurface.get_children()[1] === island.clockContainer && island.clockContainer === Main.panel.statusArea.dateMenu.container, 'GNOME\'s live clock is the centre of the capsule');
     assert(Main.panel.statusArea.dateMenu._clockDisplay.text.length > 0, 'integrated clock retains live GNOME date/time formatting');
     const path = GLib.getenv('NOTCHY_TEST_OUTPUT') || '/tmp/notchy-test'; GLib.mkdir_with_parents(path, 0o700);
+    thunderstormFixtures(path);
+    // Virtual pointers start in the top-left corner; their first motion can
+    // catch on the hot corner's pressure barrier there and open the overview.
+    // The suite's own settings backend keeps this from the real desktop.
+    new Gio.Settings({schema_id: 'org.gnome.desktop.interface'}).set_boolean('enable-hot-corners', false);
     async function screenshot(name) { const shooter = new Shell.Screenshot(); const stream = Gio.File.new_for_path(`${path}/${name}.png`).replace(null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null); await shooter.screenshot(false, stream); stream.close(null); }
     await screenshot('collapsed');
-    const keyboard = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+    const keyboard = seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
     const key = async keyval => { keyboard.notify_keyval(GLib.get_monotonic_time(), keyval, Clutter.KeyState.PRESSED); keyboard.notify_keyval(GLib.get_monotonic_time(), keyval, Clutter.KeyState.RELEASED); await Scripting.sleep(120); };
     if (GLib.getenv('NOTCHY_TEST_CORNERS_ONLY')) {
         for (const name of ['corner-one.txt', 'corner-two.txt']) {
@@ -194,7 +225,7 @@ export async function run() {
     assert(styled(island.body, 'notchy-result-title')[0]?.text === '= 14', 'search computes arithmetic first'); await screenshot('search');
     assert(Math.abs(styled(island.body, 'notchy-result')[0].width - (620 - 20)) <= 2, 'results span the search field');
     await key(Clutter.KEY_Return); await Scripting.sleep(300);
-    assert(!island.expanded && await clipboardText() === '14', 'Enter copies the result and closes the search');
+    { const copied = await clipboardText(); assert(!island.expanded && copied === '14', `Enter copies the result and closes the search (open: ${island.expanded}, clipboard: ${JSON.stringify(copied)})`); }
     island.toggle('search'); await Scripting.sleep(400);
     island.views.focusEntry.set_text('einstellungen'); await Scripting.sleep(400);
     island.views.focusEntry.set_text('xyz-no-match'); await Scripting.sleep(400);
@@ -220,7 +251,8 @@ export async function run() {
 
     // Volume and brightness live inline in the capsule.
     await Scripting.sleep(2000);
-    Main.osdWindowManager.showOne(island.monitor.index, new Gio.ThemedIcon({name: 'audio-volume-high-symbolic'}), 'Lautsprecher', 0.42, 1); await Scripting.sleep(200);
+    // showOne() since GNOME 49; until 48 show() took the monitor first.
+    (Main.osdWindowManager.showOne ?? Main.osdWindowManager.show).call(Main.osdWindowManager, island.monitor.index, new Gio.ThemedIcon({name: 'audio-volume-high-symbolic'}), 'Lautsprecher', 0.42, 1); await Scripting.sleep(200);
     assert(island.hudState?.level === 0.42 && island.panelSurface.has_style_class_name('notchy-hud') && !Main.osdWindowManager._osdWindows[island.monitor.index].visible, 'volume appears in the capsule instead of GNOME\'s OSD');
     assert(styled(island.rightRow, 'notchy-hud-value')[0]?.text === '42', 'the capsule shows the level'); await screenshot('hud-volume');
     await Scripting.sleep(1500); assert(!island.hudState && !island.panelSurface.has_style_class_name('notchy-hud'), 'volume activity folds back by itself');
@@ -234,21 +266,21 @@ export async function run() {
     const sink = {volume: 500, is_muted: false, push_volume() {}, change_is_muted(muted) { this.is_muted = muted; }};
     const realSystem = island.system;
     island.system = Object.assign(Object.create(realSystem), {mixer: {get_default_sink: () => sink, get_vol_max_norm: () => 1000}});
-    const pointer = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+    const pointer = seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
     try {
         const [sx, sy] = island.leftSlot.get_transformed_position();
         ext.settings.set_boolean('hover-open', false);
-        pointer.notify_absolute_motion(GLib.get_monotonic_time(), sx + island.leftSlot.width / 2, sy + 10); await Scripting.sleep(150);
+        await pointTo(pointer, sx + island.leftSlot.width / 2, sy + 10); await Scripting.sleep(150);
         pointer.notify_discrete_scroll(GLib.get_monotonic_time(), Clutter.ScrollDirection.UP, Clutter.ScrollSource.WHEEL); await Scripting.sleep(200);
-        assert(sink.volume === 540 && island.hudState?.level === 0.54 && !island.expanded, 'scrolling over the closed island raises the volume and shows it inline');
-        pointer.notify_absolute_motion(GLib.get_monotonic_time(), 20, 600); await Scripting.sleep(150);
+        assert(sink.volume === 540 && island.hudState?.level === 0.54 && !island.expanded, `scrolling over the closed island raises the volume and shows it inline (volume ${sink.volume}, inline ${island.hudState?.level}, open ${island.expanded}, pointer ${global.get_pointer().slice(0, 2)} over ${global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, ...global.get_pointer().slice(0, 2))})`);
+        await pointTo(pointer, 20, 600); await Scripting.sleep(150);
     } finally { pointer.run_dispose(); island.system = realSystem; ext.settings.set_boolean('hover-open', true); island.clearHud(); }
 
     // Notifications grow into a banner below the clock.
     const systemSource = MessageTray.getSystemSource();
     const note = new MessageTray.Notification({source: systemSource, title: 'Build fertig', body: 'Alle Tests bestanden. Das Paket liegt unter dist/.'});
     note.addAction('Anzeigen', () => {}); systemSource.addNotification(note); await Scripting.sleep(500);
-    assert(island.peeking && island.peekKind === 'notification' && note.acknowledged && Main.messageTray._notification !== note, 'notification appears as a Notchy banner and GNOME skips its own');
+    assert(island.peeking && island.peekKind === 'notification' && note.acknowledged && Main.messageTray._notification !== note, `notification appears as a Notchy banner and GNOME skips its own (peeking ${island.peeking}, kind ${island.peekKind}, acknowledged ${note.acknowledged}, GNOME banner ${Main.messageTray._notification === note}, can peek ${island.canPeek} [drop ${island.dropActive}, overview ${Main.overview.visible}, calendar ${island.dateMenu.menu.isOpen}, fullscreen ${global.display.get_monitor_in_fullscreen(island.monitor.index)}, closed ${island.life.closed}], expanded ${island.expanded}, hovered ${island.hovered})`);
     await screenshot('notification-banner');
     island.open('calendar'); await Scripting.sleep(500);
     assert(styled(island.body, 'notchy-cal-note-title').some(a => a.text === 'Build fertig') && styled(island.body, 'notchy-cal-note-app').length >= 1, 'the Kalender tab lists GNOME\'s notifications grouped per app');
@@ -393,8 +425,8 @@ function paneShownOnGlass(island, windowActor) {
 }
 async function interactionRegressions(ext, path, screenshot) {
     const island = ext.islands[0];
-    const pointer = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
-    const keyboard = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+    const pointer = seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+    const keyboard = seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
     const move = async (x, y) => { pointer.notify_absolute_motion(GLib.get_monotonic_time(), x, y); await Scripting.sleep(90); };
     let pointerPressed = false;
     const press = async state => { const pressed = state === Clutter.ButtonState.PRESSED; if (pressed === pointerPressed) return; pointerPressed = pressed; pointer.notify_button(GLib.get_monotonic_time(), 1, state); await Scripting.sleep(90); };
@@ -438,7 +470,7 @@ async function interactionRegressions(ext, path, screenshot) {
         island.open('clipboard'); await Scripting.sleep(350);
         assert(!island.pinned && island.views.focusEntry.clutter_text.has_key_focus(), 'clipboard autofocus does not pin the island');
         await move(island.actor.x + 40, island.actor.y + 10); await move(20, 600); await Scripting.sleep(700);
-        assert(!island.expanded && !global.stage.get_key_focus(), 'the island collapses on pointer leave and releases hidden entry focus');
+        assert(!island.expanded && !keyFocus(), `the island collapses on pointer leave and releases hidden entry focus (open ${island.expanded}, focus ${keyFocus()}, pointer ${global.get_pointer().slice(0, 2)}, hovered ${island.hovered}, pinned ${island.pinned})`);
         island.open('clipboard'); await Scripting.sleep(350);
         await move(20, 600); await press(Clutter.ButtonState.PRESSED); await press(Clutter.ButtonState.RELEASED);
         assert(!island.expanded, 'outside click dismisses the island');
@@ -676,10 +708,21 @@ async function interactionRegressions(ext, path, screenshot) {
                 await Scripting.sleep(600);
                 const window = global.get_window_actors().map(a => a.meta_window).find(w => w.get_title() === 'Notchy Drop Source');
                 assert(window && window.get_client_type() === (backend === 'wayland' ? 0 : 1), `${name}: ${backend} file source mapped`);
-                window.move_resize_frame(false, 20, 420, 300, 150); await Scripting.sleep(250);
-                await move(80, 470); await press(Clutter.ButtonState.PRESSED);
-                await move(120, 450); await move(180, 390); await Scripting.sleep(200);
-                assert(ext.drops.dragging && ext.drops.backend === backend, `${name}: real ${backend} file drag detected with matching receiver`);
+                // A window just mapped may take a few frames to accept the move (GNOME 47).
+                for (let i = 0; i < 20; i++) {
+                    window.move_resize_frame(false, 20, 420, 300, 150); await Scripting.sleep(i ? 100 : 250);
+                    const frame = window.get_frame_rect(); if (frame.x === 20 && frame.y === 420 && frame.width === 300 && frame.height === 150) break;
+                }
+                await pointTo(pointer, 80, 470); await move(80, 470);
+                const seen = [], under = String(global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, 80, 470)), focused = global.display.focus_window?.get_title();
+                const seenId = global.display.get_selection().connect('owner-changed', (_s, type, owner) => seen.push(`${type}:${owner ? owner.get_mimetypes().join('|') : 'none'}`));
+                await press(Clutter.ButtonState.PRESSED);
+                // Several small steps, as a hand makes them: GTK 4.16 (GNOME 47) starts
+                // a drag only after a few motion events past its threshold.
+                for (const [x, y] of [[90, 465], [100, 460], [120, 450], [150, 420], [180, 390]]) await move(x, y);
+                await Scripting.sleep(200);
+                assert(ext.drops.dragging && ext.drops.backend === backend, `${name}: real ${backend} file drag detected with matching receiver (dragging ${ext.drops.dragging}, backend ${ext.drops.backend}, pointer ${global.get_pointer().slice(0, 2)}, under ${under}, focus ${focused}, selections ${seen.join(', ')})`);
+                global.display.get_selection().disconnect(seenId);
                 const [ax, ay] = island.panelButton.get_transformed_position();
                 for (const progress of [.25, .5, .75, 1]) await move(180 + (ax + island.panelButton.width / 2 - 180) * progress, 390 + (ay + 12 - 390) * progress);
                 await Scripting.sleep(450);
@@ -872,8 +915,8 @@ async function interactionRegressions(ext, path, screenshot) {
 // shown on top of the island, with single and multiple selections.
 async function regalMenuRegressions(ext, path, screenshot) {
     const island = ext.islands[0];
-    const pointer = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
-    const keyboard = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+    const pointer = seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+    const keyboard = seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
     const move = async (x, y) => { pointer.notify_absolute_motion(GLib.get_monotonic_time(), x, y); await Scripting.sleep(90); };
     const click = async (x, y, button = 1, wait = 600) => { await move(x, y); await Scripting.sleep(150); pointer.notify_button(GLib.get_monotonic_time(), button, Clutter.ButtonState.PRESSED); await Scripting.sleep(60); pointer.notify_button(GLib.get_monotonic_time(), button, Clutter.ButtonState.RELEASED); await Scripting.sleep(wait); };
     const tap = async (keyval, wait = 300) => { keyboard.notify_keyval(GLib.get_monotonic_time(), keyval, Clutter.KeyState.PRESSED); keyboard.notify_keyval(GLib.get_monotonic_time(), keyval, Clutter.KeyState.RELEASED); await Scripting.sleep(wait); };
@@ -982,7 +1025,7 @@ async function regalMenuRegressions(ext, path, screenshot) {
 // confirmation, windows, clipboard, snippets, emoji and the fallback search.
 async function launcherRegressions(ext, path, screenshot) {
     const island = ext.islands[0];
-    const keyboard = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+    const keyboard = seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
     const press = async (keyval, wait = 200) => { keyboard.notify_keyval(GLib.get_monotonic_time(), keyval, Clutter.KeyState.PRESSED); keyboard.notify_keyval(GLib.get_monotonic_time(), keyval, Clutter.KeyState.RELEASED); await Scripting.sleep(wait); };
     const chord = async (modifiers, keyval, wait = 250) => {
         for (const m of modifiers) keyboard.notify_keyval(GLib.get_monotonic_time(), m, Clutter.KeyState.PRESSED);
@@ -996,12 +1039,7 @@ async function launcherRegressions(ext, path, screenshot) {
     const realSystem = {open: system.open, call: system.call}, opened = [], calls = [];
     system.open = uri => opened.push(uri);
     system.call = (bus, name, objectPath, iface, method, params) => { calls.push({bus, name, iface, method, params: params?.deep_unpack() ?? null}); return Promise.resolve(null); };
-    const root = `${path}/thunderstorm`; GLib.mkdir_with_parents(`${root}/Berichte`, 0o700); GLib.mkdir_with_parents(`${root}/.geheim`, 0o700);
-    const files = ['Bericht Quartal.pdf', 'Notizen zum bericht.txt', '.geheim/bericht privat.txt'].map(name => `${root}/${name}`);
-    for (const file of files) GLib.file_set_contents(file, 'fixture');
-    // 30 files named after an installed app, to rank against the app itself.
-    const chromeFiles = Array.from({length: 30}, (_, i) => `${root}/${i === 0 ? 'chrome' : i % 2 ? `chrome export ${i}.json` : `Chrome Lesezeichen ${i}.html`}`);
-    for (const file of chromeFiles) GLib.file_set_contents(file, 'fixture');
+    const {root, files, chromeFiles} = thunderstormFixtures(path);
     const indexed = [...files, `${root}/Berichte`, `${root}/verschwunden/bericht alt.txt`, ...chromeFiles];
     const log = `${path}/localsearch-queries.log`; GLib.unlink(log);
     const queries = () => { try { return new TextDecoder().decode(GLib.file_get_contents(log)[1]).trim().split('\n').filter(Boolean).map(JSON.parse); } catch { return []; } };
@@ -1153,7 +1191,7 @@ async function launcherRegressions(ext, path, screenshot) {
             const area = Main.layoutManager.getWorkAreaForMonitor(island.monitor.index), rect = fixture.get_frame_rect();
             assert(rect.x === area.x && Math.abs(rect.width - Math.round(area.width / 2)) <= 1 && rect.height === area.height, `the window takes the left half (${rect.x},${rect.y} ${rect.width}x${rect.height})`);
             await open(); await type('maximieren'); await press(Clutter.KEY_Return, 600);
-            assert(fixture.is_maximized(), 'the window can be maximised from the launcher');
+            assert(fixture.is_maximized?.() ?? fixture.get_maximized() === Meta.MaximizeFlags.BOTH, 'the window can be maximised from the launcher');
         } finally { windowFixture.force_exit(); await Scripting.sleep(300); }
         // Indexed folders on request.
         await open(); await type('indizierte ordner'); await press(Clutter.KEY_Return, 800);
@@ -1167,7 +1205,7 @@ async function launcherRegressions(ext, path, screenshot) {
         await screenshot('thunderstorm-fallback');
         await press(Clutter.KEY_Escape);
         assert(!island.expanded, 'Escape closes Thunderstorm');
-        await commandRegressions(ext, island, {open, type, press, state, titles, calls});
+        await commandRegressions(ext, island, {open, type, press, chord, state, titles, calls});
         await languageRegressions(ext, path, screenshot, {open, type, press, chord, state, titles, calls, waitFor, files});
     } finally {
         system.open = realSystem.open; system.call = realSystem.call;
@@ -1184,7 +1222,7 @@ async function launcherRegressions(ext, path, screenshot) {
 // with a shortcut, own search terms, favourites, the history of older
 // versions — each change takes effect without restarting the extension, and
 // shutting down keeps asking first.
-async function commandRegressions(ext, island, {open, type, press, state, titles, calls}) {
+async function commandRegressions(ext, island, {open, type, press, chord, state, titles, calls}) {
     const settings = ext.settings, before = settings.get_string('launcher-commands');
     try {
         await open(); await type('bereitschaft');
@@ -1209,8 +1247,10 @@ async function commandRegressions(ext, island, {open, type, press, state, titles
         // The action panel's run asks first too.
         await type('neu starten');
         state().selected = state().results.findIndex(r => r.id === 'cmd:system.restart');
-        await chordPanel(press, ext); await press(Clutter.KEY_Return, 300);
-        assert(state().confirm === 'cmd:system.restart' && !state().panel, 'running from the action panel asks for confirmation as well');
+        const restartIndex = state().selected;
+        await chord([Clutter.KEY_Control_L], Clutter.KEY_k); const panelOpened = Boolean(state().panel), panelActions = state().panel?.actions?.map(a => a.title).join('|');
+        await press(Clutter.KEY_Return, 300);
+        assert(state().confirm === 'cmd:system.restart' && !state().panel, `running from the action panel asks for confirmation as well (selected ${restartIndex}, panel ${panelOpened}: ${panelActions}, then confirm ${state().confirm}, panel ${Boolean(state().panel)}, text ${island.views.focusEntry?.get_text()})`);
         await press(Clutter.KEY_Escape, 250);
         // The usage history of an older version, keyed 'cmd:lock', still revives.
         const history = ext.launcher.history;
@@ -1229,13 +1269,6 @@ async function commandRegressions(ext, island, {open, type, press, state, titles
         assert(state().confirm === 'cmd:system.shutdown', 'an invalid setting never turns off a confirmation');
         await press(Clutter.KEY_Escape, 250);
     } finally { settings.set_string('launcher-commands', before); island.close(true); }
-}
-async function chordPanel(press, ext) {
-    const keyboard = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
-    keyboard.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Control_L, Clutter.KeyState.PRESSED);
-    await press(Clutter.KEY_k, 60);
-    keyboard.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Control_L, Clutter.KeyState.RELEASED); await Scripting.sleep(250);
-    keyboard.run_dispose();
 }
 // English for Notchy alone, then back: the island is rebuilt in the new
 // language, Thunderstorm's labels and shortcuts follow, German search terms
@@ -1368,10 +1401,10 @@ async function airpodsRegressions(ext, path, screenshot) {
         const notchCenter = capsuleX + island.panelSurface.width / 2, monitorCenter = island.monitor.x + island.monitor.width / 2;
         assert(Math.abs(notchCenter - monitorCenter) <= 1, `the AirPods symbol does not push the notch out of the middle (${notchCenter} vs ${monitorCenter})`);
         Main.panel.set_style('background-color: transparent;'); await screenshot('airpods-bubble'); Main.panel.set_style(null);
-        const bubblePointer = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+        const bubblePointer = seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
         try {
             const [bx, by] = bubble.content.get_transformed_position();
-            bubblePointer.notify_absolute_motion(GLib.get_monotonic_time(), bx + bubble.content.width / 2, by + bubble.content.height / 2); await Scripting.sleep(150);
+            await pointTo(bubblePointer, bx + bubble.content.width / 2, by + bubble.content.height / 2); await Scripting.sleep(150);
             bubblePointer.notify_button(GLib.get_monotonic_time(), 1, Clutter.ButtonState.PRESSED); await Scripting.sleep(60);
             bubblePointer.notify_button(GLib.get_monotonic_time(), 1, Clutter.ButtonState.RELEASED); await Scripting.sleep(500);
             const menuBox = bubble.button.menu.box;
@@ -1414,8 +1447,9 @@ async function airpodsRegressions(ext, path, screenshot) {
         await fixture('Ear', '(bb)', [true, false]); await Scripting.sleep(400);
         assert(menuCaptions().join('|') === 'Links|Rechts · nicht im Ohr|Case', `a bud out of the ear is named (${menuCaptions().join(' ')})`);
         const pause = () => menuBox.get_children().find(item => item.label?.text === 'Pause beim Herausnehmen');
+        const pauseBefore = menuBox.get_children().filter(item => item.label?.text === 'Pause beim Herausnehmen').map(item => item.state).join('/');
         pause().toggle(); await waitFor(() => airpods.state.pauseOnRemoval === false);
-        assert(calls().some(c => c.set === 'PauseOnRemoval' && c.value === false), 'automatic media pause is the daemon\'s own PauseOnRemoval setting');
+        assert(calls().some(c => c.set === 'PauseOnRemoval' && c.value === false), `automatic media pause is the daemon's own PauseOnRemoval setting (state ${airpods.state.pauseOnRemoval}, switches before ${pauseBefore}, switch ${pause()?.state}, calls ${JSON.stringify(calls().slice(-3))})`);
         await screenshot('airpods-controls');
         menu.close(); await Scripting.sleep(300);
         // A model with ANC only: no adaptive mode, no conversation awareness.
@@ -1497,7 +1531,7 @@ async function airpodsRegressions(ext, path, screenshot) {
 // Thunderstorm reaches its full height with its footer inside the surface.
 async function layoutRegressions(ext, path, screenshot) {
     const island = ext.islands[0];
-    const pointer = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+    const pointer = seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
     const move = async (x, y, wait = 0) => { pointer.notify_absolute_motion(GLib.get_monotonic_time(), x, y); await Scripting.sleep(wait); };
     const waitFor = async (condition, ms = 3000) => { for (let i = 0; i < ms / 50 && !condition(); i++) await Scripting.sleep(50); return condition(); };
     const away = () => move(640, 600, 0);

@@ -19,6 +19,7 @@ import {ageText} from '../services/batteries.js';
 import {Waveform} from './waveform.js';
 import {ActivitiesPage} from './activityViews.js';
 import {Lifetime} from '../lifecycle.js';
+import {connectKeyPress} from '../compat/index.js';
 
 // A file's kind: the colour of its type label (as in helper/tray.py).
 const KIND = Object.fromEntries([
@@ -749,7 +750,7 @@ export class Views {
             return Clutter.EVENT_PROPAGATE;
         };
         search.clutter_text.connect('text-changed', () => { query = search.get_text(); selected = 0; search.get_text() ? search.add_style_class_name('searching') : search.remove_style_class_name('searching'); update(); });
-        search.clutter_text.connect('key-press-event', (_t, event) => keys(event, true));
+        connectKeyPress(search.clutter_text, (_t, event) => keys(event, true));
         this.keyPress = event => keys(event, false);
         update(); this.pageLife.cleanups.push(this.clipboard.subscribe(update));
         return root;
@@ -1187,7 +1188,7 @@ export class Views {
         this.searchAgain = () => { if (this.pageLife.closed || state.drill || state.panel) return; state.confirm = null; session.query(entry.get_text()); };
         this.pageLife.cleanups.push(() => { this.searchAgain = null; });
         entry.clutter_text.connect('text-changed', update);
-        entry.clutter_text.connect('key-press-event', (_t, event) => {
+        connectKeyPress(entry.clutter_text, (_t, event) => {
             const key = event.get_key_symbol(), mods = event.get_state(), ctrl = Boolean(mods & Clutter.ModifierType.CONTROL_MASK), shift = Boolean(mods & Clutter.ModifierType.SHIFT_MASK);
             const items = current();
             const step = delta => { state.selected = Math.max(0, Math.min(items.length - 1, state.selected + delta)); state.confirm = null; state.moved = true; drawSelection(); };

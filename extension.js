@@ -1,4 +1,3 @@
-import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
@@ -6,7 +5,6 @@ import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {Extension, InjectionManager} from 'resource:///org/gnome/shell/extensions/extension.js';
-import {getInputSourceManager} from 'resource:///org/gnome/shell/ui/status/keyboard.js';
 import {Lifetime} from './src/lifecycle.js';
 import {normalizeAccelerator} from './src/model.js';
 import {Store} from './src/services/store.js';
@@ -38,6 +36,7 @@ import {LauncherEntry} from './src/services/launcherEntry.js';
 import {Activities} from './src/services/activities.js';
 import {startTranslations} from './src/i18n/gnome.js';
 import {_, fmt, language} from './src/i18n/core.js';
+import * as Compat from './src/compat/index.js';
 
 export default class Notchy extends Extension {
     openPreferences() {
@@ -62,6 +61,7 @@ export default class Notchy extends Extension {
     enable() {
         this.settings = this.getSettings(); this.life = new Lifetime(); this.islands = [];
         try {
+            if (!Notchy.described) { Notchy.described = true; console.log(`Notchy ${this.metadata.version}: ${Compat.describe()}`); }
             // Notchy's language: the system's, or the one chosen in its preferences.
             this.life.cleanups.push(startTranslations(this, this.settings));
             this.store = new Store(); this.shelf = new Shelf(this.store); this.clipboard = new Clipboard(this.settings, this.store);
@@ -116,16 +116,15 @@ export default class Notchy extends Extension {
     }
     activeIsland() { return this.islands[0]; }
     _hookHud() {
-        this.injections = new InjectionManager(); const extension = this;
-        this.injections.overrideMethod(Main.osdWindowManager, '_showOsdWindow', original => function (index, icon, text, level, maxLevel) {
+        this.injections = new InjectionManager();
+        Compat.overrideOsd(this.injections, (index, icon, text, level, maxLevel) => {
             // Shown as a Notchy live activity; GNOME's OSD only when Notchy cannot show it.
-            const island = extension.islands.find(i => i.monitor.index === index);
+            const island = this.islands.find(i => i.monitor.index === index);
             const name = icon?.get_names?.()[0] ?? 'audio-volume-high-symbolic';
             const caption = text || (name.includes('brightness') ? _('Brightness') : name.includes('mic') ? _('Microphone') : _('Volume'));
-            if (!extension.settings.get_boolean('hud-enabled') || level === null || level === undefined || !island?.hud(icon ?? name, caption, level, maxLevel ?? 1))
-                return original.call(this, index, icon, text, level, maxLevel);
+            return this.settings.get_boolean('hud-enabled') && level !== null && level !== undefined && Boolean(island?.hud(icon ?? name, caption, level, maxLevel ?? 1));
         });
-        const keymap = Clutter.get_default_backend().get_default_seat().get_keymap();
+        const keymap = Compat.keymap();
         // 'state-changed' also fires for Num Lock, layout switches and modifiers;
         // only an actual Caps Lock change becomes a live activity in the capsule.
         let capsLock = keymap.get_caps_lock_state();
@@ -162,12 +161,13 @@ export default class Notchy extends Extension {
     // switch does nothing at all; then Notchy borrows the keys while it runs
     // (no setting is changed). With several layouts GNOME keeps them.
     _hookInputSourceKeys() {
-        const GNOME_KEYS = [['switch-input-source', Meta.KeyBindingFlags.NONE, '_keybindingAction'], ['switch-input-source-backward', Meta.KeyBindingFlags.IS_REVERSED, '_keybindingActionBackward']];
-        const wm = new Gio.Settings({schema_id: 'org.gnome.desktop.wm.keybindings'}), sources = new Gio.Settings({schema_id: 'org.gnome.desktop.input-sources'});
         this.borrowedKeys = new Set();
+        if (!Compat.canBorrowInputSourceKeys()) { console.warn('Notchy: GNOME\'s layout-switch keys cannot be borrowed on this version.'); return; }
+        const GNOME_KEYS = [['switch-input-source', Meta.KeyBindingFlags.NONE], ['switch-input-source-backward', Meta.KeyBindingFlags.IS_REVERSED]];
+        const wm = new Gio.Settings({schema_id: 'org.gnome.desktop.wm.keybindings'}), sources = new Gio.Settings({schema_id: 'org.gnome.desktop.input-sources'});
         const restore = name => {
-            const [, flags, field] = GNOME_KEYS.find(([key]) => key === name), manager = getInputSourceManager();
-            manager[field] = Main.wm.addKeybinding(name, wm, flags, Shell.ActionMode.ALL, manager._switchInputSource.bind(manager));
+            const [, flags] = GNOME_KEYS.find(([key]) => key === name);
+            Compat.restoreInputSourceKey(name, wm, flags);
             this.borrowedKeys.delete(name);
         };
         const sync = () => {
