@@ -1077,7 +1077,7 @@ async function launcherRegressions(ext, path, screenshot) {
             await type('chrom', 0); await press(Clutter.KEY_Down, 30);
             const chosen = state().results[state().selected]?.id;
             await waitFor(() => !state().pending, 4000); await Scripting.sleep(200);
-            assert(state().results[state().selected]?.id === chosen && chosen, `a late file answer does not move the selection the user chose (${chosen})`);
+            assert(state().results[state().selected]?.id === chosen && chosen, `a late file answer does not move the selection the user chose (${chosen}, now ${state().results[state().selected]?.id}, pointer ${global.get_pointer().slice(0, 2)} over ${global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, ...global.get_pointer().slice(0, 2))})`);
             // The explicit file mode.
             await type('datei chrome'); await waitFor(() => !state().pending && titles().length > 3, 4000);
             assert(titles()[0] === 'chrome' && !titles().includes('Google Chrome') && state().results.every(r => ['file', 'folder', 'shelf'].includes(r.kind)) && titles().length > 8,

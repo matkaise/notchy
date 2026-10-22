@@ -113,6 +113,13 @@ runtime errors.
 | 50.1 | development machine (host) | passed | passed, 517/517 | final code, clean `tests/output` |
 | 51.0 | Ubuntu 26.10, GJS 1.90.0, GTK 4.24.1, libadwaita 1.10.0 | passed | passed, 517/517 | shaders through `Clutter.ShaderEffect` |
 
+On 2026-10-22 the matrix ran again on the final branch (after the switch to
+Fedora for 47): 47.10, 48.0, 50.1 and 51.0 passed at the first attempt. 49.0
+failed once in Thunderstorm, where a late file answer moved the row the test
+had just selected with ↓ 30 ms after typing; the same code had passed on 49
+twice before, and the repeated run passed 517/517. The assertion now reports
+the pointer position and the actor under it, should it happen again.
+
 Not tested: point releases other than these, other distributions than Ubuntu
 and (for 47.10) Fedora, X11 sessions (GNOME 49 deprecated and 50 removed them;
 Notchy targets Wayland), real hardware per release (see *Known limitations*).
