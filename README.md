@@ -8,7 +8,7 @@ The user interface speaks **German and English** and follows the GNOME/system la
 
 ## Requirements
 
-- GNOME Shell **48, 49, 50 or 51** on Wayland (GNOME 47 is prepared but not yet declared), from one package ([docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) lists what differs between releases and how each was tested). Notchy integrates into the top bar of the primary monitor.
+- GNOME Shell **47, 48, 49, 50 or 51** on Wayland, from one package ([docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) lists what differs between releases and how each was tested). Notchy integrates into the top bar of the primary monitor.
 - GJS, GTK 4.10 or newer, libadwaita, Python 3 and PyGObject.
 - PipeWire 1.x for AirPlay output (uses PipeWire's `raop-discover` module and Avahi).
 - Optional, for AirDrop: a MediaTek MT7921/MT7922 Wi-Fi card, Bluetooth, and the [airdrop-mt7921](https://github.com/jedbillyb/airdrop-mt7921) backend (see [AirDrop](#airdrop)).

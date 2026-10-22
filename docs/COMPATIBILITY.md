@@ -9,7 +9,7 @@ than which version is running. GNOME 50 is the development baseline.
 
 | GNOME Shell | GJS | libadwaita / GTK | Status |
 |---|---|---|---|
-| 47 | 1.82 | 1.6 / 4.16 | prepared, not declared (see *Test results*) |
+| 47 | 1.82 | 1.6 / 4.16 | declared; automated suite passed on 47.10 (see *Known limitations* for 47.0) |
 | 48 | 1.82 | 1.7 / 4.18 | declared; automated suite passed |
 | 49 | 1.86 | 1.8 / 4.20 | declared; automated suite passed |
 | 50 | 1.88 | 1.9 / 4.22 | declared; automated suite passed |
@@ -96,7 +96,8 @@ history and all other saved data are shared unchanged.
 
 Run on 2026-10-20 with `bash scripts/test-matrix.sh` (Ubuntu containers,
 headless GNOME Shell, software rendering) and with `bash scripts/test-shell.sh`
-on the development machine (Ubuntu 26.04, GNOME Shell 50.1). Every run is the
+on the development machine (Ubuntu 26.04, GNOME Shell 50.1); GNOME 47 again on
+2026-10-22 (47.0 and Fedora 41's 47.10, below). Every run is the
 complete suite: `check.sh` (99 Node tests, 53 Python tests, schema and
 translation checks) and the Shell suite (517 assertions, the preferences
 window, the GTK Regal, three disable/enable cycles), with the log free of
@@ -104,16 +105,43 @@ runtime errors.
 
 | Release | Environment | check.sh | Shell suite | Notes |
 |---|---|---|---|---|
-| 47.0 | Ubuntu 24.10, GJS 1.82.0, GTK 4.16.3, libadwaita 1.6.2 | passed | three runs with the final code: one fully clean (517/517); one 517/517 but | the second run: a GTK 4.16 assertion in Notchy's GTK helper during the synthetic X11 drags (`gtk_drop_target_async_handle_event: self->drop == drop`, inside GTK); in the third, GNOME Shell 47.0 itself aborted (`malloc(): unsorted double linked list corrupted`) right after the snap layouts opened (assertion 132). 15 snap rounds in a row with and without Notchy did not reproduce it. Not declared until a real GNOME 47 session confirms it |
+| 47.0 | Ubuntu 24.10, GJS 1.82.0, GTK 4.16.3, libadwaita 1.6.2 | passed | 6 runs: 5 reached 517/517 (one with a GTK assertion in the log), 1 crash of GNOME Shell | on 2026-10-20 three runs: one clean; one with a GTK 4.16 assertion in Notchy's GTK helper during the synthetic X11 drags (`gtk_drop_target_async_handle_event: self->drop == drop`, inside GTK); in the third, GNOME Shell 47.0 itself aborted (`malloc(): unsorted double linked list corrupted`) right after the snap layouts opened (assertion 132). 15 snap rounds in a row with and without Notchy did not reproduce it, nor did three more complete runs on 2026-10-22 with the Shell under gdb |
+| 47.10 | Fedora 41 (final updates), Mutter 47.10, GJS 1.82.3, GTK 4.16.13, libadwaita 1.6.10, GLib 2.82.5 | passed | passed, 5 of 5 runs 517/517 | 2026-10-22, two of the runs with the Shell under gdb (no signal). GNOME's own media-list error (as on 48/49) twice per run; GTK's non-fatal `gtk_drop_target_async_handle_crossing` runtime-check warning twice per run during the synthetic X11 drags (GTK 4.18 on GNOME 48 logs the same). See *GNOME 47.10 on Fedora* below |
 | 48.0 | Ubuntu 25.04, GJS 1.82.1, GTK 4.18.5, libadwaita 1.7.0 | passed | passed, 517/517 | GNOME logs 2 errors of its own (media list, MPRIS player quitting), reproduced without Notchy |
 | 49.0 | Ubuntu 25.10, GJS 1.86.0, GTK 4.20.1, libadwaita 1.8.0 | passed | passed, 517/517 | same 2 GNOME errors as 48 |
 | 50.1 | Ubuntu 26.04 container, GJS 1.88.0, GTK 4.22.4, libadwaita 1.9.1 | passed | passed, 517/517 | – |
 | 50.1 | development machine (host) | passed | passed, 517/517 | final code, clean `tests/output` |
 | 51.0 | Ubuntu 26.10, GJS 1.90.0, GTK 4.24.1, libadwaita 1.10.0 | passed | passed, 517/517 | shaders through `Clutter.ShaderEffect` |
 
-Not tested: point releases other than these, other distributions, X11
-sessions (GNOME 49 deprecated and 50 removed them; Notchy targets Wayland),
-real hardware per release (see *Known limitations*).
+Not tested: point releases other than these, other distributions than Ubuntu
+and (for 47.10) Fedora, X11 sessions (GNOME 49 deprecated and 50 removed them;
+Notchy targets Wayland), real hardware per release (see *Known limitations*).
+
+### GNOME 47.10 on Fedora
+
+Ubuntu never shipped a GNOME 47 after 47.0, so 47.10 ran in a `fedora:41`
+container (its repositories still resolve) with the same steps as
+`scripts/test-matrix.sh`; Fedora's `gnome-shell` package includes
+`gnome-shell-test-tool`. This container is not part of the matrix. Four
+differences from the Ubuntu containers had to be set up, none of them in
+Notchy:
+
+- GNOME Shell 47.10 crashed at startup, even with an empty test script, in
+  libgnome-desktop 44.1 (`on_got_localed_proxy_for_getting_default_input_sources`)
+  because the private system bus has no `org.freedesktop.locale1`. A small
+  stand-in for systemd-localed on that bus fixes it; every real system has
+  localed.
+- Fedora's container image installs only English catalogs
+  (`/etc/rpm/macros.image-language-conf`), so the Shell had no German catalog
+  and GLib turned translations off (the same trap as Ubuntu's language packs).
+- Fedora's `nodejs` lacks full ICU; `nodejs-full-i18n` is needed for the
+  German number and date tests in `check.sh`.
+- `tests/shell.js` starts the preferences test with Debian's
+  `/usr/lib/gnome-shell` for the Shew typelib; Fedora has
+  `/usr/lib64/gnome-shell` (a symlink in the container).
+
+Mutter's and GNOME Shell's release notes list about 25 and 7 crash-fix merge
+requests, respectively, between 47.0 and 47.10.
 
 What the matrix found and what was changed for it:
 
@@ -137,12 +165,16 @@ What the matrix found and what was changed for it:
 
 ## Known limitations
 
-- **GNOME 47 is prepared, not declared.** Every API difference is handled and
-  the suite passes, but one of three runs ended in a crash of GNOME Shell 47.0
-  itself (heap corruption, see *Test results*) that could not be reproduced or
-  attributed. Ubuntu's 47.0 is the only GNOME 47 the matrix can run; check a
-  current 47.x session (Fedora 41 shipped 47.10) by hand before adding "47" to
-  `metadata.json`.
+- **GNOME 47 is declared on the strength of 47.10.** Every API difference is
+  handled. On 47.10, the current GNOME 47 release, all five complete runs passed. On
+  Ubuntu's 47.0, one of six runs ended with GNOME Shell 47.0 itself aborting on
+  heap corruption. That run was right after the snap layouts opened (see
+  *Test results*). The abort was not reproduced in 15 snap rounds, three more
+  complete 47.0 runs under gdb or the five 47.10 runs, so no backtrace exists
+  and it is not attributed; it is GNOME's code, and 47.10 carries about 30
+  crash fixes since 47.0. Users on 47.0 should update to the latest 47.x.
+  The matrix still runs Ubuntu's 47.0; Fedora 41's 47.10 ran outside it (see
+  *GNOME 47.10 on Fedora*).
 - **Tested headless, in containers.** Every release ran the complete automated
   suite (real input events through virtual devices, real Wayland and X11 client
   windows, software rendering at scale 1 on a 1280×720 virtual monitor). What
@@ -152,8 +184,9 @@ What the matrix found and what was changed for it:
   receivers, AirDrop hardware, real LocalSearch, notifications from real apps.
   See *Manual checks per release* below.
 - **The releases tested are the ones Ubuntu ships**: 47.0, 48.0, 49.0, 50.1 and
-  51.0. Point releases change no API Notchy uses (checked against the sources
-  up to 47.10, 48.8, 49.10, 50.6, 51.1), but they were not run.
+  51.0, plus 47.10 from Fedora 41. Point releases change no API Notchy uses
+  (checked against the sources up to 47.10, 48.8, 49.10, 50.6, 51.1), but the
+  other point releases were not run.
 - **GNOME 51.0 dash.** With no favourite app installed, the dash starts empty;
   when a window without an installed `.desktop` file (Notchy's Regal is one)
   becomes its first entry while the overview is closed, GNOME's
