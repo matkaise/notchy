@@ -287,8 +287,10 @@ export async function run() {
     island.close(); note.destroy(); await Scripting.sleep(400);
     assert(!island.peeking && !island.expanded, 'dismissed notification leaves no banner');
 
+    // GNOME's private libraries (Shew for prefs): /usr/lib on Debian and Ubuntu, /usr/lib64 on Fedora.
+    const shellLibDir = ['/usr/lib/gnome-shell', '/usr/lib64/gnome-shell'].find(dir => GLib.file_test(`${dir}/girepository-1.0/Shew-0.typelib`, GLib.FileTest.EXISTS)) ?? '/usr/lib/gnome-shell';
     const prefsLauncher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.NONE});
-    prefsLauncher.setenv('NOTCHY_EXTENSION_PATH', ext.path, true); prefsLauncher.setenv('GI_TYPELIB_PATH', '/usr/lib/gnome-shell:/usr/lib/gnome-shell/girepository-1.0', true); prefsLauncher.setenv('LD_LIBRARY_PATH', '/usr/lib/gnome-shell', true); prefsLauncher.setenv('GDK_BACKEND', 'wayland', true);
+    prefsLauncher.setenv('NOTCHY_EXTENSION_PATH', ext.path, true); prefsLauncher.setenv('GI_TYPELIB_PATH', `${shellLibDir}:${shellLibDir}/girepository-1.0`, true); prefsLauncher.setenv('LD_LIBRARY_PATH', shellLibDir, true); prefsLauncher.setenv('GDK_BACKEND', 'wayland', true);
     prefsLauncher.spawnv(['/usr/bin/gjs', '-m', here('prefs.js')]);
     await Scripting.sleep(1800);
 

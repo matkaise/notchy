@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Runs scripts/check.sh and scripts/test-shell.sh against each supported GNOME
-# release, each in its own container (tests/matrix/Dockerfile).
+# release, each in its own container: Ubuntu's (tests/matrix/Dockerfile), or
+# Fedora's for GNOME 47, whose final 47.10 Ubuntu never shipped
+# (tests/matrix/Dockerfile.fedora).
 #
 #   bash scripts/test-matrix.sh            # GNOME 47 48 49 50 51
 #   bash scripts/test-matrix.sh 49 51      # only these
@@ -14,18 +16,22 @@
 # release under test. metadata.json in the repository is never changed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-declare -A UBUNTU=([47]=24.10 [48]=25.04 [49]=25.10 [50]=26.04 [51]=26.10)
+declare -A DISTRO=([47]=fedora:41 [48]=ubuntu:25.04 [49]=ubuntu:25.10 [50]=ubuntu:26.04 [51]=ubuntu:26.10)
 suite="${NOTCHY_MATRIX_SUITE:-all}"
 if (($#)); then versions=("$@"); else versions=(47 48 49 50 51); fi
 passthrough=()
 while IFS='=' read -r name _; do passthrough+=(-e "$name"); done < <(env | grep -E '^NOTCHY_TEST_[A-Z_]+=' || true)
 
 run_one() {
-    local version=$1 base=${UBUNTU[$1]:-}
+    local version=$1 base=${DISTRO[$1]:-}
     if [[ -z "$base" ]]; then printf 'GNOME %s: not a supported release\n' "$version" >&2; return 2; fi
-    local image="notchy-test:gnome-$version" out="tests/output/matrix/gnome-$version"
+    local image="notchy-test:gnome-$version" out="tests/output/matrix/gnome-$version" build
+    case "$base" in
+        fedora:*) build=(-f tests/matrix/Dockerfile.fedora --build-arg "FEDORA=${base#*:}") ;;
+        *) build=(--build-arg "UBUNTU=${base#*:}") ;;
+    esac
     rm -rf "$out"; mkdir -p "$out"
-    docker build -q -t "$image" --build-arg "UBUNTU=$base" tests/matrix >"$out/build.log" 2>&1 || { cat "$out/build.log" >&2; return 1; }
+    docker build -q -t "$image" "${build[@]}" tests/matrix >"$out/build.log" 2>&1 || { cat "$out/build.log" >&2; return 1; }
     docker run -i --rm --shm-size=1g -e "SUITE=$suite" "${passthrough[@]}" \
         -v "$PWD:/src:ro" -v "$PWD/$out:/out" "$image" bash -s <<'EOF'
 set -u
@@ -35,6 +41,12 @@ mkdir -p -m 700 "$XDG_RUNTIME_DIR"
 # with no system services behind it.
 export DBUS_SYSTEM_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/system_bus_socket"
 dbus-daemon --session --address="$DBUS_SYSTEM_BUS_ADDRESS" --fork --nopidfile
+# Fedora's GNOME 47 crashes at startup without org.freedesktop.locale1 on
+# the system bus; its image ships a stand-in (tests/matrix/localed.py).
+if [[ -f /usr/local/bin/notchy-test-localed ]]; then
+    python3 /usr/local/bin/notchy-test-localed &
+    gdbus wait --system --timeout 10 org.freedesktop.locale1 || { echo 'localed stand-in did not start' >&2; exit 1; }
+fi
 mkdir notchy && tar -C /src --exclude=./.git --exclude=./dist --exclude=./tests/output --exclude=./archive --exclude=./locale -cf - . | tar -C notchy -xf -
 cd notchy
 version="$(gnome-shell --version)"; major="$(sed -E 's/[^0-9]*([0-9]+).*/\1/' <<<"$version")"
@@ -57,7 +69,7 @@ EOF
 
 declare -A result
 for version in "${versions[@]}"; do
-    printf '== GNOME %s (Ubuntu %s)\n' "$version" "${UBUNTU[$version]:-?}"
+    printf '== GNOME %s (%s)\n' "$version" "${DISTRO[$version]:-?}"
     result[$version]=FAILED
     if run_one "$version"; then
         # Every suite that was asked for must have reported, and reported success.

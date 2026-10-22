@@ -12,7 +12,10 @@ export LIBGL_ALWAYS_SOFTWARE=1
 # software renderer too, so headless helper frames cannot depend on a real GPU.
 export GSK_RENDERER="${NOTCHY_TEST_GSK_RENDERER:-cairo}"
 export WAYLAND_DISPLAY=gnome-shell-test-display
+# Ubuntu's wallpaper where the release has it, a small dark one elsewhere
+# (the test tool's own default points at GNOME wallpapers a container lacks).
 export SHELL_BACKGROUND_IMAGE=/usr/share/backgrounds/ubuntu-wallpaper-d.png
+[[ -f "$SHELL_BACKGROUND_IMAGE" ]] || SHELL_BACKGROUND_IMAGE="$PWD/tests/fixtures/background.png"
 export MUTTER_DEBUG_DUMMY_MODE_SPECS=1280x720
 export MUTTER_DEBUG_DUMMY_MONITOR_SCALES=1
 # D-Bus-activated services inherit their environment from the bus, not from

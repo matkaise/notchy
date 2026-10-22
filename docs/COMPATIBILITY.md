@@ -106,7 +106,7 @@ runtime errors.
 | Release | Environment | check.sh | Shell suite | Notes |
 |---|---|---|---|---|
 | 47.0 | Ubuntu 24.10, GJS 1.82.0, GTK 4.16.3, libadwaita 1.6.2 | passed | 6 runs: 5 reached 517/517 (one with a GTK assertion in the log), 1 crash of GNOME Shell | on 2026-10-20 three runs: one clean; one with a GTK 4.16 assertion in Notchy's GTK helper during the synthetic X11 drags (`gtk_drop_target_async_handle_event: self->drop == drop`, inside GTK); in the third, GNOME Shell 47.0 itself aborted (`malloc(): unsorted double linked list corrupted`) right after the snap layouts opened (assertion 132). 15 snap rounds in a row with and without Notchy did not reproduce it, nor did three more complete runs on 2026-10-22 with the Shell under gdb |
-| 47.10 | Fedora 41 (final updates), Mutter 47.10, GJS 1.82.3, GTK 4.16.13, libadwaita 1.6.10, GLib 2.82.5 | passed | passed, 5 of 5 runs 517/517 | 2026-10-22, two of the runs with the Shell under gdb (no signal). GNOME's own media-list error (as on 48/49) twice per run; GTK's non-fatal `gtk_drop_target_async_handle_crossing` runtime-check warning twice per run during the synthetic X11 drags (GTK 4.18 on GNOME 48 logs the same). See *GNOME 47.10 on Fedora* below |
+| 47.10 | Fedora 41 (final updates), Mutter 47.10, GJS 1.82.3, GTK 4.16.13, libadwaita 1.6.10, GLib 2.82.5 | passed | passed, 6 of 6 runs 517/517 | 2026-10-22: five runs beside the matrix, two of them with the Shell under gdb (no signal), then one through `scripts/test-matrix.sh 47` (with 50.1 after it, also passed). GNOME's own media-list error (as on 48/49) twice in each of the first five runs, none in the matrix run; GTK's non-fatal `gtk_drop_target_async_handle_crossing` runtime-check warning twice per run during the synthetic X11 drags (GTK 4.18 on GNOME 48 logs the same). See *GNOME 47.10 on Fedora* below |
 | 48.0 | Ubuntu 25.04, GJS 1.82.1, GTK 4.18.5, libadwaita 1.7.0 | passed | passed, 517/517 | GNOME logs 2 errors of its own (media list, MPRIS player quitting), reproduced without Notchy |
 | 49.0 | Ubuntu 25.10, GJS 1.86.0, GTK 4.20.1, libadwaita 1.8.0 | passed | passed, 517/517 | same 2 GNOME errors as 48 |
 | 50.1 | Ubuntu 26.04 container, GJS 1.88.0, GTK 4.22.4, libadwaita 1.9.1 | passed | passed, 517/517 | – |
@@ -119,26 +119,29 @@ Notchy targets Wayland), real hardware per release (see *Known limitations*).
 
 ### GNOME 47.10 on Fedora
 
-Ubuntu never shipped a GNOME 47 after 47.0, so 47.10 ran in a `fedora:41`
-container (its repositories still resolve) with the same steps as
-`scripts/test-matrix.sh`; Fedora's `gnome-shell` package includes
-`gnome-shell-test-tool`. This container is not part of the matrix. Four
-differences from the Ubuntu containers had to be set up, none of them in
-Notchy:
+Ubuntu never shipped a GNOME 47 after 47.0, so the matrix runs GNOME 47 in a
+`fedora:41` container (`tests/matrix/Dockerfile.fedora`; its repositories
+still resolve); Fedora's `gnome-shell` package includes
+`gnome-shell-test-tool`. Four differences from the Ubuntu containers had to be
+set up, none of them in Notchy:
 
 - GNOME Shell 47.10 crashed at startup, even with an empty test script, in
   libgnome-desktop 44.1 (`on_got_localed_proxy_for_getting_default_input_sources`)
   because the private system bus has no `org.freedesktop.locale1`. A small
-  stand-in for systemd-localed on that bus fixes it; every real system has
-  localed.
+  stand-in for systemd-localed (`tests/matrix/localed.py`), which
+  `scripts/test-matrix.sh` starts on that bus, fixes it; every real system
+  has localed.
 - Fedora's container image installs only English catalogs
   (`/etc/rpm/macros.image-language-conf`), so the Shell had no German catalog
   and GLib turned translations off (the same trap as Ubuntu's language packs).
 - Fedora's `nodejs` lacks full ICU; `nodejs-full-i18n` is needed for the
   German number and date tests in `check.sh`.
-- `tests/shell.js` starts the preferences test with Debian's
-  `/usr/lib/gnome-shell` for the Shew typelib; Fedora has
-  `/usr/lib64/gnome-shell` (a symlink in the container).
+- GNOME's private Shew typelib, which the preferences test needs, lives in
+  `/usr/lib64/gnome-shell` on Fedora instead of `/usr/lib/gnome-shell`;
+  `tests/shell.js` looks in both.
+
+Fedora's image also has no Ubuntu wallpaper; `scripts/test-shell.sh` then
+uses `tests/fixtures/background.png`.
 
 Mutter's and GNOME Shell's release notes list about 25 and 7 crash-fix merge
 requests, respectively, between 47.0 and 47.10.
@@ -166,15 +169,15 @@ What the matrix found and what was changed for it:
 ## Known limitations
 
 - **GNOME 47 is declared on the strength of 47.10.** Every API difference is
-  handled. On 47.10, the current GNOME 47 release, all five complete runs passed. On
+  handled. On 47.10, the current GNOME 47 release, all six complete runs passed. On
   Ubuntu's 47.0, one of six runs ended with GNOME Shell 47.0 itself aborting on
   heap corruption. That run was right after the snap layouts opened (see
   *Test results*). The abort was not reproduced in 15 snap rounds, three more
-  complete 47.0 runs under gdb or the five 47.10 runs, so no backtrace exists
+  complete 47.0 runs under gdb or the six 47.10 runs, so no backtrace exists
   and it is not attributed; it is GNOME's code, and 47.10 carries about 30
   crash fixes since 47.0. Users on 47.0 should update to the latest 47.x.
-  The matrix still runs Ubuntu's 47.0; Fedora 41's 47.10 ran outside it (see
-  *GNOME 47.10 on Fedora*).
+  The matrix runs 47.10 from Fedora 41 (see *GNOME 47.10 on Fedora*);
+  47.0 is no longer in it.
 - **Tested headless, in containers.** Every release ran the complete automated
   suite (real input events through virtual devices, real Wayland and X11 client
   windows, software rendering at scale 1 on a 1280×720 virtual monitor). What
@@ -183,8 +186,9 @@ What the matrix found and what was changed for it:
   repaints, fractional scaling, several monitors, real Bluetooth/AirPods, AirPlay
   receivers, AirDrop hardware, real LocalSearch, notifications from real apps.
   See *Manual checks per release* below.
-- **The releases tested are the ones Ubuntu ships**: 47.0, 48.0, 49.0, 50.1 and
-  51.0, plus 47.10 from Fedora 41. Point releases change no API Notchy uses
+- **The releases tested are the ones the matrix containers ship**: 47.10 from
+  Fedora 41 and Ubuntu's 48.0, 49.0, 50.1 and 51.0, plus Ubuntu's 47.0 before
+  the matrix moved to Fedora for 47. Point releases change no API Notchy uses
   (checked against the sources up to 47.10, 48.8, 49.10, 50.6, 51.1), but the
   other point releases were not run.
 - **GNOME 51.0 dash.** With no favourite app installed, the dash starts empty;
@@ -223,8 +227,10 @@ enabling Notchy a few times. docs/TESTING.md lists the full desktop checklist.
 
 ## Supporting a new GNOME release
 
-1. Add the release to `UBUNTU` in `scripts/test-matrix.sh` (the Ubuntu
-   release that ships it) and to the matrix in `.github/workflows/tests.yml`.
+1. Add the release to `DISTRO` in `scripts/test-matrix.sh` (the Ubuntu
+   release that ships it, as `ubuntu:YY.MM`; `fedora:N` builds
+   `tests/matrix/Dockerfile.fedora` instead) and to the matrix in
+   `.github/workflows/tests.yml`.
 2. Run `bash scripts/test-matrix.sh N`. The package built inside the container
    lists release N, so GNOME loads it before `metadata.json` does.
 3. Read the Shell's and Mutter's changes since the last supported release for

@@ -1,0 +1,34 @@
+# GNOME 47 for scripts/test-matrix.sh and CI. Ubuntu only ever shipped
+# GNOME 47.0; Fedora 41 carries its final update, 47.10, with
+# gnome-shell-test-tool. Fedora's mirror metalink keeps serving releases past
+# their end of life (archives.fedoraproject.org).
+ARG FEDORA=41
+FROM fedora:${FEDORA}
+# The image installs English catalogs only (%_install_langs). German for the
+# Shell itself: GLib's g_dgettext() turns translations off for the whole
+# process when the Shell's own domain has no catalog for the locale, which
+# would leave Notchy's German catalog unused as well. Fedora's nodejs is
+# built with small ICU; check.sh needs German Intl formats (nodejs-full-i18n).
+RUN set -e; \
+    rm -f /etc/rpm/macros.image-language-conf; \
+    dnf install -y --setopt=install_weak_deps=False \
+        gnome-shell gjs xorg-x11-server-Xwayland dbus-daemon dbus-tools glib2 \
+        python3 python3-gobject gtk4 libadwaita gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good \
+        graphene gdk-pixbuf2 mesa-dri-drivers mesa-vulkan-drivers at-spi2-core adwaita-icon-theme \
+        abattis-cantarell-vf-fonts dejavu-sans-fonts glibc-langpack-de gnome-text-editor zip unzip \
+        nodejs nodejs-full-i18n procps-ng shadow-utils findutils which; \
+    # LocalSearch's settings schema (the indexed folders); the test talks to a
+    # stand-in index. GNOME 47's Fedora still names the package tracker-miners.
+    dnf install -y --setopt=install_weak_deps=False localsearch || dnf install -y --setopt=install_weak_deps=False tracker-miners; \
+    dnf clean all; \
+    # Xwayland's socket directory, as a desktop has it (Mutter 47 insists).
+    mkdir -p -m 1777 /tmp/.X11-unix; \
+    test -x /usr/bin/gnome-shell-test-tool
+# gnome-text-editor gives the dash a favourite app, as in tests/matrix/Dockerfile.
+# The Shell needs org.freedesktop.locale1 on the system bus (localed.py).
+COPY localed.py /usr/local/bin/notchy-test-localed
+# The tests run as an ordinary user, as on a desktop.
+RUN useradd -m -u 1000 tester
+USER tester
+ENV LANG=de_DE.UTF-8 XDG_RUNTIME_DIR=/tmp/runtime-tester
+WORKDIR /home/tester
