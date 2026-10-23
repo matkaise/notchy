@@ -402,10 +402,9 @@ export default class NotchyPreferences extends ExtensionPreferences {
         toggle(main, 'activities-group', _('Summarise similar activities'), _('Two downloads become “2 transfers”.'));
         toggle(main, 'activities-animations', _('Animations'), _('A check when something finishes, a short shake when it fails, growing progress.'));
         number(main, 'activities-completed-seconds', _('Show finished activities for (seconds)'), 1, 60, 1, _('Failed ones stay at least 20 seconds.'));
-        toggle(main, 'activities-downloads', _('Browser downloads'), _('Chrome, Firefox and others write a temporary file into your Downloads folder while they download. Notchy watches only that folder and reads only those files’ names and sizes, never their contents. The browsers do not tell the total size, so no percentage is shown.'));
         toggle(main, 'activities-sound', _('Sound when a timer runs out'));
         const types = group(live, _('Activity Types'));
-        const TYPES = [['transfer', _('Browser downloads and the progress of other apps (Files, Transmission …)')], ['operation', _('File work started in Notchy (ZIP, conversion, copies)')],
+        const TYPES = [['transfer', _('Progress other apps publish (Files, Transmission …)')], ['operation', _('File work started in Notchy (ZIP, conversion, copies)')],
             ['airdrop', _('AirDrop transfers')], ['timer', _('Timers and Pomodoro')], ['recording', _('Screen recordings')], ['agent', _('AI agents that need you, finished or failed')],
             ['media', _('Music and media')], ['accessory', _('AirPods (in the list)')], ['custom', _('Activities of other apps and scripts (notchyctl, D-Bus, MCP)')]];
         for (const [type, subtitle] of TYPES) {

@@ -36,9 +36,7 @@ export NOTCHY_AIRPODS_NAME=org.notchy.AirPodsTest
 export NOTCHY_NO_SYSTEM_BLUETOOTH=1
 export NOTCHY_AAP_REPLAY="$PWD/tests/fixtures/aap-airpods-pro2.hex"
 export NOTCHY_AAP_LOG="$PWD/tests/output/aap-sent.log"
-# Browser downloads are watched in a private folder, never the real Downloads.
-export NOTCHY_DOWNLOADS_DIR="$notchy_test_services/downloads"
-mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$NOTCHY_DOWNLOADS_DIR"
+mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
 filters=(--extra-filter org.notchy.FileTray --extra-filter org.notchy.DropTarget --extra-filter org.notchy.DropSource --extra-filter tray.py --extra-filter python3 --extra-filter gjs --extra-filter org.gnome.Shell.Extensions --extra-filter org.notchy.PreferencesTest --extra-filter org.notchy.LayerFixture)
 bundle="$PWD/dist/notchy@matthias.local.shell-extension.zip"
 if gnome-shell-test-tool --help | grep -- '--extension' >/dev/null; then

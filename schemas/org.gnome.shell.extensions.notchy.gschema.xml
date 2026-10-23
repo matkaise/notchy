@@ -59,7 +59,6 @@
   <key name="activities-animations" type="b"><default>true</default><summary>Short animations when activities finish, fail or change</summary></key>
   <key name="activities-group" type="b"><default>true</default><summary>Summarise similar activities (two downloads become "2 transfers")</summary></key>
   <key name="activities-indicators" type="b"><default>true</default><summary>Show further important activities as small indicators beside the notch</summary></key>
-  <key name="activities-downloads" type="b"><default>true</default><summary>Show browser downloads (Chrome, Firefox …) from the temporary files they write into the Downloads folder: name and size so far, never a guessed percentage</summary></key>
   <key name="activities-sound" type="b"><default>true</default><summary>Play a sound when a timer runs out</summary></key>
   <key name="pomodoro-work-minutes" type="i"><default>25</default><range min="5" max="120"/><summary>Length of a Pomodoro focus phase in minutes</summary></key>
   <key name="pomodoro-break-minutes" type="i"><default>5</default><range min="1" max="60"/><summary>Length of a Pomodoro break in minutes</summary></key>

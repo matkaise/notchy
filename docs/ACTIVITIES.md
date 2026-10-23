@@ -51,12 +51,11 @@ Notchy keeps everything that runs right now in one place, the **Activity Manager
 | Image/PDF/Office conversion, OCR, background removal | none | the external tools report nothing; shown without a bar |
 | AirDrop receiving | the backend's percentage | sending shows the peer, no percentage |
 | Files (copies, moves, compressing) and other apps that publish it (Transmission …) | what the app publishes through `com.canonical.Unity.LauncherEntry` | event-driven broadcast signal, the same docks listen to; no file names, no polling. Measured with Ubuntu's Files 50: it publishes only while one of its windows is open and only for operations that take longer than about 1.4 s (shorter ones are never shown), with values such as 0.54 → 0.62 → 0.77 → 1. 100 % counts as finished at once (Files keeps it visible about 3.6 s longer); hidden half-way it just leaves (a cancel is no success); an app that quits takes its entry along; 30 min without an update is no longer believed |
-| Browser downloads (Chrome, Chromium, Edge, Brave, Vivaldi: `*.crdownload`; Firefox: `*.part`; Opera: `*.opdownload`) | the size so far of the temporary file in the Downloads folder — **no percentage**, no browser tells the total | `src/services/downloads.js`: Gio's inotify monitor on that one folder (not recursive, no polling); only names and sizes are read. Renamed to its final name: finished (with „Öffnen“ and „Im Ordner zeigen“); deleted: cancelled; not growing for 2 min (paused, interrupted, a leftover from before): not shown until it grows again. Downloads saved elsewhere („ask where to save“) are not seen. Setting: Live Activities → Browser downloads |
 | Timers | elapsed share of an exact deadline | |
 | Agents | only what the agent reports (`notchyctl agent update --progress`, MCP) | hooks carry no progress |
 | `set_activity` / `notchyctl activity` | its value if above 0 | these APIs default to 0, so 0 means „unknown“ |
 
-Not supported: a percentage for browser downloads (Chrome's LauncherEntry progress runs only under the Unity desktop, not under „ubuntu:GNOME“, and Firefox has none — verified on Chrome 155 and Firefox 157), Files operations shorter than about 1.4 s or without an open Files window, `wget`/`curl` in a terminal (report them yourself, see the examples), apps that publish no progress at all. Apart from the temporary download files' names and sizes in the Downloads folder, Notchy never reads other programs' files, windows or processes for progress.
+Not supported: browser downloads. Chrome loads its LauncherEntry support (libunity) only under the Unity desktop or KDE — on Ubuntu's GNOME session the library is not loaded (checked on Chrome 155's running browser process) — and Firefox has no such support at all (from its sources). Watching the Downloads folder for the browsers' temporary files would work, but was left out deliberately; a browser extension with the downloads permission and native messaging would be the clean way and is not built. Also not supported: Files operations shorter than about 1.4 s or without an open Files window, `wget`/`curl` in a terminal (report them yourself, see the examples), apps that publish no progress at all. Notchy never reads other programs' files, windows or processes for progress.
 
 ## Priorities and the closed notch
 
@@ -157,7 +156,7 @@ report(id='render', name='Render', type='operation', progress=0.25, remaining=90
 
 MCP (`helper/mcp_server.py`): `live_activity` (`id`, `name`, optional `type`, `state`, `progress`, `remaining`, `description`, `ttl`) and `live_activity_end` (`id`), besides the existing `set_activity`, `agent_status`, `agent_end`.
 
-Apps that already publish LauncherEntry progress need nothing: Notchy shows it; browser downloads into the Downloads folder are seen without anything to set up.
+Apps that already publish LauncherEntry progress need nothing: Notchy shows it.
 
 ## Adding a new activity type
 

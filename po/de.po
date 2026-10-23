@@ -11,27 +11,27 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "Language-Team: German\n"
 
-#: extension.js:125
+#: extension.js:124
 msgid "Brightness"
 msgstr "Helligkeit"
 
-#: extension.js:125
+#: extension.js:124
 msgid "Microphone"
 msgstr "Mikrofon"
 
-#: extension.js:125 src/ui/island.js:815
+#: extension.js:124 src/ui/island.js:815
 msgid "Volume"
 msgstr "Lautstärke"
 
-#: extension.js:135
+#: extension.js:134
 msgid "Caps Lock off"
 msgstr "Feststelltaste aus"
 
-#: extension.js:135
+#: extension.js:134
 msgid "Caps Lock on"
 msgstr "Feststelltaste an"
 
-#: extension.js:58
+#: extension.js:57
 #, javascript-format
 msgid "The settings could not be opened: %s"
 msgstr "Einstellungen konnten nicht geöffnet werden: %s"
@@ -284,8 +284,8 @@ msgid_plural "%d pictures"
 msgstr[0] "%d Bild"
 msgstr[1] "%d Bilder"
 
-#: src/launcher/providers.js:123 src/launcher/providers.js:158 src/launcher/providers.js:395 src/services/activities.js:238
-#: src/ui/views.js:1151 helper/tray.py:908
+#: src/launcher/providers.js:123 src/launcher/providers.js:158 src/launcher/providers.js:395 src/ui/views.js:1151
+#: helper/tray.py:908
 msgid "Open"
 msgstr "Öffnen"
 
@@ -296,7 +296,7 @@ msgid_plural "Open %d Files"
 msgstr[0] "%d Datei öffnen"
 msgstr[1] "%d Dateien öffnen"
 
-#: src/services/activities.js:238 helper/tray.py:909
+#: helper/tray.py:909
 msgid "Show in Folder"
 msgstr "Im Ordner zeigen"
 
@@ -527,7 +527,7 @@ msgstr "Dateiindex (GNOME LocalSearch)"
 msgid "Notchy only searches what LocalSearch has already indexed. Adding folders here changes LocalSearch’s settings for your user, not the system."
 msgstr "Notchy durchsucht nur, was LocalSearch bereits indiziert. Ordner hier hinzuzufügen ändert die Einstellungen von LocalSearch für deinen Benutzer, nicht das System."
 
-#: prefs.js:160 prefs.js:367 prefs.js:494
+#: prefs.js:160 prefs.js:367 prefs.js:493
 msgid "Checking…"
 msgstr "Wird geprüft …"
 
@@ -615,7 +615,7 @@ msgstr "Text"
 msgid "New Snippet"
 msgstr "Neues Snippet"
 
-#: prefs.js:226 prefs.js:500 prefs.js:519
+#: prefs.js:226 prefs.js:499 prefs.js:518
 msgid "Remove"
 msgstr "Entfernen"
 
@@ -919,224 +919,216 @@ msgid "Show finished activities for (seconds)"
 msgstr "Fertige Aktivitäten zeigen für (Sekunden)"
 
 #: prefs.js:405
-msgid "Browser downloads"
-msgstr "Browser-Downloads"
-
-#: prefs.js:405
-msgid "Chrome, Firefox and others write a temporary file into your Downloads folder while they download. Notchy watches only that folder and reads only those files’ names and sizes, never their contents. The browsers do not tell the total size, so no percentage is shown."
-msgstr "Chrome, Firefox und andere schreiben beim Herunterladen eine vorläufige Datei in deinen Download-Ordner. Notchy beobachtet nur diesen Ordner und liest von diesen Dateien nur Name und Größe, nie ihren Inhalt. Die Browser nennen die Gesamtgröße nicht, darum erscheint keine Prozentangabe."
-
-#: prefs.js:406
 msgid "Sound when a timer runs out"
 msgstr "Ton, wenn ein Timer abläuft"
 
-#: prefs.js:407
+#: prefs.js:406
 msgid "Activity Types"
 msgstr "Arten von Aktivitäten"
 
-#: prefs.js:408
-msgid "Browser downloads and the progress of other apps (Files, Transmission …)"
-msgstr "Browser-Downloads und der Fortschritt anderer Apps (Dateien, Transmission …)"
-
-#: prefs.js:408
+#: prefs.js:407
 msgid "File work started in Notchy (ZIP, conversion, copies)"
 msgstr "In Notchy gestartete Dateiarbeit (ZIP, Umwandlung, Kopien)"
 
-#: prefs.js:409
+#: prefs.js:407
+msgid "Progress other apps publish (Files, Transmission …)"
+msgstr "Fortschritt, den andere Apps melden (Dateien, Transmission …)"
+
+#: prefs.js:408
 msgid "AI agents that need you, finished or failed"
 msgstr "KI-Agenten, die dich brauchen, fertig sind oder scheiterten"
 
-#: prefs.js:409
+#: prefs.js:408
 msgid "AirDrop transfers"
 msgstr "AirDrop-Übertragungen"
 
-#: prefs.js:409
+#: prefs.js:408
 msgid "Screen recordings"
 msgstr "Bildschirmaufnahmen"
 
-#: prefs.js:409
+#: prefs.js:408
 msgid "Timers and Pomodoro"
 msgstr "Timer und Pomodoro"
 
-#: prefs.js:410
+#: prefs.js:409
 msgid "Activities of other apps and scripts (notchyctl, D-Bus, MCP)"
 msgstr "Aktivitäten anderer Apps und Skripte (notchyctl, D-Bus, MCP)"
 
-#: prefs.js:410
+#: prefs.js:409
 msgid "AirPods (in the list)"
 msgstr "AirPods (in der Liste)"
 
-#: prefs.js:410
+#: prefs.js:409
 msgid "Music and media"
 msgstr "Musik und Medien"
 
-#: prefs.js:421
+#: prefs.js:420
 msgid "Priorities"
 msgstr "Prioritäten"
 
-#: prefs.js:421
+#: prefs.js:420
 msgid "What the notch shows when several activities run, most important first. Activities that need you and failures always show at once; others wait until the shown one had its moment."
 msgstr "Was die Notch zeigt, wenn mehrere Aktivitäten laufen, das Wichtigste zuerst. Aktivitäten, die dich brauchen, und Fehler erscheinen immer sofort; andere warten, bis die gezeigte ihre Zeit hatte."
 
-#: prefs.js:439
+#: prefs.js:438
 msgid "Higher"
 msgstr "Höher"
 
-#: prefs.js:440
+#: prefs.js:439
 msgid "Lower"
 msgstr "Tiefer"
 
-#: prefs.js:444
+#: prefs.js:443
 msgid "Default order"
 msgstr "Standardreihenfolge"
 
-#: prefs.js:445
+#: prefs.js:444
 msgid "Reset"
 msgstr "Zurücksetzen"
 
-#: prefs.js:449
+#: prefs.js:448
 msgid "Pomodoro"
 msgstr "Pomodoro"
 
-#: prefs.js:449
+#: prefs.js:448
 msgid "Start timers in Thunderstorm (“timer 10 min tea”, “pomodoro”), in the Activities tab or with notchyctl timer."
 msgstr "Timer startest du in Thunderstorm („timer 10 min Tee“, „pomodoro“), im Tab „Aktivitäten“ oder mit notchyctl timer."
 
-#: prefs.js:450
+#: prefs.js:449
 msgid "Focus (minutes)"
 msgstr "Fokus (Minuten)"
 
-#: prefs.js:451
+#: prefs.js:450
 msgid "Break (minutes)"
 msgstr "Pause (Minuten)"
 
-#: prefs.js:452
+#: prefs.js:451
 msgid "For Your Own Apps"
 msgstr "Für eigene Apps"
 
-#: prefs.js:452
+#: prefs.js:451
 msgid "Other apps and scripts report activities over D-Bus (ReportActivity), with notchyctl live or the MCP tools live_activity and live_activity_end. Details in docs/ACTIVITIES.md."
 msgstr "Andere Apps und Skripte melden Aktivitäten über D-Bus (ReportActivity), mit notchyctl live oder den MCP-Werkzeugen live_activity und live_activity_end. Details in docs/ACTIVITIES.md."
 
-#: prefs.js:453
+#: prefs.js:452
 msgid "Ends with notchyctl live end build, or after its lifetime."
 msgstr "Endet mit notchyctl live end build oder nach seiner Lebensdauer."
 
-#: prefs.js:458 src/ui/activityViews.js:146
+#: prefs.js:457 src/ui/activityViews.js:145
 msgid "Agents"
 msgstr "Agenten"
 
-#: prefs.js:459
+#: prefs.js:458
 msgid "Agents Beside the Notch"
 msgstr "Agenten neben der Notch"
 
-#: prefs.js:459
+#: prefs.js:458
 msgid "Claude Code, Codex and Antigravity report their state to Notchy through their own hooks: working, waiting for you, done, error. A program that merely runs never counts as “working”. Prompts and contents are neither read nor stored."
 msgstr "Claude Code, Codex und Antigravity melden ihren Zustand über ihre eigenen Hooks an Notchy: arbeitet, wartet auf dich, fertig, Fehler. Ein bloß laufendes Programm gilt nie als „arbeitet“. Prompts und Inhalte werden nicht gelesen oder gespeichert."
 
-#: prefs.js:460
+#: prefs.js:459
 msgid "Show agent indicators"
 msgstr "Agenten-Indikatoren anzeigen"
 
-#: prefs.js:461
+#: prefs.js:460
 msgid "Distribute left and right automatically"
 msgstr "Automatisch links und rechts verteilen"
 
-#: prefs.js:461
+#: prefs.js:460
 msgid "New indicators go to the side with more room; the notch stays in the middle."
 msgstr "Neue Indikatoren kommen auf die Seite mit mehr Platz; die Notch bleibt in der Mitte."
 
-#: prefs.js:462
+#: prefs.js:461
 msgid "As a calm, still symbol."
 msgstr "Als ruhiges, unbewegtes Symbol."
 
-#: prefs.js:462
+#: prefs.js:461
 msgid "Show ready agents without a task"
 msgstr "Bereite Agenten ohne Aufgabe anzeigen"
 
-#: prefs.js:463
+#: prefs.js:462
 msgid "Short animation when a task is done"
 msgstr "Kurze Animation bei abgeschlossener Aufgabe"
 
-#: prefs.js:464
+#: prefs.js:463
 msgid "After that, the agent counts as ready."
 msgstr "Danach gilt der Agent als bereit."
 
-#: prefs.js:464
+#: prefs.js:463
 msgid "Show “Done” for (seconds)"
 msgstr "„Fertig“ anzeigen für (Sekunden)"
 
-#: prefs.js:466
+#: prefs.js:465
 msgid "A side chosen per agent below wins."
 msgstr "Eine unten je Agent gewählte Seite hat Vorrang."
 
-#: prefs.js:466 prefs.js:496
+#: prefs.js:465 prefs.js:495
 msgid "Automatic"
 msgstr "Automatisch"
 
 #. Translators: L and R are the left and the right AirPod.
-#: prefs.js:466 prefs.js:496 src/ui/views.js:106 src/ui/views.js:363
+#: prefs.js:465 prefs.js:495 src/ui/views.js:106 src/ui/views.js:363
 msgid "Left"
 msgstr "Links"
 
-#: prefs.js:466
+#: prefs.js:465
 msgid "Position of the indicators"
 msgstr "Position der Indikatoren"
 
 #. Translators: L and R are the left and the right AirPod.
-#: prefs.js:466 prefs.js:496 src/ui/views.js:106 src/ui/views.js:363
+#: prefs.js:465 prefs.js:495 src/ui/views.js:106 src/ui/views.js:363
 msgid "Right"
 msgstr "Rechts"
 
-#: prefs.js:470
+#: prefs.js:469
 msgid "Beside the notch, for agents, AirPods, activities and the Shelf; further ones join the “+N” group. 0 = as many as fit."
 msgstr "Neben der Notch, für Agenten, AirPods, Aktivitäten und das Regal; weitere kommen in die „+N“-Gruppe. 0 = so viele, wie Platz haben."
 
-#: prefs.js:470
+#: prefs.js:469
 msgid "Maximum visible indicators"
 msgstr "Höchstens sichtbare Indikatoren"
 
-#: prefs.js:471
+#: prefs.js:470
 msgid "In the Activities tab. 0 = not at all."
 msgstr "Im Tab „Aktivitäten“. 0 = gar nicht."
 
-#: prefs.js:471
+#: prefs.js:470
 msgid "List ended sessions for (minutes)"
 msgstr "Beendete Sitzungen auflisten für (Minuten)"
 
-#: prefs.js:472 src/ui/views.js:890
+#: prefs.js:471 src/ui/views.js:890
 msgid "Notifications"
 msgstr "Mitteilungen"
 
-#: prefs.js:472
+#: prefs.js:471
 msgid "Only the agent, its project folder’s name and its state are shown — never a prompt or what the agent wrote. Not while the agent’s own window has the focus. While Smart Live Activities show it in the notch, it goes quietly into the message list."
 msgstr "Gezeigt werden nur der Agent, der Name seines Projektordners und sein Zustand – nie ein Prompt oder was der Agent schrieb. Nicht, solange das Fenster des Agenten den Fokus hat. Solange die smarten Live-Aktivitäten es in der Notch zeigen, landet die Benachrichtigung still in der Nachrichtenliste."
 
-#: prefs.js:473
+#: prefs.js:472
 msgid "An approval or a question. Notchy approves nothing itself: a click switches to the agent."
 msgstr "Eine Freigabe oder eine Frage. Notchy gibt selbst nichts frei: Ein Klick wechselt zum Agenten."
 
-#: prefs.js:473
+#: prefs.js:472
 msgid "When an agent needs you"
 msgstr "Wenn ein Agent dich braucht"
 
-#: prefs.js:474
+#: prefs.js:473
 msgid "When an agent finished its task"
 msgstr "Wenn ein Agent seine Aufgabe erledigt hat"
 
-#: prefs.js:475
+#: prefs.js:474
 msgid "When an agent’s task failed"
 msgstr "Wenn die Aufgabe eines Agenten fehlschlug"
 
-#: prefs.js:476
+#: prefs.js:475
 msgid "With a sound"
 msgstr "Mit Ton"
 
-#: prefs.js:478
+#: prefs.js:477
 msgid "Integrations"
 msgstr "Integrationen"
 
-#: prefs.js:478
+#: prefs.js:477
 msgid "Set Up adds Notchy’s hook adapter to the agent’s configuration beside your existing hooks and makes a backup first. Remove takes out exactly these entries again."
 msgstr "Einrichten trägt Notchys Hook-Adapter neben deinen bestehenden Hooks in die Konfiguration des Agenten ein und legt vorher eine Sicherung an. Entfernen nimmt genau diese Einträge wieder heraus."
 
@@ -1144,29 +1136,33 @@ msgstr "Einrichten trägt Notchys Hook-Adapter neben deinen bestehenden Hooks in
 msgid "Appearance"
 msgstr "Darstellung"
 
-#: prefs.js:492
+#: prefs.js:491
 msgid "Configuration broken"
 msgstr "Konfiguration fehlerhaft"
 
-#: prefs.js:492
+#: prefs.js:491
 msgid "Not set up"
 msgstr "Nicht eingerichtet"
 
-#: prefs.js:492
+#: prefs.js:491
 msgid "Partly set up"
 msgstr "Teilweise eingerichtet"
 
-#: prefs.js:492
+#: prefs.js:491
 msgid "Set up"
 msgstr "Eingerichtet"
 
-#: prefs.js:496
+#: prefs.js:495
 msgid "Preferred side"
 msgstr "Bevorzugte Seite"
 
-#: prefs.js:499
+#: prefs.js:498
 msgid "Hook adapter"
 msgstr "Hook-Adapter"
+
+#: prefs.js:499 prefs.js:518
+msgid "Set Up"
+msgstr "Einrichten"
 
 #: prefs.js:50
 msgid "The GNOME clock in the top bar becomes the island; it grows around the clock."
@@ -1176,44 +1172,40 @@ msgstr "Die GNOME-Uhr in der oberen Leiste wird zur Island; sie wächst um die U
 msgid "Your Island"
 msgstr "Deine Island"
 
-#: prefs.js:500 prefs.js:519
-msgid "Set Up"
-msgstr "Einrichten"
-
-#: prefs.js:507
+#: prefs.js:506
 #, javascript-format
 msgid "State unknown: %s"
 msgstr "Status unbekannt: %s"
 
-#: prefs.js:509 scripts/notchyctl:157
+#: prefs.js:508 scripts/notchyctl:157
 msgid "program not found"
 msgstr "Programm nicht gefunden"
 
-#: prefs.js:516
+#: prefs.js:515
 #, javascript-format
 msgid "%s: Remove Hooks?"
 msgstr "%s: Hooks entfernen?"
 
-#: prefs.js:516
+#: prefs.js:515
 #, javascript-format
 msgid "%s: Set Up Hooks?"
 msgstr "%s: Hooks einrichten?"
 
-#: prefs.js:517
+#: prefs.js:516
 msgid "Codex runs the new hooks only after you trusted them with /hooks."
 msgstr "Codex führt die neuen Hooks erst aus, nachdem du sie mit /hooks freigegeben hast."
 
-#: prefs.js:517
+#: prefs.js:516
 #, javascript-format
 msgid "Notchy adds its hook adapter to %s. Existing hooks stay unchanged; a backup is made first."
 msgstr "Notchy trägt seinen Hook-Adapter in %s ein. Bestehende Hooks bleiben unverändert; vorher wird eine Sicherung angelegt."
 
-#: prefs.js:518
+#: prefs.js:517
 #, javascript-format
 msgid "Notchy removes only its own entries from %s; a backup is made first."
 msgstr "Notchy entfernt nur seine eigenen Einträge aus %s; vorher wird eine Sicherung angelegt."
 
-#: prefs.js:519 src/services/activities.js:192 src/services/activities.js:221 src/services/activities.js:222
+#: prefs.js:518 src/services/activities.js:185 src/services/activities.js:214 src/services/activities.js:215
 msgid "Cancel"
 msgstr "Abbrechen"
 
@@ -1225,20 +1217,20 @@ msgstr "Dynamic Glass: schwarze Notch, die in Glas übergeht. Liquid Glass: schw
 msgid "Style"
 msgstr "Stil"
 
-#: prefs.js:524
+#: prefs.js:523
 #, javascript-format
 msgid "Not changed: %s"
 msgstr "Nicht geändert: %s"
 
-#: prefs.js:533
+#: prefs.js:532
 msgid "ChatGPT in the browser and in the desktop app offer no status interface; Notchy reads nothing there. Your own scripts and other agents report with notchyctl or through the MCP server (tools agent_status, agent_end)."
 msgstr "ChatGPT im Browser und in der Desktop-App bieten keine Statusschnittstelle; Notchy liest dort nichts aus. Eigene Skripte und andere Agenten melden sich mit notchyctl oder über den MCP-Server (Werkzeuge agent_status, agent_end)."
 
-#: prefs.js:533
+#: prefs.js:532
 msgid "Other Agents and ChatGPT"
 msgstr "Andere Agenten und ChatGPT"
 
-#: prefs.js:534
+#: prefs.js:533
 msgid "More commands: start, heartbeat, stop, list; details in the README."
 msgstr "Weitere Befehle: start, heartbeat, stop, list; Details in der README."
 
@@ -1504,17 +1496,17 @@ msgid_plural "%d days ago"
 msgstr[0] "vor %d Tag"
 msgstr[1] "vor %d Tagen"
 
-#: src/i18n/core.js:159 src/ui/views.js:1301
+#: src/i18n/core.js:149 src/ui/views.js:1301
 #, javascript-format
 msgid "%d s"
 msgstr "%d s"
 
-#: src/i18n/core.js:161
+#: src/i18n/core.js:151
 #, javascript-format
 msgid "%d min"
 msgstr "%d Min."
 
-#: src/i18n/core.js:162
+#: src/i18n/core.js:152
 #, javascript-format
 msgid "%1$d h %2$d min"
 msgstr "%1$d Std. %2$d Min."
@@ -1860,7 +1852,7 @@ msgstr "Essen"
 msgid "Travel"
 msgstr "Reisen"
 
-#: src/launcher/emoji.js:535 src/ui/activityViews.js:152 src/ui/activityViews.js:178 src/ui/island.js:26
+#: src/launcher/emoji.js:535 src/ui/activityViews.js:151 src/ui/activityViews.js:177 src/ui/island.js:26
 msgid "Activities"
 msgstr "Aktivitäten"
 
@@ -2190,7 +2182,7 @@ msgstr "Mit Einheit kopieren"
 msgid "Start a Pomodoro"
 msgstr "Pomodoro starten"
 
-#: src/launcher/providers.js:90 src/ui/activityViews.js:123
+#: src/launcher/providers.js:90 src/ui/activityViews.js:122
 #, javascript-format
 msgid "Start a timer: %s"
 msgstr "Timer starten: %s"
@@ -2240,106 +2232,98 @@ msgstr "Unbekannter Titel"
 msgid "Picture"
 msgstr "Bild"
 
-#: src/services/activities.js:120 src/services/agents.js:58 src/services/agents.js:67 src/services/timers.js:26
+#: src/services/activities.js:119 src/services/agents.js:58 src/services/agents.js:67 src/services/timers.js:26
 msgid "Notchy is shutting down"
 msgstr "Notchy wird beendet"
 
-#: src/services/activities.js:124
+#: src/services/activities.js:123
 msgid "Too many activities from other apps"
 msgstr "Zu viele Aktivitäten anderer Apps"
 
-#: src/services/activities.js:139
+#: src/services/activities.js:138
 msgid "This activity has ended"
 msgstr "Diese Aktivität ist beendet"
 
-#: src/services/activities.js:141 src/services/activities.js:149 src/services/activities.js:166
+#: src/services/activities.js:140 src/services/activities.js:148 src/services/activities.js:159
 msgid "This action is not available"
 msgstr "Diese Aktion ist nicht verfügbar"
 
-#: src/services/activities.js:156
-msgid "The file is no longer there"
-msgstr "Die Datei ist nicht mehr da"
-
-#: src/services/activities.js:162 src/ui/activityViews.js:255
+#: src/services/activities.js:155 src/ui/activityViews.js:254
 msgid "The agent’s window cannot be named for sure"
 msgstr "Das Fenster des Agenten lässt sich nicht sicher bestimmen"
 
-#: src/services/activities.js:181 src/ui/activityViews.js:254 src/ui/agentBubble.js:218
+#: src/services/activities.js:174 src/ui/activityViews.js:253 src/ui/agentBubble.js:218
 msgid "Switch"
 msgstr "Wechseln"
 
-#: src/services/activities.js:197 src/ui/island.js:715
+#: src/services/activities.js:190 src/ui/island.js:715
 msgid "Looking for an iPhone…"
 msgstr "Sucht iPhone …"
 
-#: src/services/activities.js:197 src/ui/island.js:715
+#: src/services/activities.js:190 src/ui/island.js:715
 #, javascript-format
 msgid "To %s"
 msgstr "An %s"
 
-#: src/services/activities.js:198
+#: src/services/activities.js:191
 msgid "Receiving"
 msgstr "Empfängt"
 
-#: src/services/activities.js:199 src/ui/island.js:717
+#: src/services/activities.js:192 src/ui/island.js:717
 msgid "Wi-Fi reconnecting…"
 msgstr "WLAN verbindet …"
 
-#: src/services/activities.js:200 src/ui/island.js:718
+#: src/services/activities.js:193 src/ui/island.js:718
 msgid "No iPhone"
 msgstr "Kein iPhone"
 
-#: src/services/activities.js:200 src/ui/island.js:718
+#: src/services/activities.js:193 src/ui/island.js:718
 msgid "Starting…"
 msgstr "Startet …"
 
-#: src/services/activities.js:200 src/ui/island.js:718
+#: src/services/activities.js:193 src/ui/island.js:718
 msgid "Visible"
 msgstr "Sichtbar"
 
-#: src/services/activities.js:207 src/services/activities.js:221 src/ui/views.js:274
+#: src/services/activities.js:200 src/services/activities.js:214 src/ui/views.js:274
 msgid "Pause"
 msgstr "Pause"
 
-#: src/services/activities.js:207 src/ui/views.js:274
+#: src/services/activities.js:200 src/ui/views.js:274
 msgid "Play"
 msgstr "Wiedergabe"
 
-#: src/services/activities.js:214 src/services/activityModel.js:47
+#: src/services/activities.js:207 src/services/activityModel.js:47
 msgid "Screen recording"
 msgstr "Bildschirmaufnahme"
 
-#: src/services/activities.js:215
+#: src/services/activities.js:208
 msgid "Stop"
 msgstr "Beenden"
 
-#: src/services/activities.js:219
+#: src/services/activities.js:212
 msgid "Break"
 msgstr "Pause"
 
-#: src/services/activities.js:219
+#: src/services/activities.js:212
 #, javascript-format
 msgid "Focus · round %d"
 msgstr "Fokus · Runde %d"
 
-#: src/services/activities.js:222
+#: src/services/activities.js:215
 msgid "Resume"
 msgstr "Fortsetzen"
 
-#: src/services/activities.js:230
+#: src/services/activities.js:223
 msgid "Progress reported by the app"
 msgstr "Fortschritt laut App"
 
-#: src/services/activities.js:236
-msgid "Download"
-msgstr "Download"
-
-#: src/services/activities.js:246 src/ui/airpodsBubble.js:59 src/ui/airpodsBubble.js:158 src/ui/views.js:351
+#: src/services/activities.js:232 src/ui/airpodsBubble.js:59 src/ui/airpodsBubble.js:158 src/ui/views.js:351
 #: src/ui/views.js:374
 msgid "Connected"
 msgstr "Verbunden"
 
-#: src/services/activities.js:246 src/ui/airpodsBubble.js:59 src/ui/airpodsBubble.js:158 src/ui/views.js:374
+#: src/services/activities.js:232 src/ui/airpodsBubble.js:59 src/ui/airpodsBubble.js:158 src/ui/views.js:374
 #, javascript-format
 msgid "Connected · %s"
 msgstr "Verbunden · %s"
@@ -2531,7 +2515,7 @@ msgstr "Unbekanntes Ereignis: %s"
 msgid "update without state, status or progress"
 msgstr "update ohne Zustand, Status oder Fortschritt"
 
-#: src/services/agentModel.js:53 src/ui/activityViews.js:296
+#: src/services/agentModel.js:53 src/ui/activityViews.js:295
 msgid "Ended"
 msgstr "Beendet"
 
@@ -2596,7 +2580,7 @@ msgstr "%s braucht dich"
 msgid "%s: task failed"
 msgstr "%s: Aufgabe fehlgeschlagen"
 
-#: src/services/agents.js:96 src/ui/activityViews.js:249 src/ui/agentBubble.js:235
+#: src/services/agents.js:96 src/ui/activityViews.js:248 src/ui/agentBubble.js:235
 msgid "Answer in the agent’s window"
 msgstr "Im Fenster des Agenten antworten"
 
@@ -2825,61 +2809,61 @@ msgstr "Fokus: %s"
 msgid "Time is up"
 msgstr "Die Zeit ist um"
 
-#: src/ui/activityViews.js:122
+#: src/ui/activityViews.js:121
 msgid "25 min"
 msgstr "25 Min."
 
-#: src/ui/activityViews.js:122
+#: src/ui/activityViews.js:121
 msgid "5 min"
 msgstr "5 Min."
 
-#: src/ui/activityViews.js:131
+#: src/ui/activityViews.js:130
 msgid "Nothing running"
 msgstr "Nichts läuft"
 
-#: src/ui/activityViews.js:132
-msgid "Downloads, timers, recordings and agents appear here."
-msgstr "Downloads, Timer, Aufnahmen und Agenten erscheinen hier."
+#: src/ui/activityViews.js:131
+msgid "Transfers, timers, recordings and agents appear here."
+msgstr "Übertragungen, Timer, Aufnahmen und Agenten erscheinen hier."
 
-#: src/ui/activityViews.js:155
+#: src/ui/activityViews.js:154
 msgid "Ended sessions"
 msgstr "Beendete Sitzungen"
 
-#: src/ui/activityViews.js:178
+#: src/ui/activityViews.js:177
 #, javascript-format
 msgid "%d needs you"
 msgid_plural "%d need you"
 msgstr[0] "%d braucht dich"
 msgstr[1] "%d brauchen dich"
 
-#: src/ui/activityViews.js:178
+#: src/ui/activityViews.js:177
 #, javascript-format
 msgid "%d running"
 msgid_plural "%d running"
 msgstr[0] "%d läuft"
 msgstr[1] "%d laufen"
 
-#: src/ui/activityViews.js:198 src/ui/agentBubble.js:198
+#: src/ui/activityViews.js:197 src/ui/agentBubble.js:198
 #, javascript-format
 msgid "%1$s · %2$d session"
 msgid_plural "%1$s · %2$d sessions"
 msgstr[0] "%1$s · %2$d Sitzung"
 msgstr[1] "%1$s · %2$d Sitzungen"
 
-#: src/ui/activityViews.js:245 src/ui/agentBubble.js:231
+#: src/ui/activityViews.js:244 src/ui/agentBubble.js:231
 #, javascript-format
 msgid "Session %s"
 msgstr "Sitzung %s"
 
-#: src/ui/activityViews.js:249 src/ui/agentBubble.js:235
+#: src/ui/activityViews.js:248 src/ui/agentBubble.js:235
 msgid "Answer where the agent runs"
 msgstr "Dort antworten, wo der Agent läuft"
 
-#: src/ui/activityViews.js:271
+#: src/ui/activityViews.js:270
 msgid "Dismiss"
 msgstr "Ausblenden"
 
-#: src/ui/activityViews.js:296
+#: src/ui/activityViews.js:295
 msgid "Process gone"
 msgstr "Prozess beendet"
 

@@ -99,8 +99,7 @@ export function compactParts(entry, {agents = null, animate = true, now = Date.n
     const progress = entry.count === 1 ? progressOf(lead, now) : entry.progress;
     if (progress !== null) return {left: [glyph('kind', '', icon)], right: [track(progress), text('value', 'value', formatPercent(Math.round(progress * 100)))]};
     // Running without a measured progress: its name, never a made-up bar.
-    // A download shows its size so far beside its name.
-    const words = entry.count > 1 ? title : lead.description && (lead.type === 'custom' || lead.download) ? `${title} · ${lead.description}` : title;
+    const words = entry.count > 1 ? title : lead.description && lead.type === 'custom' ? `${title} · ${lead.description}` : title;
     return {left: [glyph('kind', '', icon)], right: [text('name', '', words)]};
 }
 // Whether the notch's entry needs a second hand (a timer, a recording).
@@ -129,7 +128,7 @@ export class ActivitiesPage {
         this.empty = box(true, {style_class: 'notchy-act-empty', x_expand: true, y_expand: true, visible: false, ...center});
         this.empty.add_child(new St.Icon({gicon: gicon('adwaita:view-list-bullet-symbolic'), icon_size: 32, style_class: 'notchy-empty-icon', x_align: Clutter.ActorAlign.CENTER}));
         this.empty.add_child(label(_('Nothing running'), 'notchy-title', {x_align: Clutter.ActorAlign.CENTER}));
-        this.empty.add_child(label(_('Downloads, timers, recordings and agents appear here.'), 'notchy-muted', {x_align: Clutter.ActorAlign.CENTER}));
+        this.empty.add_child(label(_('Transfers, timers, recordings and agents appear here.'), 'notchy-muted', {x_align: Clutter.ActorAlign.CENTER}));
         this.scroller = scroll(this.list, 240);
         this.actor.add_child(this.scroller); this.actor.add_child(this.empty);
         if (this.activities) this.life.cleanups.push(this.activities.subscribe(() => this.sync()));

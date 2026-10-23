@@ -6,8 +6,10 @@ import {launcherEntryUpdate, LauncherEntries} from './progressModel.js';
 const IFACE = 'com.canonical.Unity.LauncherEntry';
 
 // Progress other apps publish themselves: the LauncherEntry interface docks
-// (Ubuntu Dock, Dash to Dock, Plank) listen to. Chrome and Chromium report
-// downloads there, Nautilus its file operations, Transmission its torrents.
+// (Ubuntu Dock, Dash to Dock, Plank) listen to: Files reports its copies,
+// moves and archives there (only with a window open), Transmission its
+// torrents. Chrome does only under Unity or KDE, Firefox never, so browser
+// downloads are not shown.
 // Notchy only listens to the broadcast signal on the session bus — no
 // polling, nothing read from the apps. What the app says is all Notchy knows:
 // the fraction it reports, never a name of a file or a speed. An app that

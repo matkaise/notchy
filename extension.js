@@ -33,7 +33,6 @@ import {Agents} from './src/services/agents.js';
 import {Notifier} from './src/services/notifier.js';
 import {Timers} from './src/services/timers.js';
 import {LauncherEntry} from './src/services/launcherEntry.js';
-import {DownloadWatch} from './src/services/downloads.js';
 import {Activities} from './src/services/activities.js';
 import {startTranslations} from './src/i18n/gnome.js';
 import {_, fmt, language} from './src/i18n/core.js';
@@ -79,7 +78,7 @@ export default class Notchy extends Extension {
             this.airpods = new AirPods(this, this.settings);
             // Smart Live Activities: the sources above, external progress and
             // timers meet in one manager (src/services/activities.js).
-            this.notifier = new Notifier(); this.timers = new Timers(this, this.settings); this.launcherEntry = new LauncherEntry(); this.downloads = new DownloadWatch(this.settings);
+            this.notifier = new Notifier(); this.timers = new Timers(this, this.settings); this.launcherEntry = new LauncherEntry();
             this.activities = new Activities(this, this.settings);
             this.companion.watchActivities(this.activities);
             this._rebuild();
@@ -207,7 +206,7 @@ export default class Notchy extends Extension {
         this.radial?.dispose(); this.capture?.dispose();
         this.injections?.clear(); this.injections = null; this.life?.dispose();
         for (const island of this.islands ?? []) island.dispose(); this.islands = [];
-        this.activities?.dispose(); this.activities = null; this.timers?.dispose(); this.timers = null; this.launcherEntry?.dispose(); this.launcherEntry = null; this.downloads?.dispose(); this.downloads = null; this.notifier?.dispose(); this.notifier = null;
+        this.activities?.dispose(); this.activities = null; this.timers?.dispose(); this.timers = null; this.launcherEntry?.dispose(); this.launcherEntry = null; this.notifier?.dispose(); this.notifier = null;
         this.files?.dispose(); this.files = this.launcher = null; this.airpods?.dispose(); this.airpods = null;
         this.companion?.dispose(); this.operations?.dispose(); this.clipboard?.dispose(); this.cover?.dispose(); this.cover = null; this.spectrum?.dispose(); this.spectrum = null; this.outputs?.dispose(); this.outputs = null; this.snap?.dispose(); this.snap = null; this.airdrop?.dispose(); this.airdrop = null; this.media?.dispose(); this.system?.dispose(); this.productivity?.dispose(); this.agents?.dispose(); this.agents = null; this.calendar?.dispose(); this.calendar = null; this.notifications?.dispose(); this.notifications = null; this.shelf?.dispose(); this.store?.dispose();
         this.companion = this.operations = this.clipboard = this.media = this.system = this.shelf = this.store = this.life = this.settings = null;

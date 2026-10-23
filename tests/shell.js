@@ -2000,25 +2000,6 @@ async function activityRegressions(ext, path, screenshot) {
         await copy.send('show org.gnome.Nautilus.desktop 0.4'); await copy.send('progress org.gnome.Nautilus.desktop 1');
         assert(await waitFor(() => ext.activities.store.get(entryId)?.state === 'completed', 2000), 'a LauncherEntry progress at 100 % is finished at once');
         await copy.close();
-        // Browser downloads: the temporary files Chrome and Firefox write, in the (private) Downloads folder.
-        const downloads = Gio.File.new_for_path(GLib.getenv('NOTCHY_DOWNLOADS_DIR'));
-        const write = (name, bytes) => GLib.file_set_contents(downloads.get_child(name).get_path(), 'a'.repeat(bytes));
-        const download = () => ext.activities.list().find(a => a.source === 'downloads');
-        assert(ext.downloads.monitor && GLib.getenv('NOTCHY_DOWNLOADS_DIR') === ext.downloads.folder.get_path(), 'the test watches its own Downloads folder');
-        write('Unconfirmed 4711.crdownload', 0);
-        await waitFor(() => download(), 2000);
-        downloads.get_child('Unconfirmed 4711.crdownload').move(downloads.get_child('ubuntu.iso.crdownload'), Gio.FileCopyFlags.NONE, null, null);
-        write('ubuntu.iso.crdownload', 2500000);
-        assert(await waitFor(() => download()?.name === 'ubuntu.iso' && download()?.description === '2,5 MB', 3000), `a Chrome download shows its name and size so far (${download()?.name}, ${download()?.description})`);
-        assert(download().progress === null, 'without a known total: no percentage');
-        downloads.get_child('ubuntu.iso.crdownload').move(downloads.get_child('ubuntu.iso'), Gio.FileCopyFlags.NONE, null, null);
-        assert(await waitFor(() => download()?.state === 'completed', 3000), 'renamed to its final name, it is finished');
-        assert(download().actions.some(a => a.id === 'show'), 'a finished download offers to show it in its folder');
-        ext.activities.invoke(download().id, 'dismiss');
-        write('bild.png', 0); write('bild.png.part', 1000);
-        assert(await waitFor(() => download()?.name === 'bild.png', 3000), 'a Firefox .part download is shown');
-        downloads.get_child('bild.png.part').delete(null);
-        assert(await waitFor(() => !download(), 3000), 'deleted (cancelled), it leaves without a „done“');
         // The Activities tab: agents and activities, rows updated in place, the keyboard kept.
         await report({id: 'build', name: 'Build', type: 'operation', progress: 0.1, actions: [{id: 'open', label: 'Öffnen'}]});
         island.toggle('activities'); await Scripting.sleep(700);
