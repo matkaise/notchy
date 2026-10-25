@@ -6,10 +6,6 @@ import {PROVIDERS, statusText} from './agentModel.js';
 import {actionText} from './operations.js';
 import {_, fmt, formatPercent, onLanguageChanged} from '../i18n/core.js';
 
-// Types that get a small indicator of their own beside the notch while
-// another activity has the notch (agents have theirs already, music and the
-// AirPods too).
-const SIDE_TYPES = new Set(['transfer', 'operation', 'airdrop', 'timer', 'recording', 'custom']);
 const AGENT_STATE = {working: 'running', waiting: 'waiting', completed: 'completed', error: 'error'};
 
 // The Activity Manager: one place for everything that runs. Each source —
@@ -18,7 +14,7 @@ const AGENT_STATE = {working: 'running', waiting: 'waiting', completed: 'complet
 // theirs over D-Bus (ReportActivity), notchyctl or MCP. The store keeps the
 // lifecycle (appeared, finished, lingering, expired), groupEntries
 // summarises, the Arbiter decides what the closed notch shows. The island,
-// its indicators and the Activities tab only draw what this says.
+// the agent card and the capsule only draw what this says.
 //
 // Sources stay responsible for their own state: the agent service for
 // sessions and hooks, the timers for deadlines, the file operations for
@@ -107,11 +103,6 @@ export class Activities extends Emitter {
     list() {
         const order = this.order;
         return [...this.visible].sort((a, b) => order.indexOf(classOf(a)) - order.indexOf(classOf(b)) || b.started - a.started || (a.id < b.id ? -1 : 1));
-    }
-    // Entries beside the notch: the others worth an indicator.
-    get sideEntries() {
-        if (!this.enabled || !this.settings.get_boolean('activities-indicators')) return [];
-        return this.entries.filter(entry => entry.key !== this.focus?.key && SIDE_TYPES.has(entry.type) && !entry.members.some(m => m.legacy));
     }
 
     // --- External reports -------------------------------------------------

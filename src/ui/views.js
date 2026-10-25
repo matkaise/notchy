@@ -17,7 +17,6 @@ import {kindLabel, sectionLabel} from '../launcher/logic.js';
 import {_, N_, fmt, ngettext, formatPercent, formatDate, formatTime} from '../i18n/core.js';
 import {ageText} from '../services/batteries.js';
 import {Waveform} from './waveform.js';
-import {ActivitiesPage} from './activityViews.js';
 import {Lifetime} from '../lifecycle.js';
 import {connectKeyPress} from '../compat/index.js';
 
@@ -227,7 +226,6 @@ export class Views {
         if (name === 'clipboard') return this.clipboardView();
         if (name === 'calendar') return this.calendarView();
         if (name === 'search') return this.searchView();
-        if (name === 'activities') return new ActivitiesPage(this).actor;
         return this.mediaView();
     }
 

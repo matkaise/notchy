@@ -13,8 +13,8 @@ import {Views} from './views.js';
 import {AirPodsBubble} from './airpodsBubble.js';
 import {AgentIndicators} from './agentBubble.js';
 import {ShelfBubble} from './shelfBubble.js';
-import {ActivityIndicators} from './activityBubble.js';
 import {compactParts, entryTicks} from './activityViews.js';
+import {agentCard} from './agentCard.js';
 import {SideIndicators} from './sideIndicators.js';
 import {Waveform} from './waveform.js';
 import {box, label, icon, gicon, button} from './widgets.js';
@@ -23,19 +23,19 @@ import {_, N_, fmt, ngettext, formatPercent} from '../i18n/core.js';
 
 // Bottom tab bar (Droppy for GNOME): page, icon, label.
 export const TABS = [['media', 'audio-x-generic-symbolic', N_('Media')], ['shelf', 'package-x-generic-symbolic', N_('Shelf')],
-    ['clipboard', 'edit-paste-symbolic', N_('Clipboard')], ['calendar', 'x-office-calendar-symbolic', N_('Calendar')], ['activities', 'view-list-bullet-symbolic', N_('Activities')]];
+    ['clipboard', 'edit-paste-symbolic', N_('Clipboard')], ['calendar', 'x-office-calendar-symbolic', N_('Calendar')]];
 const TAB_INDEX = Object.fromEntries(TABS.map(([page], i) => [page, i]));
 // Content heights per tab; the surface morphs between them.
 // Every tab has the same height, so switching tabs never makes the island jump.
 export const PAGE_HEIGHT = 300;
-export const CONTENT_HEIGHT = {media: PAGE_HEIGHT, shelf: PAGE_HEIGHT, clipboard: PAGE_HEIGHT, calendar: PAGE_HEIGHT, activities: PAGE_HEIGHT};
+export const CONTENT_HEIGHT = {media: PAGE_HEIGHT, shelf: PAGE_HEIGHT, clipboard: PAGE_HEIGHT, calendar: PAGE_HEIGHT};
 // A compact, icon-only tab pill (as in Droppy); labels remain accessible names.
 export const DROP_HEIGHT = 132;
 export const TAB_WIDTH = 46, TAB_HEIGHT = 30, TAB_INSET = 3, TABBAR_HEIGHT = 50;
 const TOP_GAP = 8, RADIUS = 30, SLIDE = 24;
 // AirPods arriving: the pill before the card, the card, the pill after it; leaving.
 const AIRPODS_PILL = 900, AIRPODS_CARD = 4200, AIRPODS_AFTER = 1800, AIRPODS_GONE = 2400;
-const WIDTH = {search: 620, drop: 460, notification: 440, snap: 560};
+const WIDTH = {search: 620, drop: 460, notification: 440, snap: 560, agent: 460};
 const LIQUID_INSET = 3, FADE = 70;
 // Settings that change what an opened tab shows (see the settings handler).
 const PAGE_KEYS = new Set(['style', 'glass-level', 'width', 'media-enabled', 'media-waveform', 'airplay-enabled', 'clipboard-enabled', 'airpods-battery-threshold']);
@@ -193,7 +193,7 @@ export class Island {
             // The page may claim Esc first (an AirDrop question declines with it).
             if (this.views.keyPress?.(event) === Clutter.EVENT_STOP) return Clutter.EVENT_STOP;
             if (key === Clutter.KEY_Escape) { this.close(); return Clutter.EVENT_STOP; }
-            // Entries consume typed digits first; elsewhere 1–5 select a tab.
+            // Entries consume typed digits first; elsewhere 1–4 select a tab.
             const tab = TABS[key - Clutter.KEY_1];
             if (this.expanded && !this.peeking && tab) { this.open(tab[0]); return Clutter.EVENT_STOP; }
             return Clutter.EVENT_PROPAGATE;
@@ -231,7 +231,6 @@ export class Island {
         if (this.airpods) this.airpodsBubble = new AirPodsBubble(this);
         if (this.agents) this.agentIndicators = new AgentIndicators(this);
         this.shelfBubble = new ShelfBubble(this);
-        if (this.activities) this.activityIndicators = new ActivityIndicators(this);
         this.applyStyle(); this.updateCompact(); this.position(); this.syncVisibility(); this.syncAirDrop();
     }
     buildPanel() {
@@ -244,7 +243,7 @@ export class Island {
         this.leftRow = box(false, {style_class: 'notchy-slot-row', x_expand: true}); this.leftSlot.set_child(this.leftRow);
         this.rightSlot = new St.Button({style_class: 'notchy-slot notchy-slot-right', can_focus: true, accessible_name: _('Open Notchy')});
         this.rightRow = box(false, {style_class: 'notchy-slot-row', x_expand: true, x_align: Clutter.ActorAlign.END}); this.rightSlot.set_child(this.rightRow);
-        for (const slot of [this.leftSlot, this.rightSlot]) slot.connect('clicked', () => this.toggle());
+        for (const slot of [this.leftSlot, this.rightSlot]) slot.connect('clicked', () => this.capsuleClicked());
         this.panelSurface.add_child(this.leftSlot);
         this.panelButton.add_child(this.panelSurface);
         Main.panel.addToStatusArea('notchy', this.panelButton, 0, 'center');
@@ -289,7 +288,7 @@ export class Island {
     get expandedWidth() { return Math.min(this.settings.get_int('width'), this.monitor.width - 32); }
     get currentWidth() {
         if (this.dropActive) return WIDTH.drop;
-        if (this.peeking) return Math.max(this.peekKind === 'snap' ? WIDTH.snap : WIDTH.notification, this.compactWidth);
+        if (this.peeking) return Math.max(WIDTH[this.peekKind] ?? WIDTH.notification, this.compactWidth);
         return this.page === 'search' ? WIDTH.search : this.expandedWidth;
     }
     // Native panes start right below the clock row; the shelf pane includes the
@@ -507,16 +506,10 @@ export class Island {
         if (this.dropActive || this.extension.drops?.dragging) return;
         if (this.hovered) {
             this.cancelCollapse(); this.life.cancel(this.hoverTimeout);
-            if (!this.expanded && !this.dateMenu.menu.isOpen && this.settings.get_boolean('hover-open')) this.hoverTimeout = this.life.later(this.settings.get_int('hover-delay'), () => { this.hoverTimeout = 0; if (this.hovered && !this.dateMenu.menu.isOpen && !this.dropActive && !this.extension.drops?.dragging) this.open(this.defaultPage); });
+            if (!this.expanded && !this.dateMenu.menu.isOpen && this.settings.get_boolean('hover-open')) this.hoverTimeout = this.life.later(this.settings.get_int('hover-delay'), () => { this.hoverTimeout = 0; if (this.hovered && !this.dateMenu.menu.isOpen && !this.dropActive && !this.extension.drops?.dragging) this.open(); });
         } else { this.life.cancel(this.hoverTimeout); this.hoverTimeout = 0; this.scheduleCollapse(); }
     }
-    // The page the island opens on: the Activities tab while the notch shows
-    // an activity (a transfer, a timer, an agent that needs you …), else media.
-    get defaultPage() {
-        const focus = this.activities?.focus;
-        return focus && focus.type !== 'media' && !focus.members.some(m => m.legacy) ? 'activities' : 'media';
-    }
-    open(page = this.defaultPage) {
+    open(page = 'media') {
         if (this.life.closed || this.dropActive) return; this.cancelCollapse(); this.life.cancel(this.hoverTimeout); this.hoverTimeout = 0;
         this.foldWidth = undefined;
         const fromPeek = this.peeking; this.endPeek(); this.clearHud();
@@ -575,6 +568,8 @@ export class Island {
         this.syncTabs(); this.syncPin();
     }
     close(immediate = false) {
+        // A shown agent card: what its agent finished has been seen.
+        if (this.peekKind === 'agent') this.agents?.markSeen(this.agentCardProvider);
         // Folding an AirDrop question away is an answer: no.
         if (this.peekKind === 'airdrop-ask') this.airdrop?.question?.answer(false);
         // What waited for the island: the AirPods card, then a held-back notification.
@@ -616,11 +611,31 @@ export class Island {
         if (!duration) { this.returnPanelHeader(); this.syncVisibility(); }
         else this.morphTimeout = this.life.later(duration, () => { this.morphTimeout = 0; if (!this.expanded && !this.dropActive) { this.returnPanelHeader(); this.syncVisibility(); } });
     }
+    // A click on the capsule: while it names an agent that needs you (or just
+    // finished), that agent's card; else the island.
+    capsuleClicked() {
+        const focus = this.activities?.focus;
+        if (!this.expanded && focus?.type === 'agent' && focus.members[0]?.provider && this.showAgentCard(focus.members[0].provider)) return;
+        this.toggle();
+    }
+    // An agent's card (src/ui/agentCard.js), springing out of the notch like
+    // the AirPods card; a click on the agent's indicator opens it.
+    showAgentCard(provider, {focus = true} = {}) {
+        if (!this.agents || this.life.closed) return false;
+        if (this.expanded && !this.peeking) this.close(true);
+        // Moving on to another agent's card: the one shown has been seen.
+        if (this.peekKind === 'agent' && this.agentCardProvider !== provider) this.agents.markSeen(this.agentCardProvider);
+        let card = null;
+        if (!this.peek('agent', 0, () => (card = agentCard(this, provider)))) return false;
+        this.agentCardProvider = provider; this.agentCard = card;
+        if (focus) { this.actor.grab_key_focus(); card.focus(); }
+        return true;
+    }
     // Shortcuts and clock clicks: hover never takes the keyboard from an app,
     // an explicit toggle does, so Esc and 1–4 work right away.
     toggle(page) {
         if (this.expanded && !this.peeking && (!page || this.page === page)) { this.close(); return; }
-        this.open(page ?? this.defaultPage);
+        this.open(page);
         if (this.expanded && !this.views.focusEntry?.has_key_focus?.() && !this.views.focusEntry?.clutter_text?.has_key_focus()) this.actor.grab_key_focus();
     }
     cancelCollapse() { this.life.cancel(this.collapseTimeout); this.collapseTimeout = 0; }
@@ -834,6 +849,8 @@ export class Island {
             this.peeking = true; this.expanded = true; this.page = 'peek';
             this.body.opacity = 0; this.body.show(); this.applyStyle();
         }
+        // A new banner brings its own keys (or none).
+        this.views.keyPress = null;
         this.peekKind = kind; this.peekView = build();
         this.body.destroy_all_children(); this.body.add_child(this.peekView.actor);
         const width = this.currentWidth; this.body.width = width;
@@ -845,7 +862,7 @@ export class Island {
     }
     endPeek() {
         if (!this.peeking) return;
-        this.peeking = false; this.peekKind = null; this.peekView = null; this.sizeTarget = null;
+        this.peeking = false; this.peekKind = null; this.peekView = null; this.sizeTarget = null; this.agentCard = null; this.views.keyPress = null;
         this.life.cancel(this.peekTimeout); this.peekTimeout = 0;
         this.body.destroy_all_children();
     }
@@ -941,7 +958,6 @@ export class Island {
         this.queuedNotifications = []; this.releaseNotifications(this.waitingNotifications ?? []);
         if (this.nativeShelf) this.companion.closeShelf();
         this.agentIndicators?.dispose(); this.agentIndicators = null;
-        this.activityIndicators?.dispose(); this.activityIndicators = null;
         this.airpodsBubble?.dispose(); this.airpodsBubble = null;
         this.shelfBubble?.dispose(); this.shelfBubble = null;
         this.sides?.dispose(); this.sides = null;

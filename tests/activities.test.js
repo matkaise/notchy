@@ -4,7 +4,7 @@ import {ActivityStore, Arbiter, activity, parseReport, groupEntries, classOf, sa
     CLASSES, MIN_DISPLAY_MS, COMPLETED_MS, ERROR_MS} from '../src/services/activityModel.js';
 import {TimerSet, parseDuration, parseTimerQuery, timerName} from '../src/services/timerModel.js';
 import {launcherEntryUpdate, LauncherEntries, STALE_MS} from '../src/services/progressModel.js';
-import {AgentRegistry, parseEvent, hookEvent, pickWindow} from '../src/services/agentModel.js';
+import {AgentRegistry, parseEvent, hookEvent, pickWindow, viewState, COMPLETED_MS as AGENT_COMPLETED_MS} from '../src/services/agentModel.js';
 import {planSides} from '../src/ui/sideLayout.js';
 import {useLanguage} from './i18n-helper.js';
 
@@ -242,7 +242,7 @@ test('progress other apps publish (LauncherEntry): only what they say', () => {
     assert.ok(!entries.list(T + STALE_MS + 1).some(e => e.app === 'x.desktop'));
 });
 
-test('agents: parallel sessions, late events, crashes and the history of ended sessions', () => {
+test('agents: parallel sessions, late events, crashes', () => {
     const agents = new AgentRegistry();
     const hook = (provider, payload, time) => { const {event} = parseEvent({...hookEvent(provider, payload), time}, time); return agents.apply(event, time); };
     hook('claude', {hook_event_name: 'UserPromptSubmit', session_id: 'a', cwd: '/p/Notchy'}, T);
@@ -255,15 +255,45 @@ test('agents: parallel sessions, late events, crashes and the history of ended s
     assert.equal(r.transition, null, 'the same state again notifies nobody twice');
     assert.equal(agents.providers()[0].count, 2);
     hook('claude', {hook_event_name: 'SessionEnd', session_id: 'b'}, T + 5);
-    // A late event after the end neither revives it nor shows in the history twice.
+    // A late event after the end does not revive it.
     hook('claude', {hook_event_name: 'PostToolUse', session_id: 'b'}, T + 6);
-    assert.equal(agents.recent(T + 10, 600000).length, 1);
-    assert.equal(agents.recent(T + 10, 600000)[0].project, 'Website');
-    // A crashed process ends the session (no notification as an error: a kill is no failure).
+    assert.equal(agents.get('claude', 'b').connected, false);
+    // A crashed process ends the session.
     agents.tick(T + 20, session => (session.id === 'a' ? false : null));
-    assert.equal(agents.recent(T + 30, 600000)[0].orphaned, true, 'the history knows the process was gone');
-    assert.equal(agents.recent(T + 700000, 600000).length, 0, 'ended sessions leave the history after its time');
-    assert.equal(agents.recent(T + 40, 0).length, 0, '0 minutes: no history');
+    assert.equal(agents.get('claude', 'a').connected, false);
+});
+
+test('a finished task stays „done“ until it was seen (as Herdr does)', () => {
+    const agents = new AgentRegistry();
+    const hook = (payload, time) => { const {event} = parseEvent({...hookEvent('claude', payload), time}, time); return agents.apply(event, time); };
+    hook({hook_event_name: 'UserPromptSubmit', session_id: 'a', cwd: '/p/Notchy'}, T);
+    hook({hook_event_name: 'UserPromptSubmit', session_id: 'b', cwd: '/p/Docs'}, T);
+    const r = hook({hook_event_name: 'Stop', session_id: 'a'}, T + 10);
+    assert.equal(r.transition, 'completed');
+    // The agent service marks it unseen when its window is not in front.
+    agents.get('claude', 'a').unseen = true;
+    agents.tick(T + 10 + AGENT_COMPLETED_MS);
+    const a = agents.get('claude', 'a');
+    assert.equal(a.task, 'idle', 'the task itself is ready again');
+    assert.equal(viewState(a), 'completed', 'but it shows as done until seen');
+    let group = agents.providers()[0];
+    assert.equal(group.state, 'working', 'a working session is more urgent than a done one');
+    assert.equal(group.unseen, 1);
+    hook({hook_event_name: 'Stop', session_id: 'b'}, T + 20); agents.get('claude', 'b').unseen = true;
+    group = agents.providers()[0];
+    assert.equal(group.state, 'completed'); assert.equal(group.unseen, 2, 'the indicator counts what finished');
+    assert.ok(agents.providers({showIdle: false})[0], 'unseen done sessions show even with ready agents hidden');
+    // Seen: one by one (a ring clicked) or all of an agent (its card shown).
+    assert.ok(agents.markSeen('claude', 'a'));
+    assert.equal(viewState(agents.get('claude', 'a')), 'idle');
+    assert.ok(agents.markSeen('claude') && !agents.markSeen('claude'), 'marking twice changes nothing');
+    agents.tick(T + 20 + AGENT_COMPLETED_MS);
+    assert.equal(agents.providers()[0].unseen, 0, 'seen, and its moment as „done“ is over');
+    // New work clears it as well.
+    agents.get('claude', 'a').unseen = true;
+    hook({hook_event_name: 'UserPromptSubmit', session_id: 'a'}, T + 30);
+    assert.equal(agents.get('claude', 'a').unseen, false);
+    assert.equal(viewState(agents.get('claude', 'a')), 'working');
 });
 
 test('switching to an agent only when its window is unambiguous', () => {

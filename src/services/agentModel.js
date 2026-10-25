@@ -85,8 +85,6 @@ export const TOMBSTONE_MS = 2 * 60 * 1000;
 // Events may arrive slightly out of order (hooks run as separate processes);
 // an event older than the newest one applied is ignored for the state.
 export const CLOCK_SLACK_MS = 0;
-// At most this many ended sessions are remembered for the control center.
-export const HISTORY_LIMIT = 24;
 
 const PROVIDER_RE = /^[a-z0-9][a-z0-9._-]{0,31}$/;
 const clean = (text, max) => String(text ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, max);
@@ -126,7 +124,7 @@ export function parseEvent(input, now = Date.now()) {
 // {changed: bool, session, transition: 'appeared' | 'completed' | 'waiting' | 'error' | 'ended' | null}.
 // A session that appears waiting or failed reports 'appeared'.
 export class AgentRegistry {
-    constructor() { this.sessions = new Map(); this.ended = new Map(); this.generations = 0; this.history = []; }
+    constructor() { this.sessions = new Map(); this.ended = new Map(); this.generations = 0; }
     key(provider, session) { return `${provider}\u0000${session}`; }
     get(provider, session) { return this.sessions.get(this.key(provider, session)) ?? null; }
     // Whether an event may (re)open a session that ended: a start, or an
@@ -140,16 +138,6 @@ export class AgentRegistry {
     bury(key, session, now) {
         this.ended.set(key, {at: now, lastEvent: Math.max(session.lastEvent, session.endEvent ?? 0)});
         if (this.ended.size > 256) this.ended.delete(this.ended.keys().next().value);
-        // The control center lists ended sessions a while (Settings → Agents).
-        this.history = this.history.filter(h => !(h.provider === session.provider && h.id === session.id && h.generation === session.generation));
-        this.history.push({provider: session.provider, id: session.id, project: session.project, started: session.started, ended: now,
-            task: session.task, orphaned: Boolean(session.orphaned), generation: session.generation});
-        if (this.history.length > HISTORY_LIMIT) this.history.shift();
-    }
-    // Ended sessions within `keepMs`, newest first; older ones are forgotten.
-    recent(now = Date.now(), keepMs = 0) {
-        this.history = this.history.filter(h => now - h.ended < Math.max(keepMs, 0));
-        return [...this.history].reverse();
     }
     apply(event, now = Date.now()) {
         const key = this.key(event.provider, event.session);
@@ -203,6 +191,8 @@ export class AgentRegistry {
                 session.task = event.state;
                 session.completedAt = event.state === 'completed' ? now : 0;
                 if (event.state === 'working' || event.state === 'waiting') session.lastActivity = event.time;
+                // New work: whatever finished before has been dealt with.
+                if (event.state === 'working' || event.state === 'waiting' || event.state === 'error') session.unseen = false;
                 // A new task starts without the old one's progress and text.
                 if (event.kind === 'prompt') { session.progress = null; session.status = ''; session.note = ''; }
                 if (event.state !== 'working') session.tool = '';
@@ -219,7 +209,7 @@ export class AgentRegistry {
     fresh(event, now) {
         return {id: event.session, provider: event.provider, project: '', status: '', note: '', progress: null, task: 'idle', connected: true,
             started: event.time, lastEvent: 0, lastRank: undefined, lastActivity: event.time, seen: now, completedAt: 0, endedAt: 0, endEvent: 0, pid: null, pidStart: null,
-            ancestors: [], heartbeat: null, source: event.source, tool: '', generation: ++this.generations};
+            ancestors: [], heartbeat: null, source: event.source, tool: '', unseen: false, generation: ++this.generations};
     }
     // Time passing: completed → idle, quiet and orphaned sessions, the fade of
     // ended ones. `alive(session)` tells whether its process still runs
@@ -258,27 +248,43 @@ export class AgentRegistry {
     // while its process lives on in the background (a desktop app in the tray).
     // Such a session shows only while it works or waits; idle or finished, it
     // has nothing to say and its indicator goes.
+    // A finished task that was not looked at yet stays „done“ (viewState),
+    // as Herdr keeps it: the indicator stays green until you have seen it.
     providers({showIdle = true, enabled = () => true, present = () => true} = {}) {
         const groups = new Map();
         for (const session of this.sessions.values()) {
             if (!enabled(session.provider)) continue;
-            const state = shownState(session);
+            const state = viewState(session);
             if (state === 'idle' && !showIdle) continue;
             if (!present(session) && (state === 'idle' || state === 'completed')) continue;
             if (!groups.has(session.provider)) groups.set(session.provider, []);
             groups.get(session.provider).push(session);
         }
         return [...groups.entries()].map(([provider, sessions]) => {
-            sessions.sort((a, b) => PRIORITY[shownState(b)] - PRIORITY[shownState(a)] || b.lastActivity - a.lastActivity);
+            sessions.sort((a, b) => PRIORITY[viewState(b)] - PRIORITY[viewState(a)] || b.lastActivity - a.lastActivity);
             const live = sessions.filter(s => s.connected);
-            const state = live.length ? shownState(live[0]) : 'disconnected';
+            const state = live.length ? viewState(live[0]) : 'disconnected';
             const progress = live.length === 1 && state === 'working' ? live[0].progress : null;
-            return {provider, name: providerName(provider), state, priority: PRIORITY[state], sessions, count: live.length, progress};
+            const unseen = live.filter(s => viewState(s) === 'completed').length;
+            return {provider, name: providerName(provider), state, priority: PRIORITY[state], sessions, count: live.length, progress, unseen};
         });
     }
-    toJSON() { return this.list().map(s => ({...s, state: shownState(s), statusText: statusText(s)})); }
+    // Seen: a finished task the user looked at (its window, its card) turns quiet. Returns whether anything changed.
+    markSeen(provider, id = null) {
+        let changed = false;
+        for (const session of this.sessions.values()) {
+            if (session.provider !== provider || (id !== null && session.id !== id) || !session.unseen) continue;
+            session.unseen = false; changed = true;
+        }
+        return changed;
+    }
+    toJSON() { return this.list().map(s => ({...s, state: shownState(s), view: viewState(s), statusText: statusText(s)})); }
 }
 export const shownState = session => (session.connected ? session.task : 'disconnected');
+// What the indicator and the agent card show: like shownState, but a finished
+// task stays „completed“ while `unseen` (set by src/services/agents.js when
+// a task finishes away from your eyes) until you looked at it.
+export const viewState = session => (session.connected && session.unseen && (session.task === 'idle' || session.task === 'completed') ? 'completed' : shownState(session));
 
 // The one window a session runs in, among its app's windows ([{title}]):
 // the only window, or the only one whose title names the session's project

@@ -396,9 +396,8 @@ export default class NotchyPreferences extends ExtensionPreferences {
     // Smart Live Activities: what the notch shows, in which order, how long.
     activitiesPage(settings, page, group, toggle, number) {
         const live = page(_('Live Activities'), 'view-list-bullet-symbolic');
-        const main = group(live, _('Smart Live Activities'), _('The closed notch shows the most important running activity: an agent that needs you, a failure, something that just finished, a transfer, a timer or recording, the music. More of them appear beside the notch, all of them in the Activities tab. Progress is only shown where it is really measured.'));
+        const main = group(live, _('Smart Live Activities'), _('The closed notch shows the most important running activity: an agent that needs you, a failure, something that just finished, a transfer, a timer or recording, the music. The agents keep their own indicators beside the notch; a click on one opens its card. Progress is only shown where it is really measured.'));
         toggle(main, 'activities-enabled', _('Smart Live Activities'), _('Off: the notch shows music and simple activities as before.'));
-        toggle(main, 'activities-indicators', _('Further activities beside the notch'));
         toggle(main, 'activities-group', _('Summarise similar activities'), _('Two downloads become “2 transfers”.'));
         toggle(main, 'activities-animations', _('Animations'), _('A check when something finishes, a short shake when it fails, growing progress.'));
         number(main, 'activities-completed-seconds', _('Show finished activities for (seconds)'), 1, 60, 1, _('Failed ones stay at least 20 seconds.'));
@@ -445,7 +444,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
         resetButton.connect('clicked', () => { settings.reset('activities-priority'); draw(); });
         reset.add_suffix(resetButton); order.add(reset);
         draw();
-        const timers = group(live, _('Pomodoro'), _('Start timers in Thunderstorm (“timer 10 min tea”, “pomodoro”), in the Activities tab or with notchyctl timer.'));
+        const timers = group(live, _('Pomodoro'), _('Start timers in Thunderstorm (“timer 10 min tea”, “pomodoro”), or with notchyctl timer.'));
         number(timers, 'pomodoro-work-minutes', _('Focus (minutes)'), 5, 120, 5);
         number(timers, 'pomodoro-break-minutes', _('Break (minutes)'), 1, 60, 1);
         const other = group(live, _('For Your Own Apps'), _('Other apps and scripts report activities over D-Bus (ReportActivity), with notchyctl live or the MCP tools live_activity and live_activity_end. Details in docs/ACTIVITIES.md.'));
@@ -467,7 +466,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
         position.connect('notify::selected', () => settings.set_string('agents-position', SIDES[position.selected] ?? 'auto'));
         main.add(position);
         number(main, 'indicators-max', _('Maximum visible indicators'), 0, 12, 1, _('Beside the notch, for agents, AirPods, activities and the Shelf; further ones join the “+N” group. 0 = as many as fit.'));
-        number(main, 'agents-history-minutes', _('List ended sessions for (minutes)'), 0, 240, 5, _('In the Activities tab. 0 = not at all.'));
+        toggle(main, 'agents-done-until-seen', _('Keep “Done” until you have looked'), _('A finished task stays green until you open the agent’s card or its window. Off: it turns ready after the seconds above.'));
         const notes = group(agents, _('Notifications'), _('Only the agent, its project folder’s name and its state are shown — never a prompt or what the agent wrote. Not while the agent’s own window has the focus. While Smart Live Activities show it in the notch, it goes quietly into the message list.'));
         toggle(notes, 'agents-notify-waiting', _('When an agent needs you'), _('An approval or a question. Notchy approves nothing itself: a click switches to the agent.'));
         toggle(notes, 'agents-notify-completed', _('When an agent finished its task'));

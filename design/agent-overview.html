@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agenten-Karte</title>
+<style>
+:root {
+  --page: #e9e7e3; --page-ink: #1d1d1f; --page-muted: #6b6a67; --page-line: #d6d3ce;
+  --desk: #2b2b2d; --ink: #fff; --muted: rgba(255,255,255,0.55); --faint: rgba(255,255,255,0.34); --track: rgba(255,255,255,0.14);
+  --blocked: #ff9f0a; --working: #6cb4ff; --done: #34c759; --error: #ff453a; --idle: rgba(255,255,255,0.28);
+  --raise: #1c1c1e; --raise-2: #2c2c30;
+  --claude: #d97757; --codex: #ececec; --antigravity: #7aa2ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #141416; --page-ink: #f2f2f2; --page-muted: #9a9aa0; --page-line: #2a2a2e; }
+}
+:root[data-theme="dark"] { --page: #141416; --page-ink: #f2f2f2; --page-muted: #9a9aa0; --page-line: #2a2a2e; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--page-ink); font: 15px/1.5 Cantarell, Inter, system-ui, sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 40px 16px 80px; }
+h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.01em; }
+h2 { font-size: 19px; margin: 52px 0 6px; }
+.lead, .note { color: var(--page-muted); max-width: 740px; margin: 0; }
+.note { font-size: 14px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; background: var(--page-line); color: var(--page-muted); vertical-align: 3px; margin-left: 6px; }
+
+/* The desktop and GNOME's bar, as Notchy's screenshots show them. */
+.desk { position: relative; margin-top: 16px; border-radius: 14px; overflow: hidden; background: var(--desk); min-height: 360px; }
+.bar { position: relative; height: 32px; background: #000; color: #fff; font-weight: 700; font-size: 13px; }
+.bar .clock { position: absolute; left: 50%; top: 0; transform: translateX(-50%); height: 32px; display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.bar .sides { position: absolute; left: 50%; top: 2px; transform: translateX(-50%); display: flex; align-items: center; }
+.row-l, .row-r { display: flex; gap: 6px; width: 92px; }
+.row-l { justify-content: flex-end; } .row-r { justify-content: flex-start; }
+.gap { width: 150px; }
+.before { margin-top: 16px; border-radius: 14px; overflow: hidden; background: var(--desk); padding-bottom: 10px; }
+.before .hint { display: block; text-align: center; color: rgba(255,255,255,.6); font-size: 12px; margin-top: 8px; }
+
+/* An agent's indicator beside the notch (unchanged): black, its state ring around its symbol. */
+.ind { width: 28px; height: 28px; border-radius: 50%; background: #000; position: relative; display: grid; place-items: center; box-shadow: 0 0 0 1px rgba(255,255,255,.07); }
+.ind.on { background: #1c1c1e; box-shadow: 0 0 0 1px rgba(255,255,255,.22); }
+.ind::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; border: 2px solid var(--track); }
+.ind.working::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--working); border-right-color: var(--working); animation: spin 1.4s linear infinite; }
+.ind.blocked::before { border-color: var(--blocked); } .ind.done::before { border-color: var(--done); } .ind.idle::before { border-color: rgba(255,255,255,.22); }
+.ind svg { width: 12px; height: 12px; }
+.badge { position: absolute; right: -3px; top: -3px; min-width: 14px; height: 14px; border-radius: 7px; font-size: 9px; font-weight: 800; line-height: 14px; text-align: center; padding: 0 3px; color: #000; }
+.badge.blocked { background: var(--blocked); } .badge.done { background: var(--done); color: #fff; }
+
+/* The card growing out of the notch: black at the top, fading into glass, flush with the bar, rounded below. */
+.card { position: relative; margin: 0 auto; width: 460px; max-width: calc(100% - 32px); color: var(--ink); border-radius: 0 0 26px 26px; padding: 10px 24px 18px;
+  background: linear-gradient(180deg, #000 0%, #000 55%, rgba(22, 22, 26, 0.94) 100%); box-shadow: 0 18px 40px rgba(0,0,0,.35); }
+.card.liquid { margin-top: 3px; border-radius: 26px; background: rgba(28, 26, 34, 0.78); backdrop-filter: blur(22px); box-shadow: 0 18px 40px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.08); }
+.title { text-align: center; font-weight: 700; font-size: 17px; margin: 2px 0 0; }
+.sub { text-align: center; color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+.body { display: flex; align-items: center; gap: 22px; }
+.hero { width: 76px; height: 76px; flex: none; display: grid; place-items: center; }
+.hero svg { width: 56px; height: 56px; }
+.rings { display: flex; gap: 18px; flex: 1; justify-content: center; flex-wrap: wrap; }
+.session { width: 84px; text-align: center; cursor: pointer; border-radius: 16px; padding: 4px 0 2px; }
+.session:hover { background: rgba(255,255,255,.04); }
+.ring { width: 64px; height: 64px; margin: 0 auto; display: grid; place-items: center; position: relative; }
+.ring svg.r { position: absolute; inset: 0; width: 64px; height: 64px; transform: rotate(-90deg); }
+.ring svg.r circle { fill: none; stroke-width: 3; stroke-linecap: round; }
+.ring .track { stroke: var(--track); }
+.ring .spin { animation: spin 1.4s linear infinite; transform-origin: 32px 32px; }
+.ring .mark { font-size: 20px; font-weight: 800; line-height: 1; }
+.session .p { font-weight: 700; font-size: 13px; margin-top: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session .s { font-size: 11px; color: var(--faint); white-space: nowrap; }
+.session.blocked .s { color: rgba(255, 196, 110, .95); }
+.session.done .s { color: rgba(120, 220, 150, .95); }
+
+/* Needs you: one line and two buttons, as the AirDrop question. */
+.ask { margin-top: 14px; display: flex; align-items: center; gap: 10px; }
+.ask .txt { flex: 1; font-size: 12.5px; color: var(--muted); }
+.ask .txt b { color: #fff; }
+.btn { font: inherit; font-size: 12.5px; font-weight: 700; padding: 6px 16px; border-radius: 99px; border: 0; background: #2c2c30; color: #fff; cursor: pointer; white-space: nowrap; }
+.btn.go { background: var(--blocked); color: #000; }
+
+/* Several agents: a small pill of their symbols at the foot, like the tab bar. */
+.switch { display: flex; justify-content: center; margin-top: 16px; }
+.switch div { display: flex; gap: 2px; background: var(--raise); border-radius: 99px; padding: 3px; }
+.switch span { width: 46px; height: 28px; border-radius: 99px; display: grid; place-items: center; position: relative; }
+.switch span.on { background: var(--raise-2); }
+.switch span svg { width: 14px; height: 14px; }
+.switch i { position: absolute; right: 9px; top: 5px; width: 6px; height: 6px; border-radius: 50%; }
+
+.glyph-claude { fill: var(--claude); } .glyph-codex { fill: var(--codex); } .glyph-ag { fill: var(--antigravity); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin, .ind.working::after { animation: none; } }
+
+.row { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 16px; }
+.row > .desk { flex: 1 1 460px; margin-top: 0; min-height: 330px; }
+.caption { position: absolute; left: 16px; bottom: 12px; color: rgba(255,255,255,.55); font-size: 12px; }
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 16px; }
+.legend > div { background: #000; color: #fff; border-radius: 18px; padding: 14px 12px 12px; text-align: center; }
+.legend p { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.list { color: var(--page-muted); font-size: 14px; max-width: 760px; padding-left: 18px; }
+
+@media (max-width: 600px) {
+  .card { padding: 10px 14px 16px; }
+  .body { flex-direction: column; gap: 6px; }
+  .hero { width: 56px; height: 56px; } .hero svg { width: 40px; height: 40px; }
+  .rings { gap: 8px; }
+  .gap { width: 120px; } .row-l, .row-r { width: 64px; }
+  .ask { flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="claude" viewBox="0 0 12 12"><path class="glyph-claude" d="M6 0l1.2 4.2L11.5 3 8 6l3.5 3-4.3-1.2L6 12 4.8 7.8.5 9 4 6 .5 3l4.3 1.2z"/></symbol>
+  <symbol id="codex" viewBox="0 0 12 12"><circle class="glyph-codex" cx="6" cy="6" r="5"/><circle cx="6" cy="6" r="2.4" fill="#000"/></symbol>
+  <symbol id="ag" viewBox="0 0 12 12"><path class="glyph-ag" d="M6 1l5 10H1z"/></symbol>
+  <symbol id="pods" viewBox="0 0 12 12"><path fill="#fff" d="M3 1.5a2 2 0 0 1 2 2v6.5a1 1 0 0 1-2 0V7.4A2.2 2.2 0 0 1 3 1.5zm6 0a2.2 2.2 0 0 1 0 5.9V10a1 1 0 0 1-2 0V3.5a2 2 0 0 1 2-2z"/></symbol>
+</svg>
+<main>
+  <h1>Agenten-Karte <span class="tag">Entwurf 2</span></h1>
+  <p class="lead">Die Agenten bleiben Indikatoren neben der Notch. Ein Klick auf einen Agenten lässt die Notch zu seiner Karte aufspringen – wie beim Verbinden der AirPods: schwarz aus der Leiste heraus, in Glas auslaufend, großer Titel, große Ringe. Jede Sitzung ist ein Ring im Zustand ihres Agenten (wartet · arbeitet · fertig · ruhig), angelehnt an Herdr.</p>
+
+  <h2>1 · Klick auf Claude Code <span class="tag">Hauptvorschlag</span></h2>
+  <p class="note">Links das Symbol des Agenten wie das Produktbild der AirPods, rechts seine Sitzungen als Ringe, darunter Projekt und Zustand. Ein Klick auf einen Ring wechselt zu dessen Fenster. Wartet eine Sitzung, kommt eine Zeile mit Knöpfen dazu – wie die AirDrop-Frage. Unten wechselt man zu den anderen Agenten. Solange die Karte offen ist, sind die Indikatoren ausgeblendet – wie heute, wenn die Notch offen ist.</p>
+  <div class="before">
+    <div class="bar">
+      <div class="sides">
+        <div class="row-l"><span class="ind done"><svg><use href="#ag"/></svg><span class="badge done">1</span></span><span class="ind blocked on"><svg><use href="#claude"/></svg><span class="badge blocked">?</span></span></div>
+        <div class="gap"></div>
+        <div class="row-r"><span class="ind working"><svg><use href="#codex"/></svg></span><span class="ind idle"><svg><use href="#pods"/></svg></span></div>
+      </div>
+      <div class="clock"><span>25. Okt</span><span>14:32</span></div>
+    </div>
+    <span class="hint">Vorher: Klick auf den Claude-Code-Indikator ↓</span>
+  </div>
+  <div class="desk">
+    <div class="bar"><div class="clock"><span>25. Okt</span><span>14:32</span></div></div>
+    <div class="card" role="dialog" aria-label="Claude Code: zwei Sitzungen">
+      <p class="title">Claude Code</p>
+      <p class="sub">2 Sitzungen · eine wartet auf dich</p>
+      <div class="body">
+        <div class="hero"><svg><use href="#claude"/></svg></div>
+        <div class="rings">
+          <div class="session working" title="Zu Notchy wechseln">
+            <div class="ring"><svg class="r" viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="29"/><circle class="spin" cx="32" cy="32" r="29" stroke="var(--working)" stroke-dasharray="40 200"/></svg><svg width="22" height="22" viewBox="0 0 12 12"><use href="#claude"/></svg></div>
+            <div class="p">Notchy</div><div class="s">Arbeitet · 12 Min.</div>
+          </div>
+          <div class="session blocked" title="Zu Website wechseln">
+            <div class="ring"><svg class="r" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" stroke="var(--blocked)"/></svg><span class="mark" style="color:var(--blocked)">?</span></div>
+            <div class="p">Website</div><div class="s">Wartet · 2 Min.</div>
+          </div>
+        </div>
+      </div>
+      <div class="ask">
+        <span class="txt"><b>Website</b> möchte <b>Bash</b> ausführen – bestätige im Terminal.</span>
+        <button class="btn">Später</button><button class="btn go">Zum Terminal</button>
+      </div>
+      <div class="switch"><div>
+        <span class="on" title="Claude Code"><svg><use href="#claude"/></svg><i style="background:var(--blocked)"></i></span>
+        <span title="Codex"><svg><use href="#codex"/></svg><i style="background:var(--working)"></i></span>
+        <span title="Antigravity"><svg><use href="#ag"/></svg><i style="background:var(--done)"></i></span>
+      </div></div>
+    </div>
+    <div style="height:28px"></div>
+  </div>
+
+  <h2>2 · Die anderen Zustände</h2>
+  <p class="note">Gleiche Karte, je nach Lage. Ein gemeldeter Fortschritt füllt den Ring; ohne Meldung dreht sich nur ein kurzer Bogen. „Fertig“ bleibt grün, bis du die Sitzung angesehen hast.</p>
+  <div class="row">
+    <div class="desk">
+      <div class="bar"><div class="clock"><span>25. Okt</span><span>14:32</span></div></div>
+      <div class="card">
+        <p class="title">Codex</p><p class="sub">1 Sitzung · arbeitet</p>
+        <div class="body">
+          <div class="hero"><svg><use href="#codex"/></svg></div>
+          <div class="rings">
+            <div class="session working">
+              <div class="ring"><svg class="r" viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="29"/><circle cx="32" cy="32" r="29" stroke="var(--working)" stroke-dasharray="109 183"/></svg><span class="mark" style="font-size:15px">60 %</span></div>
+              <div class="p">Portfolio App</div><div class="s">Tests · 8 Min.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <span class="caption">Echter Fortschritt (vom Agenten gemeldet)</span>
+    </div>
+    <div class="desk">
+      <div class="bar"><div class="clock"><span>25. Okt</span><span>14:32</span></div></div>
+      <div class="card">
+        <p class="title">Antigravity</p><p class="sub">2 Sitzungen · eine fertig</p>
+        <div class="body">
+          <div class="hero"><svg><use href="#ag"/></svg></div>
+          <div class="rings">
+            <div class="session done">
+              <div class="ring"><svg class="r" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" stroke="var(--done)"/></svg><span class="mark" style="color:var(--done)">✓</span></div>
+              <div class="p">api</div><div class="s">Fertig · neu</div>
+            </div>
+            <div class="session">
+              <div class="ring"><svg class="r" viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="29"/></svg><svg width="20" height="20" viewBox="0 0 12 12" style="opacity:.45"><use href="#ag"/></svg></div>
+              <div class="p">site</div><div class="s">Ruhig · 40 Min.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <span class="caption">Fertig, aber noch nicht angesehen</span>
+    </div>
+  </div>
+
+  <h2>3 · Liquid Glass</h2>
+  <p class="note">Im zweiten Stil schwebt dieselbe Karte als Glaskapsel, mit 3 px Abstand zur Leiste – wie alle Flächen von Notchy.</p>
+  <div class="desk" style="background: radial-gradient(120% 140% at 30% 0%, #5c4f7d 0%, #2e3150 50%, #1b1d27 100%);">
+    <div class="bar"><div class="clock"><span>25. Okt</span><span>14:32</span></div></div>
+    <div class="card liquid">
+      <p class="title">Claude Code</p><p class="sub">3 Sitzungen</p>
+      <div class="body">
+        <div class="hero"><svg><use href="#claude"/></svg></div>
+        <div class="rings">
+          <div class="session working"><div class="ring"><svg class="r" viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="29"/><circle class="spin" cx="32" cy="32" r="29" stroke="var(--working)" stroke-dasharray="40 200"/></svg><svg width="22" height="22" viewBox="0 0 12 12"><use href="#claude"/></svg></div><div class="p">Notchy</div><div class="s">Arbeitet · 12 Min.</div></div>
+          <div class="session done"><div class="ring"><svg class="r" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" stroke="var(--done)"/></svg><span class="mark" style="color:var(--done)">✓</span></div><div class="p">Docs</div><div class="s">Fertig · neu</div></div>
+          <div class="session"><div class="ring"><svg class="r" viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="29"/></svg><svg width="20" height="20" viewBox="0 0 12 12" style="opacity:.45"><use href="#claude"/></svg></div><div class="p">Website</div><div class="s">Ruhig</div></div>
+        </div>
+      </div>
+    </div>
+    <div style="height:28px"></div>
+  </div>
+
+  <h2>Die Ringe</h2>
+  <div class="legend">
+    <div><div class="ring"><svg class="r" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" stroke="var(--blocked)"/></svg><span class="mark" style="color:var(--blocked)">?</span></div><p>Wartet – Freigabe oder Frage</p></div>
+    <div><div class="ring"><svg class="r" viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="29"/><circle class="spin" cx="32" cy="32" r="29" stroke="var(--working)" stroke-dasharray="40 200"/></svg></div><p>Arbeitet – ohne gemeldeten Fortschritt</p></div>
+    <div><div class="ring"><svg class="r" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" stroke="var(--done)"/></svg><span class="mark" style="color:var(--done)">✓</span></div><p>Fertig – noch nicht angesehen</p></div>
+    <div><div class="ring"><svg class="r" viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="29"/></svg></div><p>Ruhig – gesehen oder ohne Aufgabe</p></div>
+    <div><div class="ring"><svg class="r" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" stroke="var(--error)"/></svg><span class="mark" style="color:var(--error)">!</span></div><p>Fehler</p></div>
+  </div>
+
+  <h2>Verhalten</h2>
+  <ul class="list">
+    <li>Die Karte öffnet sich wie die AirPods-Karte aus der Notch heraus und schließt sich, wenn der Zeiger sie verlässt oder Esc gedrückt wird.</li>
+    <li>Mehr als vier Sitzungen eines Agenten: die Ringe werden kleiner, ab sechs scrollt die Reihe seitlich.</li>
+    <li>Die Indikatoren neben der Notch bleiben wie heute – Seiten, Animationen, „+N“-Gruppe; neu sind nur das grüne „fertig, noch nicht angesehen“ und die Zahl im Abzeichen.</li>
+    <li>Der Aktivitäten-Tab und die Aktivitäts-Indikatoren entfallen. Keine Limit-Balken (bräuchten deinen Login-Token beim Anbieter).</li>
+  </ul>
+</main>
+</body>
+</html>

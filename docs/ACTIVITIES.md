@@ -1,6 +1,6 @@
-# Smart Live Activities and the Agent Control Center
+# Smart Live Activities and the agent card
 
-Notchy keeps everything that runs right now in one place, the **Activity Manager**, decides what the closed notch shows, puts further important activities beside it and lists all of them in the island's **Activities** tab (key 5). The AI agent integration feeds the same manager; its own service keeps the session lifecycle and the hooks.
+Notchy keeps everything that runs right now in one place, the **Activity Manager**, and decides what the closed notch shows. The agents keep their own indicators beside the notch; a click on one opens its **card** out of the notch. The AI agent integration feeds the same manager; its own service keeps the session lifecycle and the hooks.
 
 ## Architecture
 
@@ -9,11 +9,11 @@ Notchy keeps everything that runs right now in one place, the **Activity Manager
  ─────────────                    ────────────────                       ───────
  agents.js (hooks, notchyctl,  ┐
    MCP)                        │   activities.js (GNOME)                 island.js        closed notch: the focus
- productivity.js (set_activity)│     collectors → ActivityStore.sync()   activityBubble   indicators beside it
- operations.js (Notchy's       │                                         activityViews    Activities tab, Agent
-   file work, measured)        ├──►  activityModel.js (pure)                                Control Center
- airdrop.js, media.js          │       ActivityStore  lifecycle, linger,  agentBubble.js   per-agent popup
- GNOME screen recorder         │                      expiry                              (sessions)
+ productivity.js (set_activity)│     collectors → ActivityStore.sync()   activityViews    the focus's parts
+ operations.js (Notchy's       │                                         agentBubble.js   agent indicators
+   file work, measured)        ├──►  activityModel.js (pure)             agentCard.js     an agent's card
+ airdrop.js, media.js          │       ActivityStore  lifecycle, linger,                   out of the notch
+ GNOME screen recorder         │                      expiry
  timers.js (deadlines)         │       groupEntries   summarising
  launcherEntry.js (other apps' │       Arbiter        priority, minimum   interactions:
    LauncherEntry progress)     │                      time, hysteresis    activities.invoke(id, action)
@@ -78,17 +78,16 @@ The Arbiter's rules:
 - **Return**: when the shown entry goes, the notch goes back to the entry it interrupted if that is still among the best.
 - HUD (volume/brightness), toasts, the AirPods pill and notification banners still borrow the notch for a moment, above any activity, as before; they are transient and never enter the list.
 
-What the closed notch draws: a transfer's symbol, bar and percentage (or just its name without a measured progress), a timer's remaining time, a red dot and running time while recording, an agent's symbol and „wartet auf dich“, a green check when something finished, a red symbol with a short shake on failure, music as cover and waveform. More important activities that are not the focus appear as small round indicators beside the notch (their ring fills only with measured progress); a click opens the Activities tab. The notch's width follows its content and it stays centred; indicators keep both sides equally wide (`src/ui/sideLayout.js`).
+What the closed notch draws: a transfer's symbol, bar and percentage (or just its name without a measured progress), a timer's remaining time, a red dot and running time while recording, an agent's symbol and „wartet auf dich“, a green check when something finished, a red symbol with a short shake on failure, music as cover and waveform. Activities that are not the focus wait without an indicator of their own (only the agents, the AirPods and the Regal have indicators beside the notch); a click on the capsule while it names a waiting or finished agent opens that agent's card. The notch's width follows its content and it stays centred; indicators keep both sides equally wide (`src/ui/sideLayout.js`).
 
-With **Smart Live Activities off** the notch behaves exactly as before (music, `set_activity` text, „Wird verarbeitet …“, AirDrop); the Activities tab stays available.
+With **Smart Live Activities off** the notch behaves exactly as before (music, `set_activity` text, „Wird verarbeitet …“, AirDrop).
 
-## Agent Control Center
+## The agent card
 
 The agent service (`src/services/agents.js`, `agentModel.js`) is unchanged in its job; new are:
 
-- **Indicators** beside the notch keep their states and animations: working (a turning arc, or a filling ring with real progress), waiting (orange ring that pulses a few times, „?“), completed (green ✓ with a short bounce), error (red, „!“), idle (static ring, can be hidden), disconnected (fades out). Waiting agents are kept visible when room is short; a global position (automatic, left, right) and a maximum number of visible indicators can be set; the rest joins the „+N“ group. A side once chosen is kept.
-- **Popup per agent** (click its indicator): every session with project, state, current step (the tool it runs, the approval it waits for), real progress, running time and last activity, the interaction it needs, and „Wechseln“; „Alle Agenten und Aktivitäten“ opens the tab.
-- **Overview** in the Activities tab: every agent with its sessions, ended sessions for a configurable time (Settings → Agents, default 10 min), updated in place without losing the keyboard focus.
+- **Indicators** beside the notch keep their states and animations: working (a turning arc, or a filling ring with real progress), waiting (orange ring that pulses a few times, „?“), completed (green ✓ with a short bounce), error (red, „!“), idle (static ring, can be hidden), disconnected (fades out). New: a finished task stays **done** until you looked — its window got the focus, you switched to it, or its card was shown (as Herdr keeps „done“ apart from „idle“); the badge counts the finished sessions. Waiting agents are kept visible when room is short; a global position (automatic, left, right) and a maximum number of visible indicators can be set; the rest joins the „+N“ group, whose rows open the cards. A side once chosen is kept.
+- **The card** (`src/ui/agentCard.js`; a click on the indicator, Enter or space on it): it springs out of the notch like the AirPods card — black from the bar into glass, the agent's name as the title and its sessions counted below, its symbol large on the left, each session as a 64 px ring on the right (waiting „?“, working with a turning arc or its reported percentage, done „✓“ with „neu“, quiet with the dimmed symbol, error „!“), the project folder's name and the state with its time below each ring, the most urgent first. A waiting session adds one line with what it waits for (the tool's name, never its input) and „Später“ / „Zum Fenster“. Several agents: a pill of their symbols with their state dots at the foot switches cards. The rings update in place (the keyboard focus stays), only sessions coming or going rebuild the card; ←/→ move between the rings, Enter switches, Esc or leaving closes; closing marks what the agent finished as seen. The card is 460 px wide in both glass styles.
 - **Switching** to an agent brings its window forward only when it is unambiguous: the only window of the nearest process ancestor owning windows, or the only one of them whose title names the session's project folder.
 - **Notifications** when an agent needs you (default on), finished (off) or failed (on), optionally with a sound, through GNOME's message tray (Do Not Disturb applies) and Notchy's banner. Not while the agent's own window has the focus. They carry the agent's name, the project folder's name and the state — never a prompt, a tool input or anything the agent wrote. A click switches to the agent.
 - **Late, duplicate or out-of-order hook events** and crashed agents are handled by the agent model as before (tombstones, ranks, process checks); the activities follow its state.
@@ -168,7 +167,7 @@ Apps that already publish LauncherEntry progress need nothing: Notchy shows it.
 
 ## Settings
 
-Live Activities page: on/off, further activities beside the notch, summarising, animations, how long finished activities stay, a sound when a timer runs out, each type on/off, the priority order (with reset), Pomodoro lengths. Agents page: position of the indicators (automatic, left, right; a side per agent wins), maximum visible indicators (0 = as many as fit), how long ended sessions stay listed, notifications per state and their sound — besides the existing per-agent switches, sides and hook setup. Everything is translated (German, English). Existing settings keep their values; new ones start with the defaults above.
+Live Activities page: on/off, summarising, animations, how long finished activities stay, a sound when a timer runs out, each type on/off, the priority order (with reset), Pomodoro lengths. Agents page: position of the indicators (automatic, left, right; a side per agent wins), maximum visible indicators (0 = as many as fit), whether „done“ stays until you looked, notifications per state and their sound — besides the existing per-agent switches, sides and hook setup. Everything is translated (German, English). Existing settings keep their values; new ones start with the defaults above.
 
 ## Privacy
 

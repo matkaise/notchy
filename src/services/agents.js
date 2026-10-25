@@ -28,6 +28,8 @@ export class Agents extends Emitter {
         super(); this.extension = extension; this.settings = settings; this.life = new Lifetime();
         this.registry = new AgentRegistry(); this.events = new Set(); this.ticker = 0; this.liveness = 0;
         this.life.connect(settings, 'changed', (_s, key) => { if (key.startsWith('agents-')) this.changed(); });
+        // Looking at an agent's window counts as having seen what it finished.
+        this.life.connect(global.display, 'notify::focus-window', () => this.focusChanged());
         this.restore();
     }
     // Disabling Notchy (or logging the Shell out of a lock) must not forget
@@ -77,6 +79,8 @@ export class Agents extends Emitter {
     apply(event) {
         const {changed, session, transition} = this.registry.apply(event);
         if (session?.connected && !session.hadWindow && this.hostWindows(session).length) session.hadWindow = true;
+        // Finished while you look elsewhere: it stays „done“ until you have seen it.
+        if (transition === 'completed' && session && this.settings.get_boolean('agents-done-until-seen') && !this.focused(session)) session.unseen = true;
         if (transition && session) { this.emit({type: transition, session}); this.notify(transition, session); }
         if (changed) { this.schedule(); this.changed(); }
         return '';
@@ -100,8 +104,18 @@ export class Agents extends Emitter {
         this.extension.notifier?.send({title, body, icon: PROVIDERS[session.provider]?.icon ?? 'notchy-agent-symbolic', urgent: kind === 'waiting', sound, quiet,
             activate: () => { const target = this.window(session); if (target) Main.activateWindow(target); }});
     }
-    // Ended sessions the control center still lists (Settings → Agents: minutes, 0 = none).
-    recent(now = Date.now()) { return this.registry.recent(now, this.settings.get_int('agents-history-minutes') * 60000).filter(h => this.providerEnabled(h.provider)); }
+    // Whether the window a session runs in has the focus now.
+    focused(session) {
+        const focus = global.display.focus_window;
+        return Boolean(focus && this.hostWindows(session).includes(focus));
+    }
+    focusChanged() {
+        let changed = false;
+        for (const session of this.registry.list()) if (session.unseen && this.focused(session)) { session.unseen = false; changed = true; }
+        if (changed) this.changed();
+    }
+    // The agent card was shown (or a session switched to): what it finished is seen.
+    markSeen(provider, id = null) { if (this.registry.markSeen(provider, id)) this.changed(); }
     end(provider, session) { if (this.registry.end(provider, session)) { this.emit({type: 'ended', session: this.registry.get(provider, session)}); this.schedule(); this.changed(); } }
     get sessions() { return this.registry.list(); }
     providers() {

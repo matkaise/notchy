@@ -65,7 +65,7 @@ app.connect('activate', () => {
             typeRow.active = false;
             if (!settings.get_strv('activities-disabled-types').includes('recording')) return fail('switching a type off is stored');
             settings.reset('activities-disabled-types');
-            for (const title of ['Wenn ein Agent dich braucht', 'Wenn ein Agent seine Aufgabe erledigt hat', 'Position der Indikatoren', 'Höchstens sichtbare Indikatoren', 'Beendete Sitzungen auflisten für (Minuten)'])
+            for (const title of ['Wenn ein Agent dich braucht', 'Wenn ein Agent seine Aufgabe erledigt hat', 'Position der Indikatoren', 'Höchstens sichtbare Indikatoren', '„Fertig“ behalten, bis du hingeschaut hast'])
                 if (!rows.includes(title)) return fail(`agent option „${title}“`);
             print('PASS: Live Activities: types, the priority order (arrows store it) and the agent control center\'s notifications, position and limits');
             // The same pages in English, built with an English backend (the shared setting stays).
