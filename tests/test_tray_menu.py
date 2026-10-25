@@ -49,10 +49,10 @@ class MenuEntries(unittest.TestCase):
         self.assertIn('Video verkleinern ▸', labels(self.entries(['clip.mp4'], tools=('ffmpeg', 'ffprobe'))))
         self.assertNotIn('Video verkleinern ▸', labels(self.entries(['clip.mp4'], tools=('ffmpeg',))))
 
-    def test_airdrop_only_with_backend(self):
-        self.assertNotIn('Per AirDrop senden', labels(self.entries(['a.txt'])))
+    def test_send_to_phone_only_when_notchy_can(self):
+        self.assertNotIn('An Handy senden', labels(self.entries(['a.txt'])))
         self.app.airdrop_available = True
-        self.assertIn('Per AirDrop senden', labels(self.entries(['a.txt'])))
+        self.assertIn('An Handy senden', labels(self.entries(['a.txt'])))
 
     def test_multiple_selection_applies_to_matching_files(self):
         entries = self.entries(['a.png', 'b.txt', 'c.jpg'], tools=('tesseract', 'magick'))

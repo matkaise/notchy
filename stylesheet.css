@@ -519,3 +519,13 @@
 .notchy-agent-card-dot.waiting { background-color: #ff9f0a; }
 .notchy-agent-card-dot.completed { background-color: #34c759; }
 .notchy-agent-card-dot.error { background-color: #ff453a; }
+
+/* Sharing by QR code inside AirDrop's banner (Views.shareBanner). */
+.notchy-qr { background-color: #ffffff; border-radius: 14px; }
+.notchy-qr-badge { border-radius: 7px; background-gradient-direction: vertical; background-color: #3a9bff; background-gradient-end: #0a6ee6; color: #ffffff; box-shadow: 0 0 0 3px #ffffff; }
+.notchy-share-ways { padding: 2px; spacing: 2px; border-radius: 12px; background-color: #1c1c1e; }
+.notchy-share-way { padding: 1px 10px; border-radius: 10px; font-size: 11px; font-weight: bold; color: rgba(255,255,255,0.55); }
+.notchy-share-way:hover, .notchy-share-way:focus { color: rgba(255,255,255,0.85); }
+.notchy-share-way.active { background-color: #2c2c30; color: #ffffff; }
+.notchy-share-url { font-family: monospace; font-size: 11px; color: rgba(255,255,255,0.55); padding-top: 4px; }
+.notchy-share-track { margin-top: 8px; }

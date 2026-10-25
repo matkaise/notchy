@@ -92,7 +92,7 @@ export class Drops {
         this.position = {x: island.centeredX(width), y: island.dropTop, width, height};
         island.life.cancel(island.hoverTimeout); island.hoverTimeout = 0; island.cancelCollapse();
         island.beginDrop();
-        this.extension.companion.dropTarget({visible: true, backend: this.backend, joined: true, style: island.settings.get_string('style'), shade: island.dropShade, airdrop: Boolean(this.extension.airdrop?.available), ...this.position});
+        this.extension.companion.dropTarget({visible: true, backend: this.backend, joined: true, style: island.settings.get_string('style'), shade: island.dropShade, airdrop: Boolean(this.extension.airdrop?.available || this.extension.share?.enabled), airdropBackend: Boolean(this.extension.airdrop?.available), ...this.position});
     }
     hide() {
         this.extension.companion?.dropTarget({visible: false});
@@ -111,11 +111,12 @@ export class Drops {
     }
     // Dropped on the AirDrop zone: the zone folds away, then the notch shows the send.
     airdropped(text) {
-        const airdrop = this.extension.airdrop;
+        // To a phone: AirDrop when its backend is there, else the QR code (share.js).
+        const airdrop = this.extension.airdrop, share = this.extension.share;
         const paths = text.split(/\r?\n/).filter(Boolean).map(uri => Gio.File.new_for_uri(uri).get_path()).filter(Boolean);
-        if (!airdrop?.available || airdrop.sendProc || !paths.length) return false;
+        if (!(airdrop?.available || share?.enabled) || airdrop?.sendProc || !paths.length) return false;
         this.setDragging(false); const serial = this.serial;
-        this.life.later(120, () => { if (serial === this.serial) this.hide(); airdrop.sendFiles(paths); });
+        this.life.later(120, () => { if (serial === this.serial) this.hide(); share ? share.sendToPhone(paths) : airdrop.sendFiles(paths); });
         return true;
     }
     // A new interface language: the idle receivers start again in it (one in a

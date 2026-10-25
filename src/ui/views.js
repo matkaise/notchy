@@ -18,6 +18,8 @@ import {_, N_, fmt, ngettext, formatPercent, formatDate, formatTime} from '../i1
 import {ageText} from '../services/batteries.js';
 import {Waveform} from './waveform.js';
 import {Lifetime} from '../lifecycle.js';
+import {qrWidget} from './qrWidget.js';
+import {Share} from '../services/share.js';
 import {connectKeyPress} from '../compat/index.js';
 
 // A file's kind: the colour of its type label (as in helper/tray.py).
@@ -1215,11 +1217,17 @@ export class Views {
         state.fresh = true; session.query('');
         return root;
     }
-    // AirDrop, sending: a radar while the phone is searched for, then the
-    // phone it found, a ring while the file goes over, a check at the end.
-    airdropSendView() {
-        const airdrop = this.airdrop, life = new Lifetime();
+    // Sharing with a phone, one banner for both ways: AirDrop (a radar while
+    // the iPhone is searched for, then its name and the transfer) or a QR code
+    // any phone in the same network scans (the link, then who downloads and
+    // how far). A small pill switches between them when AirDrop's backend is
+    // there; without it the banner is the QR code alone. `mode`: 'send' or
+    // 'receive' (the header's AirDrop button: visible to iPhones, or a QR code
+    // to upload into the Shelf).
+    shareBanner(mode) {
+        const airdrop = this.airdrop, share = this.share, life = new Lifetime(), receive = mode === 'receive';
         const root = box(false, {style_class: 'notchy-peek notchy-airdrop'});
+        const visual = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
         const radar = new St.Widget({style_class: 'notchy-airdrop-radar', layout_manager: new Clutter.BinLayout(), width: RADAR, height: RADAR, y_align: Clutter.ActorAlign.CENTER});
         // Three rings leave the centre one after another, like AirDrop's own search.
         const rings = [0, 1, 2].map(i => {
@@ -1228,18 +1236,31 @@ export class Views {
         });
         const core = new St.Bin({style_class: 'notchy-airdrop-core', width: 46, height: 46, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         const coreIcon = new St.Icon({icon_size: 22}); core.set_child(coreIcon); radar.add_child(core);
-        root.add_child(radar);
+        const qr = qrWidget(RADAR + 12);
+        visual.add_child(radar); visual.add_child(qr.actor);
+        root.add_child(visual);
         const text = box(true, {x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'notchy-airdrop-text-column'});
-        const meta = label('AirDrop', 'notchy-peek-app');
-        const title = label('', 'notchy-peek-title'), status = label('', 'notchy-peek-body'), hint = label('', 'notchy-airdrop-hint');
+        const metaRow = box(false, {style_class: 'notchy-peek-meta'});
+        const meta = label('AirDrop', 'notchy-peek-app', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        // The two ways, like the tab bar's pill.
+        const ways = box(false, {style_class: 'notchy-share-ways', y_align: Clutter.ActorAlign.CENTER});
+        const wayButton = (way, title) => {
+            const b = new St.Button({style_class: 'notchy-share-way', label: title, can_focus: true, accessible_name: title});
+            b.connect('clicked', () => this.island.switchShareWay(mode, way));
+            ways.add_child(b); return b;
+        };
+        const airdropWay = wayButton('airdrop', 'AirDrop'), qrWay = wayButton('qr', _('QR Code'));
+        metaRow.add_child(meta); metaRow.add_child(ways);
+        const title = label('', 'notchy-peek-title'), status = label('', 'notchy-peek-body'), hint = label('', 'notchy-airdrop-hint'), url = label('', 'notchy-share-url');
         for (const actor of [status, hint]) { actor.clutter_text.set_line_wrap(true); actor.clutter_text.ellipsize = 0; }
-        for (const actor of [meta, title, status, hint]) text.add_child(actor);
+        const track = new St.Widget({style_class: 'notchy-airdrop-timeout notchy-share-track', x_expand: true, visible: false});
+        const fill = new St.Widget({style_class: 'notchy-airdrop-timeout-fill'}); track.add_child(fill);
+        for (const actor of [metaRow, title, status, hint, url, track]) text.add_child(actor);
         root.add_child(text);
-        const cancel = button('window-close-symbolic', _('Cancel Sending'), () => airdrop.cancelSend(), 'notchy-round-button small');
+        const cancel = button('window-close-symbolic', receive ? _('Stop Receiving') : _('Cancel Sending'), () => this.island.cancelShare(mode), 'notchy-round-button small');
         cancel.y_align = Clutter.ActorAlign.START; root.add_child(cancel);
         // Clutter skips animations of actors not yet shown, so the radar starts once mapped.
         let pulsing = false, wanted = false;
-        // The rings map after their parent, so wait for the rings themselves.
         const lastRing = rings.at(-1)[0];
         lastRing.connect('notify::mapped', () => { if (lastRing.mapped && wanted && !pulsing) pulse(true); });
         const pulse = on => {
@@ -1252,38 +1273,96 @@ export class Views {
                 if (on) ring.ease({opacity: 0, scale_x: 1, scale_y: 1, duration: 1800, delay: i * 600, repeatCount: -1, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
             }
         };
-        const draw = () => {
-            const send = airdrop.send; if (!send) return;
-            const files = send.files.length === 1 ? send.files[0] : fmt(ngettext('%d file', '%d files', send.files.length), send.files.length);
-            title.text = files;
-            const phase = send.phase;
-            root.set_style_class_name(`notchy-peek notchy-airdrop ${phase}`);
-            coreIcon.gicon = gicon(phase === 'done' ? 'object-select-symbolic' : phase === 'failed' ? 'dialog-warning-symbolic' : phase === 'searching' || phase === 'cancelled' ? 'notchy-airdrop-symbolic' : 'phone-symbolic');
-            status.text = {searching: _('Looking for iPhones nearby…'), waiting: fmt(_('To %s · accept on the iPhone'), send.peer), sending: fmt(_('To %s · sending…'), send.peer),
-                done: send.peer ? fmt(_('Sent to %s'), send.peer) : _('Sent'), failed: send.error || _('Sending failed'), cancelled: _('Cancelled')}[phase] ?? '';
-            hint.text = phase === 'searching' ? _('iPhone: AirDrop “Everyone”, share menu closed') : ['waiting', 'sending'].includes(phase) ? _('Wi-Fi is paused during AirDrop') : '';
-            hint.visible = Boolean(hint.text);
-            cancel.visible = ['searching', 'waiting', 'sending'].includes(phase);
-            pulse(['searching', 'waiting', 'sending'].includes(phase));
-            // Settled: show the outcome briefly, then fold the notch away.
-            if (!cancel.visible && !life.closeTimer) life.closeTimer = life.later(phase === 'failed' ? 6000 : 2200, () => { if (this.island.peekKind === 'airdrop') this.island.close(); });
+        const setTrack = state => {
+            const known = state && state.total > 0 && ['sending', 'receiving'].includes(state.phase);
+            track.visible = Boolean(known);
+            if (known) fill.width = Math.round(Math.max(1, track.width || 240) * Math.min(1, state.done / state.total));
         };
-        life.cleanups.push(airdrop.subscribe(draw)); draw();
+        track.connect('notify::width', () => draw());
+        const settle = failed => {
+            // Settled: show the outcome briefly, then fold the notch away.
+            if (!life.closeTimer) life.closeTimer = life.later(failed ? 6000 : 2200, () => { if (this.island.peekKind === (receive ? 'receive' : 'airdrop')) this.island.close(); });
+        };
+        const draw = () => {
+            if (life.closed) return;
+            const way = receive ? this.island.receiveWay : this.island.sendWay, qrWayOn = way === 'qr';
+            ways.visible = Boolean(airdrop?.available && share?.enabled);
+            for (const [b, on] of [[airdropWay, !qrWayOn], [qrWay, qrWayOn]]) on ? b.add_style_class_name('active') : b.remove_style_class_name('active');
+            radar.visible = !qrWayOn; qr.actor.visible = false; url.visible = false;
+            meta.text = qrWayOn ? (receive ? _('Receive') : _('QR Code')) : 'AirDrop';
+            let phase = '', failed = false;
+            if (!receive && !qrWayOn) {
+                const send = airdrop?.send; if (!send) return;
+                phase = send.phase;
+                title.text = send.files.length === 1 ? send.files[0] : fmt(ngettext('%d file', '%d files', send.files.length), send.files.length);
+                coreIcon.gicon = gicon(phase === 'done' ? 'object-select-symbolic' : phase === 'failed' ? 'dialog-warning-symbolic' : phase === 'searching' || phase === 'cancelled' ? 'notchy-airdrop-symbolic' : 'phone-symbolic');
+                status.text = {searching: _('Looking for iPhones nearby…'), waiting: fmt(_('To %s · accept on the iPhone'), send.peer), sending: fmt(_('To %s · sending…'), send.peer),
+                    done: send.peer ? fmt(_('Sent to %s'), send.peer) : _('Sent'), failed: send.error || _('Sending failed'), cancelled: _('Cancelled')}[phase] ?? '';
+                hint.text = phase === 'searching' ? _('iPhone: AirDrop “Everyone”, share menu closed') : ['waiting', 'sending'].includes(phase) ? _('Wi-Fi is paused during AirDrop') : '';
+                setTrack(null);
+                pulse(['searching', 'waiting', 'sending'].includes(phase));
+                failed = phase === 'failed';
+                if (!['searching', 'waiting', 'sending'].includes(phase)) settle(failed);
+            } else if (!receive) {
+                const send = share?.send; if (!send) return;
+                phase = send.phase;
+                title.text = send.files.length === 1 ? send.files[0] : fmt(ngettext('%d file', '%d files', send.files.length), send.files.length);
+                const done = phase === 'done';
+                qr.actor.visible = !done && phase !== 'failed'; radar.visible = !qr.actor.visible;
+                qr.setText(send.url); qr.actor.opacity = phase === 'sending' ? 90 : send.url ? 255 : 90;
+                coreIcon.gicon = gicon(done ? 'object-select-symbolic' : 'dialog-warning-symbolic');
+                status.text = {starting: send.waiting ? _('Waiting for Wi-Fi…') : _('Starting…'), ready: _('Scan with the phone’s camera'), sending: fmt(_('%1$s is downloading · %2$s'), send.peer, Share.percent(send)),
+                    done: fmt(_('Sent to %s'), send.peer || _('Phone')), failed: send.error || _('Sending failed'), cancelled: _('Cancelled')}[phase] ?? '';
+                hint.text = phase === 'ready' ? _('Same Wi-Fi · valid until you close this') : done ? _('The link is no longer valid') : '';
+                url.text = phase === 'ready' ? send.url.replace(/^http:\/\//, '') : ''; url.visible = Boolean(url.text);
+                setTrack(send); pulse(false);
+                failed = phase === 'failed';
+                if (done || failed || phase === 'cancelled') settle(failed);
+            } else if (!qrWayOn) {
+                phase = airdrop?.state ?? 'off';
+                title.text = _('Visible to iPhones');
+                coreIcon.gicon = gicon(phase === 'error' ? 'dialog-warning-symbolic' : 'notchy-airdrop-symbolic');
+                status.text = phase === 'waking' ? _('Starting…') : phase === 'receiving' ? (airdrop.progress !== null ? fmt(_('Receiving · %s'), formatPercent(airdrop.progress)) : _('Receiving')) : phase === 'error' ? (airdrop.detail || _('AirDrop could not start')) : _('An iPhone can send to you now');
+                hint.text = _('Wi-Fi is paused during AirDrop');
+                setTrack(null); pulse(airdrop?.receiving);
+            } else {
+                const incoming = share?.incoming; if (!incoming) return;
+                phase = incoming.phase;
+                const done = phase === 'done';
+                title.text = done ? _('In the Shelf') : _('From the phone into the Shelf');
+                qr.actor.visible = ['starting', 'ready', 'receiving'].includes(phase); radar.visible = !qr.actor.visible;
+                qr.setText(incoming.url); qr.actor.opacity = phase === 'receiving' ? 90 : incoming.url ? 255 : 90;
+                coreIcon.gicon = gicon(done ? 'object-select-symbolic' : 'dialog-warning-symbolic');
+                status.text = {starting: incoming.waiting ? _('Waiting for Wi-Fi…') : _('Starting…'), ready: _('Scan, choose files, send'), receiving: fmt(_('%1$s is sending · %2$s'), incoming.peer, Share.percent(incoming)),
+                    done: fmt(ngettext('%d file received', '%d files received', incoming.count ?? 0), incoming.count ?? 0), expired: _('Ended'), failed: incoming.error || _('Receiving failed')}[phase] ?? '';
+                hint.text = phase === 'ready' ? _('Same Wi-Fi · ends after 10 minutes or when closed') : '';
+                url.text = phase === 'ready' ? incoming.url.replace(/^http:\/\//, '') : ''; url.visible = Boolean(url.text);
+                setTrack(incoming); pulse(false);
+                failed = phase === 'failed';
+                if (done || failed || phase === 'expired') settle(failed);
+            }
+            hint.visible = Boolean(hint.text);
+            root.set_style_class_name(`notchy-peek notchy-airdrop ${phase}`);
+        };
+        for (const service of [airdrop, share]) if (service) life.cleanups.push(service.subscribe(draw));
+        draw();
         root.connect('destroy', () => { pulse(false); life.dispose(); });
-        return {actor: root};
+        return {actor: root, qr, ways, draw};
     }
+    airdropSendView() { return this.shareBanner('send'); }
+    receiveView() { return this.shareBanner('receive'); }
     // AirDrop, receiving: who sends what, and "Accept" before the time runs out.
     airdropAskView(question) {
         const root = box(false, {style_class: 'notchy-peek notchy-airdrop notchy-airdrop-ask'});
-        const badge = new St.Bin({style_class: 'notchy-airdrop-core', width: 46, height: 46, y_align: Clutter.ActorAlign.START, child: icon('notchy-airdrop-symbolic', 22)});
+        const badge = new St.Bin({style_class: 'notchy-airdrop-core', width: 46, height: 46, y_align: Clutter.ActorAlign.START, child: question.via === 'qr' ? new St.Icon({icon_name: 'phone-symbolic', icon_size: 22}) : icon('notchy-airdrop-symbolic', 22)});
         root.add_child(badge);
         const column = box(true, {x_expand: true});
         const meta = box(false, {style_class: 'notchy-peek-meta'});
-        meta.add_child(label('AirDrop', 'notchy-peek-app', {x_expand: true}));
+        meta.add_child(label(question.via === 'qr' ? _('QR Code') : 'AirDrop', 'notchy-peek-app', {x_expand: true}));
         const left = label('', 'notchy-peek-app'); meta.add_child(left);
         column.add_child(meta);
         column.add_child(label(question.sender || _('A device nearby'), 'notchy-peek-title'));
-        const what = question.files ? fmt(_('wants to send “%s”'), question.files) : _('wants to send something');
+        const what = question.what ?? (question.files ? fmt(_('wants to send “%s”'), question.files) : _('wants to send something'));
         const body = label(what, 'notchy-peek-body'); body.clutter_text.set_line_wrap(true); body.clutter_text.ellipsize = 0; column.add_child(body);
         const actions = box(false, {style_class: 'notchy-peek-actions'});
         actions.add_child(textButton(_('Decline'), () => question.answer(false), 'notchy-pill-button'));

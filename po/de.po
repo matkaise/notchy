@@ -11,27 +11,27 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "Language-Team: German\n"
 
-#: extension.js:124
+#: extension.js:127
 msgid "Brightness"
 msgstr "Helligkeit"
 
-#: extension.js:124
+#: extension.js:127
 msgid "Microphone"
 msgstr "Mikrofon"
 
-#: extension.js:124 src/ui/island.js:830
+#: extension.js:127 src/ui/island.js:864
 msgid "Volume"
 msgstr "Lautstärke"
 
-#: extension.js:134
+#: extension.js:137
 msgid "Caps Lock off"
 msgstr "Feststelltaste aus"
 
-#: extension.js:134
+#: extension.js:137
 msgid "Caps Lock on"
 msgstr "Feststelltaste an"
 
-#: extension.js:57
+#: extension.js:58
 #, javascript-format
 msgid "The settings could not be opened: %s"
 msgstr "Einstellungen konnten nicht geöffnet werden: %s"
@@ -59,22 +59,33 @@ msgstr "%(path)s ist kein gültiges JSON (%(error)s)"
 msgid "%s holds no JSON object"
 msgstr "%s enthält kein JSON-Objekt"
 
-#: src/launcher/providers.js:398 src/ui/views.js:828 helper/drop.py:64
+#: helper/drop.py:67 helper/drop.py:152
+msgid "AirDrop or QR code"
+msgstr "AirDrop oder QR-Code"
+
+#: helper/drop.py:152
+msgid "By QR code, any phone"
+msgstr "Per QR-Code, jedes Handy"
+
+#: src/launcher/providers.js:398 src/ui/views.js:830 helper/drop.py:65
 msgid "Add to Shelf"
 msgstr "Ins Regal legen"
 
-#: src/launcher/logic.js:11 src/ui/island.js:25 src/ui/shelfBubble.js:44 src/ui/views.js:519
-#: helper/drop.py:64 helper/tray.py:304 helper/tray.py:794
+#: src/launcher/logic.js:11 src/ui/island.js:25 src/ui/shelfBubble.js:44 src/ui/views.js:521
+#: helper/drop.py:65 helper/tray.py:304 helper/tray.py:795
 msgid "Shelf"
 msgstr "Regal"
 
-#: helper/drop.py:65
-msgid "Send to an iPhone"
-msgstr "An ein iPhone senden"
+#. Translators: a short button label; its tooltip is „Send to Phone“.
+#: src/services/share.js:159 src/ui/views.js:1315 helper/drop.py:67 helper/share.py:89
+#: helper/tray.py:312
+msgid "Phone"
+msgstr "Handy"
 
-#: helper/drop.py:65 helper/tray.py:311 helper/tray.py:917
-msgid "Send with AirDrop"
-msgstr "Per AirDrop senden"
+#. Translators: a short button label; its tooltip is „Send to Phone“.
+#: helper/drop.py:67 helper/tray.py:312 helper/tray.py:918
+msgid "Send to Phone"
+msgstr "An Handy senden"
 
 #: helper/operations.py:54 helper/operations.py:131 helper/operations.py:135
 msgid "Processing the file failed."
@@ -151,7 +162,62 @@ msgstr "Die Quelldatei existiert nicht mehr."
 msgid "A required program is missing: %s"
 msgstr "Benötigtes Programm fehlt: %s"
 
-#: helper/tray.py:1025
+#: helper/share.py:216
+msgid "Download"
+msgstr "Laden"
+
+#: helper/share.py:219
+msgid "Download All as ZIP"
+msgstr "Alle als ZIP laden"
+
+#: helper/share.py:221
+#, python-format
+msgid "%d file from Notchy"
+msgid_plural "%d files from Notchy"
+msgstr[0] "%d Datei von Notchy"
+msgstr[1] "%d Dateien von Notchy"
+
+#: helper/share.py:284
+msgid "Declined on the computer."
+msgstr "Am Rechner abgelehnt."
+
+#: helper/share.py:284
+msgid "Send"
+msgstr "Senden"
+
+#: helper/share.py:284
+msgid "Waiting for the computer to accept…"
+msgstr "Warte, bis der Rechner annimmt …"
+
+#: helper/share.py:285
+msgid "Choose files first."
+msgstr "Wähle zuerst Dateien aus."
+
+#: src/services/airdrop.js:239 helper/share.py:285
+msgid "Sending failed."
+msgstr "Senden fehlgeschlagen."
+
+#: helper/share.py:285
+msgid "Sending…"
+msgstr "Wird gesendet …"
+
+#: helper/share.py:285
+msgid "Sent. The files are on the computer."
+msgstr "Gesendet. Die Dateien sind auf dem Rechner."
+
+#: helper/share.py:310
+msgid "Send files to this computer. It asks before it takes them."
+msgstr "Dateien an diesen Rechner senden. Er fragt, bevor er sie annimmt."
+
+#: helper/share.py:414
+msgid "A file to share no longer exists."
+msgstr "Eine Datei zum Teilen gibt es nicht mehr."
+
+#: helper/share.py:427
+msgid "Not connected to a local network."
+msgstr "Nicht mit einem lokalen Netz verbunden."
+
+#: helper/tray.py:1026
 #, python-format
 msgid "%d file selected"
 msgid_plural "%d files selected"
@@ -163,968 +229,972 @@ msgid "Clear Selection"
 msgstr "Auswahl aufheben"
 
 #. Translators: a short button label; its tooltip is „Compress as ZIP“.
-#: helper/tray.py:315 helper/tray.py:913
+#: helper/tray.py:316 helper/tray.py:914
 msgid "Compress as ZIP"
 msgstr "Als ZIP packen"
 
 #. Translators: a short button label; its tooltip is „Compress as ZIP“.
-#: helper/tray.py:315
+#: helper/tray.py:316
 msgid "Zip"
 msgstr "Zippen"
 
 #. Translators: a short button label; its tooltip says what it converts.
-#: helper/tray.py:319
+#: helper/tray.py:320
 msgid "Convert"
 msgstr "Umwandeln"
 
 #. Translators: a short button label; its tooltip says what it converts.
-#: helper/tray.py:319
+#: helper/tray.py:320
 msgid "Convert Pictures to WebP"
 msgstr "Bilder nach WebP konvertieren"
 
 #. Translators: a short button label; its tooltip says what it converts.
-#: helper/tray.py:319
+#: helper/tray.py:320
 msgid "Converting pictures needs ImageMagick"
 msgstr "Bildkonvertierung braucht ImageMagick"
 
-#: helper/tray.py:322
+#: helper/tray.py:323
 msgid "Remove from the Shelf · originals stay"
 msgstr "Aus dem Regal entfernen · Originale bleiben"
 
-#: helper/tray.py:327 helper/tray.py:327
+#: helper/tray.py:328 helper/tray.py:328
 msgid "Select All"
 msgstr "Alle auswählen"
 
-#: helper/tray.py:330
+#: helper/tray.py:331
 msgid "Add Files · a click selects, a double click opens"
 msgstr "Dateien hinzufügen · Klicken wählt aus, Doppelklick öffnet"
 
-#: src/ui/views.js:544 helper/tray.py:398
+#: src/ui/views.js:546 helper/tray.py:399
 msgid "The Shelf Is Empty"
 msgstr "Das Regal ist leer"
 
-#: src/ui/views.js:545 helper/tray.py:399
+#: src/ui/views.js:547 helper/tray.py:400
 msgid "Drag files onto the notch to keep them close at hand."
 msgstr "Zieh Dateien auf die Notch, dann liegen sie hier griffbereit."
 
-#: helper/tray.py:400 helper/tray.py:590
+#: helper/tray.py:401 helper/tray.py:591
 msgid "Add Files to the Shelf"
 msgstr "Dateien zum Regal hinzufügen"
 
-#: helper/tray.py:400
+#: helper/tray.py:401
 msgid "Choose Files"
 msgstr "Dateien auswählen"
 
-#: prefs.js:115 helper/tray.py:412
+#: prefs.js:118 helper/tray.py:413
 msgid "Basket"
 msgstr "Korb"
 
-#: helper/tray.py:415
+#: helper/tray.py:416
 msgid "Close Basket"
 msgstr "Korb schließen"
 
-#: helper/tray.py:426
+#: helper/tray.py:427
 msgid "Drop here"
 msgstr "Hier loslassen"
 
-#: helper/tray.py:427
+#: helper/tray.py:428
 msgid "Collect now, drop later"
 msgstr "Sammeln, später ablegen"
 
-#: helper/tray.py:440 helper/tray.py:440
+#: helper/tray.py:441 helper/tray.py:441
 msgid "Everything to the Shelf"
 msgstr "Alles ins Regal"
 
-#: helper/tray.py:444
-msgid "Send Everything with AirDrop"
-msgstr "Alles per AirDrop senden"
+#: helper/tray.py:445
+msgid "Send Everything to a Phone"
+msgstr "Alles an ein Handy senden"
 
 #. Translators: shown on a file tile without a file name extension.
-#: src/ui/views.js:554 src/ui/views.js:587 src/ui/views.js:797 helper/tray.py:639
+#: src/ui/views.js:556 src/ui/views.js:589 src/ui/views.js:799 helper/tray.py:640
 msgid "FILE"
 msgstr "DATEI"
 
-#: src/model.js:66 src/ui/shelfBubble.js:44 src/ui/views.js:520 src/ui/views.js:595
-#: src/ui/views.js:1257 helper/tray.py:710 helper/tray.py:795
+#: src/model.js:66 src/ui/shelfBubble.js:44 src/ui/views.js:522 src/ui/views.js:597
+#: src/ui/views.js:1297 src/ui/views.js:1309 helper/tray.py:711 helper/tray.py:796
 #, javascript-format, python-format
 msgid "%d file"
 msgid_plural "%d files"
 msgstr[0] "%d Datei"
 msgstr[1] "%d Dateien"
 
-#: helper/tray.py:713
+#: helper/tray.py:714
 #, python-format
 msgid "%(name)s and %(count)d more"
 msgid_plural "%(name)s and %(count)d more"
 msgstr[0] "%(name)s und %(count)d weitere"
 msgstr[1] "%(name)s und %(count)d weitere"
 
-#: helper/tray.py:791
+#: helper/tray.py:792
 #, python-format
 msgid "%d selected"
 msgid_plural "%d selected"
 msgstr[0] "%d ausgewählt"
 msgstr[1] "%d ausgewählt"
 
-#: helper/tray.py:838
+#: helper/tray.py:839
 msgid "Save a Copy"
 msgstr "Kopie speichern"
 
-#: helper/tray.py:858
+#: helper/tray.py:859
 #, python-format
 msgid "Save %d Copy In"
 msgid_plural "Save %d Copies In"
 msgstr[0] "%d Kopie speichern in"
 msgstr[1] "%d Kopien speichern in"
 
-#: helper/tray.py:904
+#: helper/tray.py:905
 #, python-format
 msgid "%d picture"
 msgid_plural "%d pictures"
 msgstr[0] "%d Bild"
 msgstr[1] "%d Bilder"
 
-#: src/launcher/providers.js:123 src/launcher/providers.js:158 src/launcher/providers.js:395 src/ui/views.js:1149
-#: helper/tray.py:908
+#: src/launcher/providers.js:123 src/launcher/providers.js:158 src/launcher/providers.js:395 src/ui/views.js:1151
+#: helper/tray.py:909
 msgid "Open"
 msgstr "Öffnen"
 
-#: helper/tray.py:908
+#: helper/tray.py:909
 #, python-format
 msgid "Open %d File"
 msgid_plural "Open %d Files"
 msgstr[0] "%d Datei öffnen"
 msgstr[1] "%d Dateien öffnen"
 
-#: helper/tray.py:909
+#: helper/tray.py:910
 msgid "Show in Folder"
 msgstr "Im Ordner zeigen"
 
-#: src/launcher/providers.js:338 src/launcher/providers.js:374 src/ui/views.js:817 helper/tray.py:910
+#: src/launcher/providers.js:338 src/launcher/providers.js:374 src/ui/views.js:819 helper/tray.py:911
 msgid "Copy"
 msgstr "Kopieren"
 
-#: helper/tray.py:911
+#: helper/tray.py:912
 msgid "Save Copies…"
 msgstr "Kopien speichern …"
 
-#: helper/tray.py:911
+#: helper/tray.py:912
 msgid "Save a Copy…"
 msgstr "Kopie speichern …"
 
-#: helper/tray.py:920
+#: helper/tray.py:921
 msgid "Recognize Text"
 msgstr "Text erkennen"
 
-#: helper/tray.py:922
+#: helper/tray.py:923
 msgid "Convert To"
 msgstr "Konvertieren in"
 
-#: helper/tray.py:925
+#: helper/tray.py:926
 msgid "Remove Background"
 msgstr "Hintergrund entfernen"
 
-#: helper/tray.py:927
+#: helper/tray.py:928
 #, python-format
 msgid "%d PDF"
 msgid_plural "%d PDFs"
 msgstr[0] "%d PDF"
 msgstr[1] "%d PDFs"
 
-#: helper/tray.py:927
+#: helper/tray.py:928
 msgid "Shrink PDF"
 msgstr "PDF verkleinern"
 
-#: helper/tray.py:929
+#: helper/tray.py:930
 #, python-format
 msgid "%d document"
 msgid_plural "%d documents"
 msgstr[0] "%d Dokument"
 msgstr[1] "%d Dokumente"
 
-#: helper/tray.py:929
+#: helper/tray.py:930
 msgid "Save as PDF"
 msgstr "Als PDF speichern"
 
-#: helper/tray.py:931
+#: helper/tray.py:932
 #, python-format
 msgid "%d video"
 msgid_plural "%d videos"
 msgstr[0] "%d Video"
 msgstr[1] "%d Videos"
 
-#: helper/tray.py:931
+#: helper/tray.py:932
 msgid "Shrink Video"
 msgstr "Video verkleinern"
 
-#: helper/tray.py:932
+#: helper/tray.py:933
 #, python-format
 msgid "To %s MB"
 msgstr "Auf %s MB"
 
-#: helper/tray.py:935
+#: helper/tray.py:936
 msgid "Remove from Shelf"
 msgstr "Aus Regal entfernen"
 
-#: prefs.js:105 prefs.js:115 src/launcher/logic.js:12 src/ui/island.js:26
+#: prefs.js:101
+msgid "Folder for received files (empty = Downloads/AirDrop)"
+msgstr "Ordner für empfangene Dateien (leer = Downloads/AirDrop)"
+
+#: prefs.js:108 prefs.js:118 src/launcher/logic.js:12 src/ui/island.js:26
 msgid "Clipboard"
 msgstr "Ablage"
 
-#: prefs.js:106
+#: prefs.js:109
 msgid "History"
 msgstr "Verlauf"
 
-#: prefs.js:106
+#: prefs.js:109
 msgid "Stored locally. Recording and keeping it across sessions are off at first."
 msgstr "Lokal gespeichert. Aufzeichnung und dauerhafte Speicherung sind anfangs aus."
 
-#: prefs.js:107
+#: prefs.js:110
 msgid "Record the clipboard"
 msgstr "Zwischenablage aufzeichnen"
 
-#: prefs.js:108
+#: prefs.js:111
 msgid "Keep the history between sessions"
 msgstr "Verlauf zwischen Sitzungen behalten"
 
-#: prefs.js:108
+#: prefs.js:111
 msgid "The file lies locally in your home folder and is not encrypted."
 msgstr "Die Datei liegt lokal im Benutzerverzeichnis und ist nicht verschlüsselt."
 
-#: prefs.js:109
+#: prefs.js:112
 msgid "Maximum entries besides favorites"
 msgstr "Maximale Einträge ohne Favoriten"
 
-#: prefs.js:110
+#: prefs.js:113
 msgid "Keep for days"
 msgstr "Aufbewahrung in Tagen"
 
-#: prefs.js:111
+#: prefs.js:114
 msgid "Excluded apps (.desktop ids, separated by commas)"
 msgstr "Ausgeschlossene Apps (.desktop-IDs, mit Komma trennen)"
 
-#: prefs.js:113
+#: prefs.js:116
 msgid "Shortcuts"
 msgstr "Tastenkürzel"
 
-#: prefs.js:114
+#: prefs.js:117
 msgid "GTK syntax, for example &lt;Super&gt;&lt;Shift&gt;space. Leave empty to turn one off."
 msgstr "GTK-Syntax, zum Beispiel &lt;Super&gt;&lt;Shift&gt;space. Leer lassen zum Deaktivieren."
 
-#: prefs.js:114
+#: prefs.js:117
 msgid "Global Shortcuts"
 msgstr "Globale Shortcuts"
 
-#: prefs.js:115
+#: prefs.js:118
 msgid "Open the island"
 msgstr "Island öffnen"
 
-#: prefs.js:115
+#: prefs.js:118
 msgid "Radial menu for captures"
 msgstr "Radialmenü für Aufnahmen"
 
-#: prefs.js:115
+#: prefs.js:118
 msgid "Thunderstorm search"
 msgstr "Thunderstorm-Suche"
 
-#: prefs.js:122
+#: prefs.js:125
 msgid "About"
 msgstr "Info"
 
-#: prefs.js:123
+#: prefs.js:126
 msgid "An independent GNOME implementation inspired by Droppy. Not an official Droppy port."
 msgstr "Eigenständige GNOME-Implementierung, inspiriert von Droppy. Kein offizieller Droppy-Port."
 
-#: prefs.js:123
+#: prefs.js:126
 msgid "Notchy · Droppy for GNOME"
 msgstr "Notchy · Droppy für GNOME"
 
-#: prefs.js:124
+#: prefs.js:127
 msgid "GNOME Shell 50 · Wayland · top bar"
 msgstr "GNOME Shell 50 · Wayland · obere Leiste"
 
-#: prefs.js:124
+#: prefs.js:127
 msgid "Notchy integrates into the clock of the top bar on the primary monitor."
 msgstr "Notchy integriert sich in die Uhr der oberen Leiste auf dem Hauptbildschirm."
 
-#: prefs.js:125
+#: prefs.js:128
 msgid "File processing"
 msgstr "Dateiverarbeitung"
 
-#: prefs.js:125
+#: prefs.js:128
 msgid "ZIP built in. Picture conversion: ImageMagick. Text recognition: Tesseract. Video: FFmpeg. Office: LibreOffice."
 msgstr "ZIP eingebaut. Bildkonvertierung: ImageMagick. Texterkennung: Tesseract. Video: FFmpeg. Office: LibreOffice."
 
-#: prefs.js:126
+#: prefs.js:129
 msgid "Droplets"
 msgstr "Droplets"
 
-#: prefs.js:126
+#: prefs.js:129
 msgid "The small tools are removed for now and will return later under a new name."
 msgstr "Die kleinen Werkzeuge sind vorerst entfernt und kehren später unter neuem Namen zurück."
 
-#: prefs.js:133
+#: prefs.js:136
 msgid "Search"
 msgstr "Suchen"
 
-#: prefs.js:133
+#: prefs.js:136
 msgid "Super + Space opens Thunderstorm: apps, files, commands, calculations and units, quicklinks, clipboard, snippets and emoji. Everything runs locally, without an account and without a cloud."
 msgstr "Super + Leertaste öffnet Thunderstorm: Apps, Dateien, Befehle, Rechnen und Einheiten, Quicklinks, Ablage, Snippets und Emoji. Alles läuft lokal, ohne Konto und ohne Cloud."
 
-#: prefs.js:134
+#: prefs.js:137
 msgid "Search files and folders"
 msgstr "Dateien und Ordner suchen"
 
-#: prefs.js:134
+#: prefs.js:137
 msgid "Through the file index of GNOME LocalSearch. Without it: a bounded search in the personal folders."
 msgstr "Über den Dateiindex von GNOME LocalSearch. Ohne ihn: eine begrenzte Suche in den persönlichen Ordnern."
 
-#: prefs.js:135
+#: prefs.js:138
 msgid "Visible results"
 msgstr "Sichtbare Treffer"
 
-#: prefs.js:136
+#: prefs.js:139
 msgid "Web search ({query} stands for the search term)"
 msgstr "Websuche ({query} steht für den Suchbegriff)"
 
-#: prefs.js:145
+#: prefs.js:148
 msgid "Lock, restart and shut down, settings pages, Do Not Disturb, AirPods and window commands."
 msgstr "Sperren, Neustarten und Ausschalten, Einstellungsseiten, Nicht stören, AirPods und Fensterbefehle."
 
-#: prefs.js:145 prefs.js:349
+#: prefs.js:148 prefs.js:352
 msgid "System Commands"
 msgstr "Systembefehle"
 
-#: prefs.js:146
+#: prefs.js:149
 msgid "Configure System Commands"
 msgstr "Systembefehle einrichten"
 
-#: prefs.js:151
+#: prefs.js:154
 #, javascript-format
 msgid "%d command"
 msgid_plural "%d commands"
 msgstr[0] "%d Befehl"
 msgstr[1] "%d Befehle"
 
-#: prefs.js:152
+#: prefs.js:155
 #, javascript-format
 msgid "%d customized"
 msgid_plural "%d customized"
 msgstr[0] "%d angepasst"
 msgstr[1] "%d angepasst"
 
-#: prefs.js:152
+#: prefs.js:155
 #, javascript-format
 msgid "%d switched off"
 msgid_plural "%d switched off"
 msgstr[0] "%d ausgeschaltet"
 msgstr[1] "%d ausgeschaltet"
 
-#: prefs.js:159
+#: prefs.js:162
 msgid "File Index (GNOME LocalSearch)"
 msgstr "Dateiindex (GNOME LocalSearch)"
 
-#: prefs.js:159
+#: prefs.js:162
 msgid "Notchy only searches what LocalSearch has already indexed. Adding folders here changes LocalSearch’s settings for your user, not the system."
 msgstr "Notchy durchsucht nur, was LocalSearch bereits indiziert. Ordner hier hinzuzufügen ändert die Einstellungen von LocalSearch für deinen Benutzer, nicht das System."
 
-#: prefs.js:160 prefs.js:367 prefs.js:492
+#: prefs.js:163 prefs.js:370 prefs.js:495
 msgid "Checking…"
 msgstr "Wird geprüft …"
 
-#: prefs.js:162
+#: prefs.js:165
 msgid "Not running · Thunderstorm searches the personal folders in a basic way. Install or turn on the “localsearch” package for the full search."
 msgstr "Läuft nicht · Thunderstorm sucht einfach in den persönlichen Ordnern. Installiere bzw. aktiviere das Paket „localsearch“ für die volle Suche."
 
-#: prefs.js:162
+#: prefs.js:165
 msgid "Running · file search through the index"
 msgstr "Läuft · Dateisuche über den Index"
 
-#: prefs.js:166 src/launcher/launcher.js:119
+#: prefs.js:169 src/launcher/launcher.js:119
 msgid "Home Folder"
 msgstr "Persönlicher Ordner"
 
-#: prefs.js:169
+#: prefs.js:172
 msgid "LocalSearch’s settings not found"
 msgstr "Einstellungen von LocalSearch nicht gefunden"
 
-#: prefs.js:169
+#: prefs.js:172
 msgid "Without LocalSearch there are no indexed folders."
 msgstr "Ohne LocalSearch gibt es keine indizierten Ordner."
 
-#: prefs.js:171
+#: prefs.js:174
 msgid "Indexed with subfolders"
 msgstr "Mit Unterordnern indiziert"
 
-#: prefs.js:172
+#: prefs.js:175
 msgid "Stop indexing"
 msgstr "Nicht mehr indizieren"
 
-#: prefs.js:176
+#: prefs.js:179
 msgid "Add Folder to the Index…"
 msgstr "Ordner zum Index hinzufügen …"
 
-#: prefs.js:177
+#: prefs.js:180
 msgid "Folder for the File Search"
 msgstr "Ordner für die Dateisuche"
 
-#: prefs.js:188
+#: prefs.js:191
 msgid "More folders for the basic search (without LocalSearch, separated by commas)"
 msgstr "Weitere Ordner für die einfache Suche (ohne LocalSearch, mit Komma trennen)"
 
-#: prefs.js:193
+#: prefs.js:196
 msgid "Keyword, space, search term: “yt lofi”, “gh notchy”, “wiki Zürich”. Target: an http(s) address with {query} or {path}, xdg:DOWNLOAD, a folder (~/…) or app:ID.desktop."
 msgstr "Kürzel, Leerzeichen, Suchbegriff: „yt lofi“, „gh notchy“, „wiki Zürich“. Ziel: eine http(s)-Adresse mit {query} oder {path}, xdg:DOWNLOAD, ein Ordner (~/…) oder app:ID.desktop."
 
-#: prefs.js:193
+#: prefs.js:196
 msgid "Quicklinks"
 msgstr "Quicklinks"
 
-#: prefs.js:194
+#: prefs.js:197
 msgid "Keyword"
 msgstr "Kürzel"
 
-#: prefs.js:194 prefs.js:198
+#: prefs.js:197 prefs.js:201
 msgid "Name"
 msgstr "Name"
 
-#: prefs.js:194
+#: prefs.js:197
 msgid "Target"
 msgstr "Ziel"
 
-#: prefs.js:195
+#: prefs.js:198
 msgid "New Quicklink"
 msgstr "Neuer Quicklink"
 
-#: prefs.js:197
+#: prefs.js:200
 msgid "Snippets"
 msgstr "Snippets"
 
-#: prefs.js:197
+#: prefs.js:200
 msgid "Text blocks: type the name or keyword, Enter copies it. {date}, {time} and {datetime} are replaced. Pasting into other apps automatically is not reliably and safely possible under Wayland and is therefore not offered."
 msgstr "Textbausteine: Name oder Kürzel eingeben, Enter kopiert. {date}, {time} und {datetime} werden ersetzt. Automatisches Einfügen in andere Apps ist unter Wayland nicht zuverlässig und sicher möglich und wird daher nicht angeboten."
 
-#: prefs.js:198
+#: prefs.js:201
 msgid "Keyword (optional)"
 msgstr "Kürzel (optional)"
 
-#: prefs.js:198 src/ui/views.js:31
+#: prefs.js:201 src/ui/views.js:33
 msgid "Text"
 msgstr "Text"
 
-#: prefs.js:199
+#: prefs.js:202
 msgid "New Snippet"
 msgstr "Neues Snippet"
 
-#: prefs.js:226 prefs.js:498 prefs.js:517
+#: prefs.js:229 prefs.js:501 prefs.js:520
 msgid "Remove"
 msgstr "Entfernen"
 
-#: prefs.js:232
+#: prefs.js:235
 msgid "Add"
 msgstr "Hinzufügen"
 
-#: prefs.js:234
+#: prefs.js:237
 msgid "New"
 msgstr "Neu"
 
-#: prefs.js:238
+#: prefs.js:241
 msgid "Restore Defaults"
 msgstr "Standard wiederherstellen"
 
-#: prefs.js:258
+#: prefs.js:261
 msgid "Thunderstorm finds these commands by their name and by German and English search terms, whatever language Notchy speaks. Context-dependent commands (AirPods, windows, workspaces) appear only when they can work."
 msgstr "Thunderstorm findet diese Befehle über ihren Namen und über deutsche und englische Suchbegriffe, gleich in welcher Sprache Notchy spricht. Kontextabhängige Befehle (AirPods, Fenster, Arbeitsbereiche) erscheinen nur, wenn sie funktionieren können."
 
-#: prefs.js:259
+#: prefs.js:262
 msgid "Search commands"
 msgstr "Befehle suchen"
 
-#: prefs.js:261
+#: prefs.js:264
 msgid "Reset All"
 msgstr "Alle zurücksetzen"
 
-#: prefs.js:267
+#: prefs.js:270
 msgid "High"
 msgstr "Hoch"
 
-#: prefs.js:267
+#: prefs.js:270
 msgid "Highest"
 msgstr "Am höchsten"
 
-#: prefs.js:267
+#: prefs.js:270
 msgid "Low"
 msgstr "Niedrig"
 
-#: prefs.js:267
+#: prefs.js:270
 msgid "Lowest"
 msgstr "Am niedrigsten"
 
-#: prefs.js:267
+#: prefs.js:270
 msgid "Normal"
 msgstr "Normal"
 
-#: prefs.js:276
+#: prefs.js:279
 msgid "Off: only its shortcut finds it."
 msgstr "Aus: nur sein Suchkürzel findet ihn."
 
-#: prefs.js:276
+#: prefs.js:279
 msgid "Show in search results"
 msgstr "In Suchergebnissen anzeigen"
 
-#: prefs.js:277 prefs.js:308
+#: prefs.js:280 prefs.js:311
 msgid "Favorite"
 msgstr "Favorit"
 
-#: prefs.js:277
+#: prefs.js:280
 msgid "Listed when the search field is empty, and ranked a little higher."
 msgstr "Erscheint im leeren Suchfeld und wird etwas höher eingestuft."
 
-#: prefs.js:278
+#: prefs.js:281
 msgid "Orders it among results that match equally well."
 msgstr "Ordnet ihn unter gleich gut passenden Treffern ein."
 
-#: prefs.js:278
+#: prefs.js:281
 msgid "Priority"
 msgstr "Priorität"
 
-#: prefs.js:279
+#: prefs.js:282
 msgid "Own search terms (separated by commas)"
 msgstr "Eigene Suchbegriffe (mit Komma trennen)"
 
-#: prefs.js:280
+#: prefs.js:283
 msgid "Shortcut (typed exactly, it comes first)"
 msgstr "Suchkürzel (genau eingetippt, steht er zuoberst)"
 
-#: prefs.js:281
+#: prefs.js:284
 msgid "Also used elsewhere"
 msgstr "Auch anderswo verwendet"
 
-#: prefs.js:283
+#: prefs.js:286
 #, javascript-format
 msgid "Always found by: %s"
 msgstr "Immer gefunden über: %s"
 
-#: prefs.js:286
+#: prefs.js:289
 msgid "A second Enter confirms, Esc cancels. No setting turns this off."
 msgstr "Ein zweites Enter bestätigt, Esc bricht ab. Keine Einstellung schaltet das aus."
 
-#: prefs.js:286
+#: prefs.js:289
 msgid "Always asks for confirmation"
 msgstr "Fragt immer nach einer Bestätigung"
 
-#: prefs.js:290
+#: prefs.js:293
 msgid "Reset to Defaults"
 msgstr "Auf Standard zurücksetzen"
 
-#: prefs.js:307
+#: prefs.js:310
 msgid "Hidden"
 msgstr "Ausgeblendet"
 
 #. Translators: short labels of the AirPods noise control buttons.
-#: prefs.js:307 src/ui/airpodsBubble.js:126
+#: prefs.js:310 src/ui/airpodsBubble.js:126
 msgid "Off"
 msgstr "Aus"
 
-#: prefs.js:307
+#: prefs.js:310
 msgid "Only by its shortcut"
 msgstr "Nur über sein Suchkürzel"
 
-#: prefs.js:308
+#: prefs.js:311
 msgid "Higher priority"
 msgstr "Höhere Priorität"
 
-#: prefs.js:308
+#: prefs.js:311
 msgid "Lower priority"
 msgstr "Niedrigere Priorität"
 
-#: prefs.js:309
+#: prefs.js:312
 #, javascript-format
 msgid "%d own search term"
 msgid_plural "%d own search terms"
 msgstr[0] "%d eigener Suchbegriff"
 msgstr[1] "%d eigene Suchbegriffe"
 
-#: prefs.js:309
+#: prefs.js:312
 #, javascript-format
 msgid "Shortcut “%s”"
 msgstr "Suchkürzel „%s“"
 
-#: prefs.js:325
+#: prefs.js:328
 msgid "Asks for confirmation"
 msgstr "Fragt nach einer Bestätigung"
 
-#: prefs.js:325
+#: prefs.js:328
 msgid "Default"
 msgstr "Standard"
 
-#: prefs.js:325
+#: prefs.js:328
 msgid "context-dependent"
 msgstr "kontextabhängig"
 
-#: prefs.js:329
+#: prefs.js:332
 #, javascript-format
 msgid "quicklink %s"
 msgstr "Quicklink %s"
 
-#: prefs.js:357
+#: prefs.js:360
 msgid "Battery levels, noise control and a connection animation in the island. For more, Notchy uses the optional airpods-helper service; it installs or changes nothing on the system itself."
 msgstr "Akkustände, Geräuschkontrolle und eine Verbindungsanimation in der Island. Für mehr nutzt Notchy den optionalen Dienst airpods-helper und installiert oder ändert selbst nichts am System."
 
-#: prefs.js:358
+#: prefs.js:361
 msgid "AirPods integration"
 msgstr "AirPods-Integration"
 
-#: prefs.js:359
+#: prefs.js:362
 msgid "Connection animation"
 msgstr "Verbindungsanimation"
 
-#: prefs.js:359
+#: prefs.js:362
 msgid "When they connect, the island grows briefly and shows the battery levels."
 msgstr "Beim Verbinden wächst die Island kurz und zeigt die Akkustände."
 
-#: prefs.js:360
+#: prefs.js:363
 msgid "Connected AirPods as a small symbol with a battery ring beside the clock; a click opens their controls."
 msgstr "Verbundene AirPods als kleines Symbol mit Akkuring neben der Uhr; ein Klick öffnet die Steuerung."
 
-#: prefs.js:360
+#: prefs.js:363
 msgid "Symbol beside the notch"
 msgstr "Symbol neben der Notch"
 
-#: prefs.js:361
+#: prefs.js:364
 msgid "Warn when the battery is low"
 msgstr "Warnung bei niedrigem Akkustand"
 
-#: prefs.js:362
+#: prefs.js:365
 msgid "Warn below (percent)"
 msgstr "Warnen unter (Prozent)"
 
-#: prefs.js:363
+#: prefs.js:366
 msgid "Notchy reads connected AirPods itself over Apple’s accessory protocol (AAP): battery levels of buds and case, ear detection, noise control. Without root, without extra software."
 msgstr "Notchy liest verbundene AirPods selbst über Apples Zubehörprotokoll (AAP): Akkustände von Buds und Case, Ohrerkennung, Geräuschkontrolle. Ohne Root, ohne zusätzliche Software."
 
-#: prefs.js:363
+#: prefs.js:366
 msgid "Without airpods-helper: read the AirPods directly"
 msgstr "Ohne airpods-helper: AirPods direkt auslesen"
 
-#: prefs.js:364
+#: prefs.js:367
 msgid "Applies to reading them directly; with airpods-helper its own setting (below) controls the pause."
 msgstr "Gilt für das direkte Auslesen; mit airpods-helper steuert dessen eigene Einstellung (unten) die Pause."
 
-#: prefs.js:364 prefs.js:370
+#: prefs.js:367 prefs.js:373
 msgid "Pause media when an AirPod is taken out"
 msgstr "Medien pausieren, wenn ein AirPod herausgenommen wird"
 
-#: prefs.js:365
+#: prefs.js:368
 msgid "Basic data from BlueZ"
 msgstr "Grunddaten von BlueZ"
 
-#: prefs.js:365
+#: prefs.js:368
 msgid "The connection (and a battery level, if the system reports one) while nothing else is available."
 msgstr "Verbindung (und ein Akkustand, falls das System ihn meldet), solange nichts anderes verfügbar ist."
 
-#: prefs.js:366
+#: prefs.js:369
 msgid "Service"
 msgstr "Dienst"
 
-#: prefs.js:94 prefs.js:368
+#: prefs.js:97 prefs.js:371
 msgid "Guide"
 msgstr "Anleitung"
 
-#: prefs.js:369
+#: prefs.js:372
 msgid "Start"
 msgstr "Starten"
 
-#: prefs.js:370
+#: prefs.js:373
 msgid "The service’s setting (PauseOnRemoval); it controls playback itself."
 msgstr "Einstellung des Dienstes (PauseOnRemoval); er steuert die Wiedergabe selbst."
 
-#: prefs.js:377
+#: prefs.js:380
 msgid "Installed, but not running. Notchy reads the AirPods itself meanwhile."
 msgstr "Installiert, läuft aber nicht. Notchy liest die AirPods solange selbst aus."
 
-#: prefs.js:377
+#: prefs.js:380
 msgid "Not installed – not needed: Notchy reads connected AirPods itself. airpods-helper adds an equalizer and more."
 msgstr "Nicht installiert – nicht nötig: Notchy liest verbundene AirPods selbst aus. airpods-helper bietet zusätzlich Equalizer und mehr."
 
-#: prefs.js:381 src/services/activityModel.js:49
+#: prefs.js:384 src/services/activityModel.js:49
 msgid "Running"
 msgstr "Läuft"
 
-#: prefs.js:381
+#: prefs.js:384
 #, javascript-format
 msgid "Running (version %s)"
 msgstr "Läuft (Version %s)"
 
-#: prefs.js:382 src/ui/island.js:785
+#: prefs.js:385 src/ui/island.js:819
 #, javascript-format
 msgid "%s connected"
 msgstr "%s verbunden"
 
-#: prefs.js:382
+#: prefs.js:385
 msgid "no AirPods connected"
 msgstr "keine AirPods verbunden"
 
-#: prefs.js:384
+#: prefs.js:387
 #, javascript-format
 msgid "Running, but not answering: %s"
 msgstr "Läuft, antwortet aber nicht: %s"
 
-#: prefs.js:393
+#: prefs.js:396
 #, javascript-format
 msgid "Starting failed: %s"
 msgstr "Start fehlgeschlagen: %s"
 
-#: prefs.js:74 prefs.js:398
+#: prefs.js:74 prefs.js:401
 msgid "Live Activities"
 msgstr "Live-Aktivitäten"
 
-#: prefs.js:399 prefs.js:400
+#: prefs.js:402 prefs.js:403
 msgid "Smart Live Activities"
 msgstr "Smarte Live-Aktivitäten"
 
-#: prefs.js:399
+#: prefs.js:402
 msgid "The closed notch shows the most important running activity: an agent that needs you, a failure, something that just finished, a transfer, a timer or recording, the music. The agents keep their own indicators beside the notch; a click on one opens its card. Progress is only shown where it is really measured."
 msgstr "Die geschlossene Notch zeigt die wichtigste laufende Aktivität: einen Agenten, der dich braucht, einen Fehler, etwas gerade Fertiges, eine Übertragung, einen Timer oder eine Aufnahme, die Musik. Die Agenten behalten ihre eigenen Indikatoren neben der Notch; ein Klick auf einen öffnet seine Karte. Fortschritt wird nur gezeigt, wo er wirklich gemessen wird."
 
-#: prefs.js:400
+#: prefs.js:403
 msgid "Off: the notch shows music and simple activities as before."
 msgstr "Aus: Die Notch zeigt Musik und einfache Aktivitäten wie bisher."
 
-#: prefs.js:401
+#: prefs.js:404
 msgid "Summarise similar activities"
 msgstr "Gleichartige Aktivitäten zusammenfassen"
 
-#: prefs.js:401
+#: prefs.js:404
 msgid "Two downloads become “2 transfers”."
 msgstr "Aus zwei Downloads werden „2 Übertragungen“."
 
-#: prefs.js:402
+#: prefs.js:405
 msgid "A check when something finishes, a short shake when it fails, growing progress."
 msgstr "Ein Haken, wenn etwas fertig ist, ein kurzes Wackeln bei einem Fehler, wachsender Fortschritt."
 
-#: prefs.js:402
+#: prefs.js:405
 msgid "Animations"
 msgstr "Animationen"
 
-#: prefs.js:403
+#: prefs.js:406
 msgid "Failed ones stay at least 20 seconds."
 msgstr "Fehlgeschlagene bleiben mindestens 20 Sekunden."
 
-#: prefs.js:403
+#: prefs.js:406
 msgid "Show finished activities for (seconds)"
 msgstr "Fertige Aktivitäten zeigen für (Sekunden)"
 
-#: prefs.js:404
+#: prefs.js:407
 msgid "Sound when a timer runs out"
 msgstr "Ton, wenn ein Timer abläuft"
 
-#: prefs.js:405
+#: prefs.js:408
 msgid "Activity Types"
 msgstr "Arten von Aktivitäten"
 
-#: prefs.js:406
+#: prefs.js:409
 msgid "File work started in Notchy (ZIP, conversion, copies)"
 msgstr "In Notchy gestartete Dateiarbeit (ZIP, Umwandlung, Kopien)"
 
-#: prefs.js:406
+#: prefs.js:409
 msgid "Progress other apps publish (Files, Transmission …)"
 msgstr "Fortschritt, den andere Apps melden (Dateien, Transmission …)"
 
-#: prefs.js:407
+#: prefs.js:410
 msgid "AI agents that need you, finished or failed"
 msgstr "KI-Agenten, die dich brauchen, fertig sind oder scheiterten"
 
-#: prefs.js:407
+#: prefs.js:410
 msgid "AirDrop transfers"
 msgstr "AirDrop-Übertragungen"
 
-#: prefs.js:407
+#: prefs.js:410
 msgid "Screen recordings"
 msgstr "Bildschirmaufnahmen"
 
-#: prefs.js:407
+#: prefs.js:410
 msgid "Timers and Pomodoro"
 msgstr "Timer und Pomodoro"
 
-#: prefs.js:408
+#: prefs.js:411
 msgid "Activities of other apps and scripts (notchyctl, D-Bus, MCP)"
 msgstr "Aktivitäten anderer Apps und Skripte (notchyctl, D-Bus, MCP)"
 
-#: prefs.js:408
+#: prefs.js:411
 msgid "AirPods (in the list)"
 msgstr "AirPods (in der Liste)"
 
-#: prefs.js:408
+#: prefs.js:411
 msgid "Music and media"
 msgstr "Musik und Medien"
 
-#: prefs.js:419
+#: prefs.js:422
 msgid "Priorities"
 msgstr "Prioritäten"
 
-#: prefs.js:419
+#: prefs.js:422
 msgid "What the notch shows when several activities run, most important first. Activities that need you and failures always show at once; others wait until the shown one had its moment."
 msgstr "Was die Notch zeigt, wenn mehrere Aktivitäten laufen, das Wichtigste zuerst. Aktivitäten, die dich brauchen, und Fehler erscheinen immer sofort; andere warten, bis die gezeigte ihre Zeit hatte."
 
-#: prefs.js:437
+#: prefs.js:440
 msgid "Higher"
 msgstr "Höher"
 
-#: prefs.js:438
+#: prefs.js:441
 msgid "Lower"
 msgstr "Tiefer"
 
-#: prefs.js:442
+#: prefs.js:445
 msgid "Default order"
 msgstr "Standardreihenfolge"
 
-#: prefs.js:443
+#: prefs.js:446
 msgid "Reset"
 msgstr "Zurücksetzen"
 
-#: prefs.js:447
+#: prefs.js:450
 msgid "Pomodoro"
 msgstr "Pomodoro"
 
-#: prefs.js:447
+#: prefs.js:450
 msgid "Start timers in Thunderstorm (“timer 10 min tea”, “pomodoro”), or with notchyctl timer."
 msgstr "Timer startest du in Thunderstorm („timer 10 min Tee“, „pomodoro“) oder mit notchyctl timer."
 
-#: prefs.js:448
+#: prefs.js:451
 msgid "Focus (minutes)"
 msgstr "Fokus (Minuten)"
 
-#: prefs.js:449
+#: prefs.js:452
 msgid "Break (minutes)"
 msgstr "Pause (Minuten)"
 
-#: prefs.js:450
+#: prefs.js:453
 msgid "For Your Own Apps"
 msgstr "Für eigene Apps"
 
-#: prefs.js:450
+#: prefs.js:453
 msgid "Other apps and scripts report activities over D-Bus (ReportActivity), with notchyctl live or the MCP tools live_activity and live_activity_end. Details in docs/ACTIVITIES.md."
 msgstr "Andere Apps und Skripte melden Aktivitäten über D-Bus (ReportActivity), mit notchyctl live oder den MCP-Werkzeugen live_activity und live_activity_end. Details in docs/ACTIVITIES.md."
 
-#: prefs.js:451
+#: prefs.js:454
 msgid "Ends with notchyctl live end build, or after its lifetime."
 msgstr "Endet mit notchyctl live end build oder nach seiner Lebensdauer."
 
-#: prefs.js:456
+#: prefs.js:459
 msgid "Agents"
 msgstr "Agenten"
 
-#: prefs.js:457
+#: prefs.js:460
 msgid "Agents Beside the Notch"
 msgstr "Agenten neben der Notch"
 
-#: prefs.js:457
+#: prefs.js:460
 msgid "Claude Code, Codex and Antigravity report their state to Notchy through their own hooks: working, waiting for you, done, error. A program that merely runs never counts as “working”. Prompts and contents are neither read nor stored."
 msgstr "Claude Code, Codex und Antigravity melden ihren Zustand über ihre eigenen Hooks an Notchy: arbeitet, wartet auf dich, fertig, Fehler. Ein bloß laufendes Programm gilt nie als „arbeitet“. Prompts und Inhalte werden nicht gelesen oder gespeichert."
 
-#: prefs.js:458
+#: prefs.js:461
 msgid "Show agent indicators"
 msgstr "Agenten-Indikatoren anzeigen"
 
-#: prefs.js:459
+#: prefs.js:462
 msgid "Distribute left and right automatically"
 msgstr "Automatisch links und rechts verteilen"
 
-#: prefs.js:459
+#: prefs.js:462
 msgid "New indicators go to the side with more room; the notch stays in the middle."
 msgstr "Neue Indikatoren kommen auf die Seite mit mehr Platz; die Notch bleibt in der Mitte."
 
-#: prefs.js:460
+#: prefs.js:463
 msgid "As a calm, still symbol."
 msgstr "Als ruhiges, unbewegtes Symbol."
 
-#: prefs.js:460
+#: prefs.js:463
 msgid "Show ready agents without a task"
 msgstr "Bereite Agenten ohne Aufgabe anzeigen"
 
-#: prefs.js:461
+#: prefs.js:464
 msgid "Short animation when a task is done"
 msgstr "Kurze Animation bei abgeschlossener Aufgabe"
 
-#: prefs.js:462
+#: prefs.js:465
 msgid "After that, the agent counts as ready."
 msgstr "Danach gilt der Agent als bereit."
 
-#: prefs.js:462
+#: prefs.js:465
 msgid "Show “Done” for (seconds)"
 msgstr "„Fertig“ anzeigen für (Sekunden)"
 
-#: prefs.js:464
+#: prefs.js:467
 msgid "A side chosen per agent below wins."
 msgstr "Eine unten je Agent gewählte Seite hat Vorrang."
 
-#: prefs.js:464 prefs.js:494
+#: prefs.js:467 prefs.js:497
 msgid "Automatic"
 msgstr "Automatisch"
 
 #. Translators: L and R are the left and the right AirPod.
-#: prefs.js:464 prefs.js:494 src/ui/views.js:105 src/ui/views.js:361
+#: prefs.js:467 prefs.js:497 src/ui/views.js:107 src/ui/views.js:363
 msgid "Left"
 msgstr "Links"
 
-#: prefs.js:464
+#: prefs.js:467
 msgid "Position of the indicators"
 msgstr "Position der Indikatoren"
 
 #. Translators: L and R are the left and the right AirPod.
-#: prefs.js:464 prefs.js:494 src/ui/views.js:105 src/ui/views.js:361
+#: prefs.js:467 prefs.js:497 src/ui/views.js:107 src/ui/views.js:363
 msgid "Right"
 msgstr "Rechts"
 
-#: prefs.js:468
+#: prefs.js:471
 msgid "Beside the notch, for agents, AirPods, activities and the Shelf; further ones join the “+N” group. 0 = as many as fit."
 msgstr "Neben der Notch, für Agenten, AirPods, Aktivitäten und das Regal; weitere kommen in die „+N“-Gruppe. 0 = so viele, wie Platz haben."
 
-#: prefs.js:468
+#: prefs.js:471
 msgid "Maximum visible indicators"
 msgstr "Höchstens sichtbare Indikatoren"
 
-#: prefs.js:469
+#: prefs.js:472
 msgid "A finished task stays green until you open the agent’s card or its window. Off: it turns ready after the seconds above."
 msgstr "Eine erledigte Aufgabe bleibt grün, bis du die Karte des Agenten oder sein Fenster öffnest. Aus: Sie wird nach den Sekunden oben wieder „Bereit“."
 
-#: prefs.js:469
+#: prefs.js:472
 msgid "Keep “Done” until you have looked"
 msgstr "„Fertig“ behalten, bis du hingeschaut hast"
 
-#: prefs.js:470 src/ui/views.js:888
+#: prefs.js:473 src/ui/views.js:890
 msgid "Notifications"
 msgstr "Mitteilungen"
 
-#: prefs.js:470
+#: prefs.js:473
 msgid "Only the agent, its project folder’s name and its state are shown — never a prompt or what the agent wrote. Not while the agent’s own window has the focus. While Smart Live Activities show it in the notch, it goes quietly into the message list."
 msgstr "Gezeigt werden nur der Agent, der Name seines Projektordners und sein Zustand – nie ein Prompt oder was der Agent schrieb. Nicht, solange das Fenster des Agenten den Fokus hat. Solange die smarten Live-Aktivitäten es in der Notch zeigen, landet die Benachrichtigung still in der Nachrichtenliste."
 
-#: prefs.js:471
+#: prefs.js:474
 msgid "An approval or a question. Notchy approves nothing itself: a click switches to the agent."
 msgstr "Eine Freigabe oder eine Frage. Notchy gibt selbst nichts frei: Ein Klick wechselt zum Agenten."
 
-#: prefs.js:471
+#: prefs.js:474
 msgid "When an agent needs you"
 msgstr "Wenn ein Agent dich braucht"
 
-#: prefs.js:472
+#: prefs.js:475
 msgid "When an agent finished its task"
 msgstr "Wenn ein Agent seine Aufgabe erledigt hat"
 
-#: prefs.js:473
+#: prefs.js:476
 msgid "When an agent’s task failed"
 msgstr "Wenn die Aufgabe eines Agenten fehlschlug"
 
-#: prefs.js:474
+#: prefs.js:477
 msgid "With a sound"
 msgstr "Mit Ton"
 
-#: prefs.js:476
+#: prefs.js:479
 msgid "Integrations"
 msgstr "Integrationen"
 
-#: prefs.js:476
+#: prefs.js:479
 msgid "Set Up adds Notchy’s hook adapter to the agent’s configuration beside your existing hooks and makes a backup first. Remove takes out exactly these entries again."
 msgstr "Einrichten trägt Notchys Hook-Adapter neben deinen bestehenden Hooks in die Konfiguration des Agenten ein und legt vorher eine Sicherung an. Entfernen nimmt genau diese Einträge wieder heraus."
 
@@ -1132,33 +1202,25 @@ msgstr "Einrichten trägt Notchys Hook-Adapter neben deinen bestehenden Hooks in
 msgid "Appearance"
 msgstr "Darstellung"
 
-#: prefs.js:490
+#: prefs.js:493
 msgid "Configuration broken"
 msgstr "Konfiguration fehlerhaft"
 
-#: prefs.js:490
+#: prefs.js:493
 msgid "Not set up"
 msgstr "Nicht eingerichtet"
 
-#: prefs.js:490
+#: prefs.js:493
 msgid "Partly set up"
 msgstr "Teilweise eingerichtet"
 
-#: prefs.js:490
+#: prefs.js:493
 msgid "Set up"
 msgstr "Eingerichtet"
 
-#: prefs.js:494
+#: prefs.js:497
 msgid "Preferred side"
 msgstr "Bevorzugte Seite"
-
-#: prefs.js:497
-msgid "Hook adapter"
-msgstr "Hook-Adapter"
-
-#: prefs.js:498 prefs.js:517
-msgid "Set Up"
-msgstr "Einrichten"
 
 #: prefs.js:50
 msgid "The GNOME clock in the top bar becomes the island; it grows around the clock."
@@ -1168,42 +1230,46 @@ msgstr "Die GNOME-Uhr in der oberen Leiste wird zur Island; sie wächst um die U
 msgid "Your Island"
 msgstr "Deine Island"
 
-#: prefs.js:505
+#: prefs.js:500
+msgid "Hook adapter"
+msgstr "Hook-Adapter"
+
+#: prefs.js:501 prefs.js:520
+msgid "Set Up"
+msgstr "Einrichten"
+
+#: prefs.js:508
 #, javascript-format
 msgid "State unknown: %s"
 msgstr "Status unbekannt: %s"
 
-#: prefs.js:507 scripts/notchyctl:157
+#: prefs.js:510 scripts/notchyctl:157
 msgid "program not found"
 msgstr "Programm nicht gefunden"
 
-#: prefs.js:514
+#: prefs.js:517
 #, javascript-format
 msgid "%s: Remove Hooks?"
 msgstr "%s: Hooks entfernen?"
 
-#: prefs.js:514
+#: prefs.js:517
 #, javascript-format
 msgid "%s: Set Up Hooks?"
 msgstr "%s: Hooks einrichten?"
 
-#: prefs.js:515
+#: prefs.js:518
 msgid "Codex runs the new hooks only after you trusted them with /hooks."
 msgstr "Codex führt die neuen Hooks erst aus, nachdem du sie mit /hooks freigegeben hast."
 
-#: prefs.js:515
+#: prefs.js:518
 #, javascript-format
 msgid "Notchy adds its hook adapter to %s. Existing hooks stay unchanged; a backup is made first."
 msgstr "Notchy trägt seinen Hook-Adapter in %s ein. Bestehende Hooks bleiben unverändert; vorher wird eine Sicherung angelegt."
 
-#: prefs.js:516
+#: prefs.js:519
 #, javascript-format
 msgid "Notchy removes only its own entries from %s; a backup is made first."
 msgstr "Notchy entfernt nur seine eigenen Einträge aus %s; vorher wird eine Sicherung angelegt."
-
-#: prefs.js:517 src/services/activities.js:176 src/services/activities.js:205 src/services/activities.js:206
-msgid "Cancel"
-msgstr "Abbrechen"
 
 #: prefs.js:52
 msgid "Dynamic Glass: a black notch that fades into glass. Liquid Glass: a floating glass capsule."
@@ -1213,20 +1279,24 @@ msgstr "Dynamic Glass: schwarze Notch, die in Glas übergeht. Liquid Glass: schw
 msgid "Style"
 msgstr "Stil"
 
-#: prefs.js:522
+#: prefs.js:520 src/services/activities.js:176 src/services/activities.js:208 src/services/activities.js:209
+msgid "Cancel"
+msgstr "Abbrechen"
+
+#: prefs.js:525
 #, javascript-format
 msgid "Not changed: %s"
 msgstr "Nicht geändert: %s"
 
-#: prefs.js:531
+#: prefs.js:534
 msgid "ChatGPT in the browser and in the desktop app offer no status interface; Notchy reads nothing there. Your own scripts and other agents report with notchyctl or through the MCP server (tools agent_status, agent_end)."
 msgstr "ChatGPT im Browser und in der Desktop-App bieten keine Statusschnittstelle; Notchy liest dort nichts aus. Eigene Skripte und andere Agenten melden sich mit notchyctl oder über den MCP-Server (Werkzeuge agent_status, agent_end)."
 
-#: prefs.js:531
+#: prefs.js:534
 msgid "Other Agents and ChatGPT"
 msgstr "Andere Agenten und ChatGPT"
 
-#: prefs.js:532
+#: prefs.js:535
 msgid "More commands: start, heartbeat, stop, list; details in the README."
 msgstr "Weitere Befehle: start, heartbeat, stop, list; Details in der README."
 
@@ -1351,41 +1421,49 @@ msgid "Preferred MPRIS bus name (empty = automatic)"
 msgstr "Bevorzugter MPRIS-Busname (leer = automatisch)"
 
 #: prefs.js:83
+msgid "Phones by QR Code"
+msgstr "Handys per QR-Code"
+
+#: prefs.js:83
+msgid "Send files to any phone in the same Wi-Fi and receive from it: the phone scans a QR code and uses its browser. No app, no account, no internet. The link carries a random key, only the local network is served, nothing is taken without your “Accept”, and it ends with its banner. With AirDrop installed, its banner switches between both."
+msgstr "Dateien an jedes Handy im selben WLAN senden und von ihm empfangen: Das Handy scannt einen QR-Code und nutzt seinen Browser. Keine App, kein Konto, kein Internet. Der Link enthält einen zufälligen Schlüssel, nur das lokale Netz wird bedient, nichts wird ohne dein „Annehmen“ übernommen, und mit seinem Banner endet er. Mit installiertem AirDrop wechselt dessen Banner zwischen beidem."
+
+#: prefs.js:84
+msgid "Send and receive by QR code"
+msgstr "Per QR-Code senden und empfangen"
+
+#: prefs.js:86
 msgid "AirDrop (experimental)"
 msgstr "AirDrop (experimentell)"
 
-#: prefs.js:83
+#: prefs.js:86
 msgid "Sending to and receiving from iPhones through the airdrop-mt7921 project. Works with MediaTek Wi-Fi (MT7921/MT7922). While AirDrop is active, Wi-Fi is paused; it reconnects by itself afterwards. Only “Everyone for 10 Minutes” on the iPhone."
 msgstr "Senden an und Empfangen von iPhones über das Projekt airdrop-mt7921. Funktioniert mit MediaTek-WLAN (MT7921/MT7922). Während AirDrop aktiv ist, ist das WLAN pausiert; danach verbindet es sich selbst wieder. Nur „Für alle für 10 Minuten“ auf dem iPhone."
 
-#: prefs.js:84
+#: prefs.js:87
 msgid "A button in the island’s header, an AirDrop area while dragging, “Send with AirDrop” in the Shelf."
 msgstr "Knopf im Kopf der Island, AirDrop-Fläche beim Ziehen, „Per AirDrop senden“ im Regal."
 
-#: prefs.js:84
+#: prefs.js:87
 msgid "Offer AirDrop in Notchy"
 msgstr "AirDrop in Notchy anbieten"
 
-#: prefs.js:92
+#: prefs.js:95
 msgid "Backend"
 msgstr "Backend"
 
-#: prefs.js:93
+#: prefs.js:96
 #, javascript-format
 msgid "Found: %s"
 msgstr "Gefunden: %s"
 
-#: prefs.js:93
+#: prefs.js:96
 msgid "Not found. Install airdrop-mt7921 (guide on the right) or enter the path below."
 msgstr "Nicht gefunden. airdrop-mt7921 installieren (Anleitung rechts) oder den Pfad unten angeben."
 
-#: prefs.js:96
+#: prefs.js:99
 msgid "Path to airdropd (empty = search automatically)"
 msgstr "Pfad zu airdropd (leer = automatisch suchen)"
-
-#: prefs.js:98
-msgid "Folder for received files (empty = Downloads/AirDrop)"
-msgstr "Ordner für empfangene Dateien (leer = Downloads/AirDrop)"
 
 #: scripts/notchyctl:110
 msgid "An action is ID:LABEL, e.g. open:Open"
@@ -1492,17 +1570,17 @@ msgid_plural "%d days ago"
 msgstr[0] "vor %d Tag"
 msgstr[1] "vor %d Tagen"
 
-#: src/i18n/core.js:149 src/ui/views.js:1299
+#: src/i18n/core.js:159 src/ui/views.js:1378
 #, javascript-format
 msgid "%d s"
 msgstr "%d s"
 
-#: src/i18n/core.js:151
+#: src/i18n/core.js:161
 #, javascript-format
 msgid "%d min"
 msgstr "%d Min."
 
-#: src/i18n/core.js:152
+#: src/i18n/core.js:162
 #, javascript-format
 msgid "%1$d h %2$d min"
 msgstr "%1$d Std. %2$d Min."
@@ -1688,7 +1766,7 @@ msgid "Notchy’s own preferences."
 msgstr "Notchys eigene Einstellungen."
 
 #. Translators: the notifications switch in the calendar tab: on, or Do Not Disturb.
-#: src/launcher/commands.js:62 src/ui/views.js:891 src/ui/views.js:968
+#: src/launcher/commands.js:62 src/ui/views.js:893 src/ui/views.js:970
 msgid "Do Not Disturb"
 msgstr "Nicht stören"
 
@@ -1712,7 +1790,7 @@ msgstr "GNOMEs Bildschirmaufnahme."
 msgid "Record Screen"
 msgstr "Bildschirm aufnehmen"
 
-#: src/launcher/commands.js:68 src/ui/island.js:242 src/ui/island.js:244
+#: src/launcher/commands.js:68 src/ui/island.js:244 src/ui/island.js:246
 msgid "Open Notchy"
 msgstr "Notchy öffnen"
 
@@ -1896,12 +1974,12 @@ msgstr "Datei"
 msgid "Folder"
 msgstr "Ordner"
 
-#: src/launcher/logic.js:11 src/ui/views.js:31
+#: src/launcher/logic.js:11 src/ui/views.js:33
 msgid "Link"
 msgstr "Link"
 
 #. Translators: the radial capture menu: a selected area, a window, the whole screen, a recording, text recognition.
-#: src/launcher/logic.js:11 src/ui/radial.js:9 src/ui/views.js:439
+#: src/launcher/logic.js:11 src/ui/radial.js:9 src/ui/views.js:441
 msgid "Window"
 msgstr "Fenster"
 
@@ -1945,7 +2023,7 @@ msgstr "Timer"
 msgid "Web"
 msgstr "Web"
 
-#: src/launcher/logic.js:18 src/ui/views.js:669
+#: src/launcher/logic.js:18 src/ui/views.js:671
 msgid "Favorites"
 msgstr "Favoriten"
 
@@ -2114,7 +2192,7 @@ msgstr "Anzeigen"
 msgid "Workspace %d"
 msgstr "Arbeitsbereich %d"
 
-#: src/launcher/providers.js:338 src/ui/views.js:689 src/ui/views.js:789
+#: src/launcher/providers.js:338 src/ui/views.js:691 src/ui/views.js:791
 msgid "Copied to clipboard"
 msgstr "In Zwischenablage kopiert"
 
@@ -2157,7 +2235,7 @@ msgstr "Strg+⇧+C"
 msgid "Path copied"
 msgstr "Pfad kopiert"
 
-#: src/launcher/providers.js:398 src/ui/views.js:696
+#: src/launcher/providers.js:398 src/ui/views.js:698
 msgid "Added to the Shelf"
 msgstr "Ins Regal gelegt"
 
@@ -2224,7 +2302,7 @@ msgstr "Vollbild"
 msgid "Unknown Title"
 msgstr "Unbekannter Titel"
 
-#: src/model.js:67 src/ui/views.js:31
+#: src/model.js:67 src/ui/views.js:33
 msgid "Picture"
 msgstr "Bild"
 
@@ -2252,74 +2330,79 @@ msgstr "Das Fenster des Agenten lässt sich nicht sicher bestimmen"
 msgid "Switch"
 msgstr "Wechseln"
 
-#: src/services/activities.js:181 src/ui/island.js:730
+#: src/services/activities.js:181 src/ui/views.js:1252 src/ui/views.js:1292 src/ui/views.js:1361
+msgid "QR Code"
+msgstr "QR-Code"
+
+#: src/services/activities.js:184 src/ui/island.js:736
 msgid "Looking for an iPhone…"
 msgstr "Sucht iPhone …"
 
-#: src/services/activities.js:181 src/ui/island.js:730
+#: src/services/activities.js:184 src/ui/island.js:736
 #, javascript-format
 msgid "To %s"
 msgstr "An %s"
 
-#: src/services/activities.js:182
+#: src/services/activities.js:185 src/services/share.js:192 src/ui/views.js:1325
 msgid "Receiving"
 msgstr "Empfängt"
 
-#: src/services/activities.js:183 src/ui/island.js:732
+#: src/services/activities.js:186 src/ui/island.js:738
 msgid "Wi-Fi reconnecting…"
 msgstr "WLAN verbindet …"
 
-#: src/services/activities.js:184 src/ui/island.js:733
+#: src/services/activities.js:187 src/ui/island.js:739
 msgid "No iPhone"
 msgstr "Kein iPhone"
 
-#: src/services/activities.js:184 src/ui/island.js:733
+#: src/services/activities.js:187 src/services/share.js:188 src/ui/island.js:739 src/ui/views.js:1314
+#: src/ui/views.js:1325 src/ui/views.js:1336
 msgid "Starting…"
 msgstr "Startet …"
 
-#: src/services/activities.js:184 src/ui/island.js:733
+#: src/services/activities.js:187 src/ui/island.js:739
 msgid "Visible"
 msgstr "Sichtbar"
 
-#: src/services/activities.js:191 src/services/activities.js:205 src/ui/views.js:272
+#: src/services/activities.js:194 src/services/activities.js:208 src/ui/views.js:274
 msgid "Pause"
 msgstr "Pause"
 
-#: src/services/activities.js:191 src/ui/views.js:272
+#: src/services/activities.js:194 src/ui/views.js:274
 msgid "Play"
 msgstr "Wiedergabe"
 
-#: src/services/activities.js:198 src/services/activityModel.js:47
+#: src/services/activities.js:201 src/services/activityModel.js:47
 msgid "Screen recording"
 msgstr "Bildschirmaufnahme"
 
-#: src/services/activities.js:199
+#: src/services/activities.js:202
 msgid "Stop"
 msgstr "Beenden"
 
-#: src/services/activities.js:203
+#: src/services/activities.js:206
 msgid "Break"
 msgstr "Pause"
 
-#: src/services/activities.js:203
+#: src/services/activities.js:206
 #, javascript-format
 msgid "Focus · round %d"
 msgstr "Fokus · Runde %d"
 
-#: src/services/activities.js:206
+#: src/services/activities.js:209
 msgid "Resume"
 msgstr "Fortsetzen"
 
-#: src/services/activities.js:214
+#: src/services/activities.js:217
 msgid "Progress reported by the app"
 msgstr "Fortschritt laut App"
 
-#: src/services/activities.js:223 src/ui/airpodsBubble.js:59 src/ui/airpodsBubble.js:158 src/ui/views.js:349
-#: src/ui/views.js:372
+#: src/services/activities.js:226 src/ui/airpodsBubble.js:59 src/ui/airpodsBubble.js:158 src/ui/views.js:351
+#: src/ui/views.js:374
 msgid "Connected"
 msgstr "Verbunden"
 
-#: src/services/activities.js:223 src/ui/airpodsBubble.js:59 src/ui/airpodsBubble.js:158 src/ui/views.js:372
+#: src/services/activities.js:226 src/ui/airpodsBubble.js:59 src/ui/airpodsBubble.js:158 src/ui/views.js:374
 #, javascript-format
 msgid "Connected · %s"
 msgstr "Verbunden · %s"
@@ -2449,7 +2532,7 @@ msgstr "Fertig"
 msgid "Failed"
 msgstr "Fehlgeschlagen"
 
-#: src/services/activityModel.js:49 src/ui/views.js:250
+#: src/services/activityModel.js:49 src/ui/views.js:252
 msgid "Paused"
 msgstr "Pausiert"
 
@@ -2481,8 +2564,8 @@ msgstr "Hintergrundaktivitäten"
 msgid "Timers and recordings"
 msgstr "Timer und Aufnahmen"
 
-#: src/services/activityModel.js:96 src/services/agentModel.js:95 src/services/agents.js:71 src/services/companion.js:119
-#: src/services/companion.js:120
+#: src/services/activityModel.js:96 src/services/agentModel.js:95 src/services/agents.js:71 src/services/companion.js:121
+#: src/services/companion.js:122
 msgid "Not valid JSON"
 msgstr "Kein gültiges JSON"
 
@@ -2507,7 +2590,7 @@ msgstr "Unbekanntes Ereignis: %s"
 msgid "update without state, status or progress"
 msgstr "update ohne Zustand, Status oder Fortschritt"
 
-#: src/services/agentModel.js:53
+#: src/services/agentModel.js:53 src/ui/views.js:1337
 msgid "Ended"
 msgstr "Beendet"
 
@@ -2515,7 +2598,7 @@ msgstr "Beendet"
 msgid "Error"
 msgstr "Fehler"
 
-#: src/services/agentModel.js:53 src/ui/agentCard.js:16
+#: src/services/agentModel.js:53 src/services/share.js:188 src/ui/agentCard.js:16
 msgid "Ready"
 msgstr "Bereit"
 
@@ -2609,10 +2692,6 @@ msgstr "Auf dem iPhone abgelehnt."
 msgid "The Wi-Fi card could not be switched to AirDrop."
 msgstr "Die WLAN-Karte ließ sich nicht für AirDrop umschalten."
 
-#: src/services/airdrop.js:239
-msgid "Sending failed."
-msgstr "Senden fehlgeschlagen."
-
 #: src/services/airpods.js:230 src/services/airpods.js:242
 msgid "airpods-helper is not running"
 msgstr "airpods-helper läuft nicht"
@@ -2662,24 +2741,24 @@ msgstr "Aufnahme fehlgeschlagen: %s"
 msgid "Screenshot added to the Shelf"
 msgstr "Bildschirmfoto im Regal"
 
-#: src/services/companion.js:117
+#: src/services/companion.js:119
 msgid "Timers are not available"
 msgstr "Timer sind nicht verfügbar"
 
-#: src/services/companion.js:129
+#: src/services/companion.js:131
 msgid "No such timer"
 msgstr "Diesen Timer gibt es nicht"
 
-#: src/services/companion.js:132
+#: src/services/companion.js:134
 msgid "Unknown timer action"
 msgstr "Unbekannte Timer-Aktion"
 
-#: src/services/companion.js:247
+#: src/services/companion.js:249
 #, javascript-format
 msgid "The shelf could not be opened: %s"
 msgstr "Regal konnte nicht geöffnet werden: %s"
 
-#: src/services/companion.js:289
+#: src/services/companion.js:291
 #, javascript-format
 msgid "The basket could not be opened: %s"
 msgstr "Korb konnte nicht geöffnet werden: %s"
@@ -2755,6 +2834,22 @@ msgstr "AirPlay-Suche wurde beendet."
 #: src/services/outputs.js:74
 msgid "PipeWire is not available."
 msgstr "PipeWire ist nicht verfügbar."
+
+#: src/services/share.js:104
+msgid "Sharing ended unexpectedly"
+msgstr "Das Teilen endete unerwartet"
+
+#: src/services/share.js:158
+#, javascript-format
+msgid "wants to send %1$d file (%2$s)"
+msgid_plural "wants to send %1$d files (%2$s)"
+msgstr[0] "möchte %1$d Datei senden (%2$s)"
+msgstr[1] "möchte %1$d Dateien senden (%2$s)"
+
+#: src/services/share.js:158 src/ui/views.js:1365
+#, javascript-format
+msgid "wants to send “%s”"
+msgstr "möchte „%s“ senden"
 
 #: src/services/snap.js:79
 msgid "Window arranged"
@@ -2887,7 +2982,7 @@ msgstr "Später"
 msgid "Go to Window"
 msgstr "Zum Fenster"
 
-#: src/ui/airpodsBubble.js:111 src/ui/airpodsBubble.js:163 src/ui/views.js:103 src/ui/views.js:359
+#: src/ui/airpodsBubble.js:111 src/ui/airpodsBubble.js:163 src/ui/views.js:105 src/ui/views.js:361
 msgid "Battery"
 msgstr "Akku"
 
@@ -2897,12 +2992,12 @@ msgid "ANC"
 msgstr "ANC"
 
 #. Translators: short labels of the AirPods noise control buttons.
-#: src/ui/airpodsBubble.js:126 src/ui/views.js:99
+#: src/ui/airpodsBubble.js:126 src/ui/views.js:101
 msgid "Adaptive"
 msgstr "Adaptiv"
 
 #. Translators: short labels of the AirPods noise control buttons.
-#: src/ui/airpodsBubble.js:126 src/ui/views.js:99
+#: src/ui/airpodsBubble.js:126 src/ui/views.js:101
 msgid "Transparency"
 msgstr "Transparenz"
 
@@ -2922,7 +3017,7 @@ msgstr "Trennen"
 msgid "Bluetooth Settings…"
 msgstr "Bluetooth-Einstellungen …"
 
-#: src/ui/airpodsBubble.js:158 src/ui/island.js:97 src/ui/views.js:372
+#: src/ui/airpodsBubble.js:158 src/ui/island.js:97 src/ui/views.js:374
 msgid "Disconnected"
 msgstr "Getrennt"
 
@@ -2944,70 +3039,66 @@ msgstr "AirPods: %s"
 msgid "Keep Open"
 msgstr "Offen halten"
 
-#: src/ui/island.js:153 src/ui/island.js:747
-msgid "AirDrop: become visible to iPhones"
-msgstr "AirDrop: für iPhones sichtbar werden"
+#: src/ui/island.js:153 src/ui/island.js:773
+msgid "Receive from a phone"
+msgstr "Von einem Handy empfangen"
 
 #: src/ui/island.js:26
 msgid "Calendar"
 msgstr "Kalender"
 
-#: src/ui/island.js:558
+#: src/ui/island.js:560
 msgid "Closes when the pointer leaves"
 msgstr "Schließt beim Verlassen"
 
-#: src/ui/island.js:558
+#: src/ui/island.js:560
 msgid "Stays open"
 msgstr "Bleibt geöffnet"
 
-#: src/ui/island.js:700
+#: src/ui/island.js:705
 msgid "Processing…"
 msgstr "Verarbeitung …"
 
-#: src/ui/island.js:740
-msgid "AirDrop: visible, Wi-Fi paused"
-msgstr "AirDrop: sichtbar, WLAN pausiert"
+#: src/ui/island.js:773
+msgid "Stop receiving"
+msgstr "Empfangen beenden"
 
-#: src/ui/island.js:747
-msgid "AirDrop: stop receiving"
-msgstr "AirDrop: Empfang beenden"
-
-#: src/ui/island.js:759
+#: src/ui/island.js:793 src/ui/views.js:1325
 msgid "AirDrop could not start"
 msgstr "AirDrop konnte nicht starten"
 
-#: src/ui/island.js:800
+#: src/ui/island.js:834
 #, javascript-format
 msgid "%s disconnected"
 msgstr "%s getrennt"
 
 #. Translators: a low battery: "AirPods left: 10 %".
 #. Translators: L and R are the left and the right AirPod.
-#: src/ui/island.js:803 src/ui/views.js:105 src/ui/views.js:361
+#: src/ui/island.js:837 src/ui/views.js:107 src/ui/views.js:363
 msgid "Case"
 msgstr "Case"
 
 #. Translators: a low battery: "AirPods left: 10 %".
-#: src/ui/island.js:803
+#: src/ui/island.js:837
 msgid "left"
 msgstr "links"
 
 #. Translators: a low battery: "AirPods left: 10 %".
-#: src/ui/island.js:803
+#: src/ui/island.js:837
 msgid "right"
 msgstr "rechts"
 
-#: src/ui/island.js:804
+#: src/ui/island.js:838
 #, javascript-format
 msgid "%1$s: %2$s"
 msgstr "%1$s: %2$s"
 
-#: src/ui/island.js:919
+#: src/ui/island.js:953
 #, javascript-format
 msgid "In the Shelf · %s"
 msgstr "Im Regal · %s"
 
-#: src/ui/island.js:920 src/ui/views.js:569
+#: src/ui/island.js:954 src/ui/views.js:571
 #, javascript-format
 msgid "%d file in the Shelf"
 msgid_plural "%d files in the Shelf"
@@ -3042,455 +3133,520 @@ msgstr[1] "Regal: %d Dateien"
 msgid "More Indicators"
 msgstr "Weitere Indikatoren"
 
-#: src/ui/views.js:1000
+#: src/ui/views.js:1002
 msgid "Close Notifications"
 msgstr "Mitteilungen schließen"
 
-#: src/ui/views.js:993 src/ui/views.js:1009 src/ui/views.js:1329
+#: src/ui/views.js:101
+msgid "Noise Cancellation"
+msgstr "Geräuschunterdrückung"
+
+#: src/ui/views.js:101
+msgid "Noise Control Off"
+msgstr "Geräuschkontrolle aus"
+
+#: src/ui/views.js:995 src/ui/views.js:1011 src/ui/views.js:1408
 #, javascript-format
 msgid "Open: %s"
 msgstr "Öffnen: %s"
 
-#: src/ui/views.js:1015
+#: src/ui/views.js:1017
 msgid "All caught up"
 msgstr "Alles erledigt"
 
-#: src/ui/views.js:1033
+#: src/ui/views.js:1035
 msgid "Apps, commands, calculations… · “file …” for files"
 msgstr "Apps, Befehle, Rechnen … · „datei …“ für Dateien"
 
+#: src/ui/views.js:1052
+msgid "Copied"
+msgstr "Kopiert"
+
+#: src/ui/views.js:1059
+msgid "No permission for this file"
+msgstr "Keine Berechtigung für diese Datei"
+
+#: src/ui/views.js:1062
+msgid "The file cannot be reached"
+msgstr "Datei nicht erreichbar"
+
+#: src/ui/views.js:1062
+msgid "The file no longer exists"
+msgstr "Datei nicht mehr vorhanden"
+
 #. Translators: L and R are the left and the right AirPod.
-#: src/ui/views.js:105
+#: src/ui/views.js:107
 msgid "L"
 msgstr "L"
 
 #. Translators: L and R are the left and the right AirPod.
-#: src/ui/views.js:105
+#: src/ui/views.js:107
 msgid "R"
 msgstr "R"
 
-#: src/ui/views.js:1050
-msgid "Copied"
-msgstr "Kopiert"
-
-#: src/ui/views.js:1057
-msgid "No permission for this file"
-msgstr "Keine Berechtigung für diese Datei"
-
-#: src/ui/views.js:1060
-msgid "The file cannot be reached"
-msgstr "Datei nicht erreichbar"
-
-#: src/ui/views.js:1060
-msgid "The file no longer exists"
-msgstr "Datei nicht mehr vorhanden"
-
-#: src/ui/views.js:1113
+#: src/ui/views.js:1115
 #, javascript-format
 msgid "%s ↵ to confirm"
 msgstr "%s ↵ zum Bestätigen"
 
-#: src/ui/views.js:1114
+#: src/ui/views.js:1116
 msgid "Esc cancels"
 msgstr "Esc bricht ab"
 
-#: src/ui/views.js:1146
+#: src/ui/views.js:1148
 msgid "↵ run · Esc back"
 msgstr "↵ ausführen · Esc zurück"
 
-#: src/ui/views.js:1150
+#: src/ui/views.js:1152
 #, javascript-format
 msgid "↵ %s · Ctrl+K Actions"
 msgstr "↵ %s · Strg+K Aktionen"
 
-#: src/ui/views.js:1150
+#: src/ui/views.js:1152
 msgid "↵ confirm · Esc cancel"
 msgstr "↵ bestätigen · Esc abbrechen"
 
-#: src/ui/views.js:1153
+#: src/ui/views.js:1155
 #, javascript-format
 msgid "%d result"
 msgid_plural "%d results"
 msgstr[0] "%d Treffer"
 msgstr[1] "%d Treffer"
 
-#: src/ui/views.js:1155
+#: src/ui/views.js:1157
 msgid "Indexed folders · Esc back"
 msgstr "Indizierte Ordner · Esc zurück"
 
-#: src/ui/views.js:1156
+#: src/ui/views.js:1158
 msgid "Searching files…"
 msgstr "Suche Dateien …"
 
-#: src/ui/views.js:1157
+#: src/ui/views.js:1159
 #, javascript-format
 msgid "Files and folders only · %s"
 msgstr "Nur Dateien und Ordner · %s"
 
-#: src/ui/views.js:1158
+#: src/ui/views.js:1160
 msgid "File index not active · basic search in personal folders"
 msgstr "Dateiindex nicht aktiv · einfache Suche in persönlichen Ordnern"
 
-#: src/ui/views.js:1159
+#: src/ui/views.js:1161
 msgid "File search is turned off"
 msgstr "Dateisuche ist ausgeschaltet"
 
-#: src/ui/views.js:1167
+#: src/ui/views.js:1169
 #, javascript-format
 msgid "Actions · %s"
 msgstr "Aktionen · %s"
 
-#: src/ui/views.js:1238
+#: src/ui/views.js:1260
 msgid "Cancel Sending"
 msgstr "Senden abbrechen"
 
-#: src/ui/views.js:1262
+#: src/ui/views.js:1260
+msgid "Stop Receiving"
+msgstr "Empfangen beenden"
+
+#: src/ui/views.js:1292
+msgid "Receive"
+msgstr "Empfangen"
+
+#: src/ui/views.js:1299
 msgid "Looking for iPhones nearby…"
 msgstr "Sucht iPhones in der Nähe …"
 
-#: src/ui/views.js:1262
+#: src/ui/views.js:1299
 #, javascript-format
 msgid "To %s · accept on the iPhone"
 msgstr "An %s · auf dem iPhone annehmen"
 
-#: src/ui/views.js:1262
+#: src/ui/views.js:1299
 #, javascript-format
 msgid "To %s · sending…"
 msgstr "An %s · wird gesendet …"
 
-#: src/ui/views.js:1263
+#: src/ui/views.js:1300 src/ui/views.js:1315
 msgid "Cancelled"
 msgstr "Abgebrochen"
 
-#: src/ui/views.js:1263
+#: src/ui/views.js:1300 src/ui/views.js:1315
 msgid "Sending failed"
 msgstr "Senden fehlgeschlagen"
 
-#: src/ui/views.js:1263
+#: src/ui/views.js:1300
 msgid "Sent"
 msgstr "Gesendet"
 
-#: src/ui/views.js:1263
+#: src/ui/views.js:1300 src/ui/views.js:1315
 #, javascript-format
 msgid "Sent to %s"
 msgstr "An %s gesendet"
 
-#: src/ui/views.js:1264
+#: src/ui/views.js:1301 src/ui/views.js:1326
 msgid "Wi-Fi is paused during AirDrop"
 msgstr "WLAN ist während AirDrop pausiert"
 
-#: src/ui/views.js:1264
+#: src/ui/views.js:1301
 msgid "iPhone: AirDrop “Everyone”, share menu closed"
 msgstr "iPhone: AirDrop „Für alle“, Teilen-Menü zu"
 
-#: src/ui/views.js:1285
+#: src/ui/views.js:1314
+#, javascript-format
+msgid "%1$s is downloading · %2$s"
+msgstr "%1$s lädt herunter · %2$s"
+
+#: src/ui/views.js:1314
+msgid "Scan with the phone’s camera"
+msgstr "Mit der Kamera des Handys scannen"
+
+#: src/ui/views.js:1314 src/ui/views.js:1336
+msgid "Waiting for Wi-Fi…"
+msgstr "Warte auf das WLAN …"
+
+#: src/ui/views.js:1316
+msgid "Same Wi-Fi · valid until you close this"
+msgstr "Gleiches WLAN · gilt, bis du den Banner schließt"
+
+#: src/ui/views.js:1316
+msgid "The link is no longer valid"
+msgstr "Der Link ist jetzt ungültig"
+
+#: src/ui/views.js:1323
+msgid "Visible to iPhones"
+msgstr "Sichtbar für iPhones"
+
+#: src/ui/views.js:1325
+msgid "An iPhone can send to you now"
+msgstr "Ein iPhone kann dir jetzt senden"
+
+#: src/ui/views.js:1325
+#, javascript-format
+msgid "Receiving · %s"
+msgstr "Empfängt · %s"
+
+#: src/ui/views.js:1332
+msgid "From the phone into the Shelf"
+msgstr "Vom Handy ins Regal"
+
+#: src/ui/views.js:596 src/ui/views.js:1332
+msgid "In the Shelf"
+msgstr "Im Regal"
+
+#: src/ui/views.js:1336
+#, javascript-format
+msgid "%1$s is sending · %2$s"
+msgstr "%1$s sendet · %2$s"
+
+#: src/ui/views.js:1336
+msgid "Scan, choose files, send"
+msgstr "Scannen, Dateien wählen, senden"
+
+#: src/ui/views.js:1337
+#, javascript-format
+msgid "%d file received"
+msgid_plural "%d files received"
+msgstr[0] "%d Datei empfangen"
+msgstr[1] "%d Dateien empfangen"
+
+#: src/ui/views.js:1337
+msgid "Receiving failed"
+msgstr "Empfangen fehlgeschlagen"
+
+#: src/ui/views.js:1338
+msgid "Same Wi-Fi · ends after 10 minutes or when closed"
+msgstr "Gleiches WLAN · endet nach 10 Min. oder beim Schließen"
+
+#: src/ui/views.js:1364
 msgid "A device nearby"
 msgstr "Ein Gerät in der Nähe"
 
-#: src/ui/views.js:1286
+#: src/ui/views.js:1365
 msgid "wants to send something"
 msgstr "möchte etwas senden"
 
-#: src/ui/views.js:1286
-#, javascript-format
-msgid "wants to send “%s”"
-msgstr "möchte „%s“ senden"
-
-#: src/ui/views.js:1289
+#: src/ui/views.js:1368
 msgid "Decline"
 msgstr "Ablehnen"
 
-#: src/ui/views.js:1290
+#: src/ui/views.js:1369
 msgid "Accept"
 msgstr "Annehmen"
 
-#: src/ui/views.js:973 src/ui/views.js:1323
+#: src/ui/views.js:975 src/ui/views.js:1402
 msgid "Notification"
 msgstr "Benachrichtigung"
 
-#: src/ui/views.js:1338
+#: src/ui/views.js:1417
 msgid "Hide Banner"
 msgstr "Banner ausblenden"
 
-#: src/ui/views.js:188
+#: src/ui/views.js:190
 msgid "last known"
 msgstr "zuletzt"
 
-#: src/ui/views.js:202
+#: src/ui/views.js:204
 #, javascript-format
 msgid "last %1$s, %2$s"
 msgstr "zuletzt %1$s, %2$s"
 
-#: src/ui/views.js:202
+#: src/ui/views.js:204
 msgid "unknown"
 msgstr "unbekannt"
 
-#: src/ui/views.js:203
+#: src/ui/views.js:205
 #, javascript-format
 msgid "%1$s: %2$s, charging"
 msgstr "%1$s: %2$s, lädt"
 
-#: src/ui/views.js:245
+#: src/ui/views.js:247
 msgid "Open the playing app"
 msgstr "Spielende App öffnen"
 
-#: src/ui/views.js:250
+#: src/ui/views.js:252
 msgid "Now Playing"
 msgstr "Läuft gerade"
 
-#: src/ui/views.js:271
+#: src/ui/views.js:273
 msgid "Previous Track"
 msgstr "Vorheriger Titel"
 
-#: src/ui/views.js:274
+#: src/ui/views.js:276
 msgid "Next Track"
 msgstr "Nächster Titel"
 
-#: src/ui/views.js:283 src/ui/views.js:306
+#: src/ui/views.js:285 src/ui/views.js:308
 #, javascript-format
 msgid "Open %s"
 msgstr "%s öffnen"
 
-#: src/ui/views.js:298
+#: src/ui/views.js:300
 msgid "All Quiet"
 msgstr "Gerade ist es still"
 
-#: src/ui/views.js:31
-msgid "Color"
-msgstr "Farbe"
-
-#: src/ui/views.js:31
-msgid "Files"
-msgstr "Dateien"
-
-#: src/ui/views.js:324
+#: src/ui/views.js:326
 msgid "No Output"
 msgstr "Keine Ausgabe"
 
-#: src/ui/views.js:325
+#: src/ui/views.js:327
 #, javascript-format
 msgid "Output: %s. Switch to AirPlay or another device"
 msgstr "Ausgabe: %s. Auf AirPlay oder ein anderes Gerät umschalten"
 
-#: src/ui/views.js:44
-msgid "Today"
-msgstr "Heute"
+#: src/ui/views.js:33
+msgid "Color"
+msgstr "Farbe"
 
-#: src/ui/views.js:44
-msgid "Yesterday"
-msgstr "Gestern"
+#: src/ui/views.js:33
+msgid "Files"
+msgstr "Dateien"
 
-#: src/ui/views.js:440
+#: src/ui/views.js:442
 msgid "Release over an area"
 msgstr "Loslassen über einer Fläche"
 
-#: src/ui/views.js:461
+#: src/ui/views.js:46
+msgid "Today"
+msgstr "Heute"
+
+#: src/ui/views.js:46
+msgid "Yesterday"
+msgstr "Gestern"
+
+#: src/ui/views.js:463
 msgid "Back to the Player"
 msgstr "Zurück zum Player"
 
-#: src/ui/views.js:463
+#: src/ui/views.js:465
 msgid "Play Music On"
 msgstr "Musik abspielen auf"
 
-#: src/ui/views.js:475
+#: src/ui/views.js:477
 msgid "AirPlay active"
 msgstr "AirPlay aktiv"
 
-#: src/ui/views.js:482
+#: src/ui/views.js:484
 msgid "This Computer"
 msgstr "Dieser Computer"
 
-#: src/ui/views.js:488
+#: src/ui/views.js:490
 #, javascript-format
 msgid "Playing on %s"
 msgstr "Wiedergabe auf %s"
 
-#: src/ui/views.js:494
+#: src/ui/views.js:496
 msgid "Find AirPlay Devices"
 msgstr "AirPlay-Geräte finden"
 
-#: src/ui/views.js:497
+#: src/ui/views.js:499
 msgid "Find AirPlay Devices on the Network"
 msgstr "AirPlay-Geräte im Netzwerk finden"
 
-#: src/ui/views.js:501
+#: src/ui/views.js:503
 msgid "Looking for AirPlay devices on the network…"
 msgstr "Suche nach AirPlay-Geräten im Netzwerk …"
 
-#: src/ui/views.js:501
+#: src/ui/views.js:503
 msgid "No AirPlay devices found."
 msgstr "Keine AirPlay-Geräte gefunden."
 
-#: src/ui/views.js:51
+#: src/ui/views.js:53
 #, javascript-format
 msgid "%d character"
 msgid_plural "%d characters"
 msgstr[0] "%d Zeichen"
 msgstr[1] "%d Zeichen"
 
-#: src/ui/views.js:594
-msgid "In the Shelf"
-msgstr "Im Regal"
-
-#: src/ui/views.js:662
+#: src/ui/views.js:664
 msgid "Search the history"
 msgstr "Verlauf durchsuchen"
 
-#: src/ui/views.js:689
+#: src/ui/views.js:691
 msgid "Copied as plain text"
 msgstr "Als reiner Text kopiert"
 
-#: src/ui/views.js:726
+#: src/ui/views.js:728
 msgid "Nothing copied yet"
 msgstr "Noch nichts kopiert"
 
-#: src/ui/views.js:726
+#: src/ui/views.js:728
 msgid "Nothing found"
 msgstr "Nichts gefunden"
 
-#: src/ui/views.js:74
+#: src/ui/views.js:76
 msgid "All"
 msgstr "Alle"
 
-#: src/ui/views.js:74
+#: src/ui/views.js:76
 msgid "Favorites Only"
 msgstr "Nur Favoriten"
 
-#: src/ui/views.js:74
+#: src/ui/views.js:76
 msgid "Links"
 msgstr "Links"
 
-#: src/ui/views.js:74
+#: src/ui/views.js:76
 msgid "Pictures"
 msgstr "Bilder"
 
-#: src/ui/views.js:788
+#: src/ui/views.js:790
 #, javascript-format
 msgid "Copy %s"
 msgstr "%s kopieren"
 
-#: src/ui/views.js:801
+#: src/ui/views.js:803
 #, javascript-format
 msgid "and %d more"
 msgid_plural "and %d more"
 msgstr[0] "und %d weitere"
 msgstr[1] "und %d weitere"
 
-#: src/ui/views.js:815
+#: src/ui/views.js:817
 msgid "Copy (Enter)"
 msgstr "Kopieren (Enter)"
 
-#: src/ui/views.js:821
+#: src/ui/views.js:823
 msgid "Copy as plain text (Shift+Enter)"
 msgstr "Als reinen Text kopieren (Umschalt+Eingabe)"
 
-#: src/ui/views.js:823
+#: src/ui/views.js:825
 msgid "Copy as Text"
 msgstr "Als Text"
 
-#: src/ui/views.js:827
+#: src/ui/views.js:829
 msgid "Favorite (F)"
 msgstr "Favorit (F)"
 
-#: src/ui/views.js:829
+#: src/ui/views.js:831
 msgid "Delete (Del)"
 msgstr "Löschen (Entf)"
 
-#: src/ui/views.js:845
+#: src/ui/views.js:847
 msgid "The History Is Off"
 msgstr "Der Verlauf ist aus"
 
-#: src/ui/views.js:846
+#: src/ui/views.js:848
 msgid "Turn it on to find everything you copied here again."
 msgstr "Schalte ihn ein, dann findest du hier alles wieder, was du kopiert hast."
 
-#: src/ui/views.js:847
+#: src/ui/views.js:849
 msgid "Turn On History"
 msgstr "Verlauf einschalten"
 
-#: src/ui/views.js:849
+#: src/ui/views.js:851
 msgid "It is kept on this computer only."
 msgstr "Gespeichert wird nur auf diesem Rechner."
 
-#: src/ui/views.js:872
+#: src/ui/views.js:874
 msgid "Previous Week"
 msgstr "Vorherige Woche"
 
-#: src/ui/views.js:873
+#: src/ui/views.js:875
 msgid "Next Week"
 msgstr "Nächste Woche"
 
-#: src/ui/views.js:895
+#: src/ui/views.js:897
 msgid "Do Not Disturb is on"
 msgstr "Nicht stören ist an"
 
-#: src/ui/views.js:895
+#: src/ui/views.js:897
 msgid "Notifications are back on"
 msgstr "Mitteilungen wieder an"
 
-#: src/ui/views.js:897
+#: src/ui/views.js:899
 msgid "Clear All"
 msgstr "Alle löschen"
 
 #. Translators: %s is a date like "19 October".
-#: src/ui/views.js:915
+#: src/ui/views.js:917
 #, javascript-format
 msgid "Today, %s"
 msgstr "Heute, %s"
 
 #. Translators: %s is a date like "19 October".
-#: src/ui/views.js:915
+#: src/ui/views.js:917
 #, javascript-format
 msgid "Tomorrow, %s"
 msgstr "Morgen, %s"
 
 #. Translators: %s is a date like "19 October".
-#: src/ui/views.js:915
+#: src/ui/views.js:917
 #, javascript-format
 msgid "Yesterday, %s"
 msgstr "Gestern, %s"
 
 #. Translators: the ISO calendar week, short ("KW 42" in German).
-#: src/ui/views.js:917
+#: src/ui/views.js:919
 #, javascript-format
 msgid "Week %d"
 msgstr "KW %d"
 
 #. Translators: in place of a start time, for an event lasting all day.
-#: src/ui/views.js:934
+#: src/ui/views.js:936
 msgid "Day"
 msgstr "Tag"
 
-#: src/ui/views.js:938
+#: src/ui/views.js:940
 msgid "Event"
 msgstr "Termin"
 
-#: src/ui/views.js:940
+#: src/ui/views.js:942
 msgid "All day"
 msgstr "Ganztägig"
 
-#: src/ui/views.js:944
+#: src/ui/views.js:946
 msgid "Loading events…"
 msgstr "Termine werden geladen …"
 
-#: src/ui/views.js:944
+#: src/ui/views.js:946
 msgid "No events"
 msgstr "Keine Termine"
 
 #. Translators: the notifications switch in the calendar tab: on, or Do Not Disturb.
-#: src/ui/views.js:968
+#: src/ui/views.js:970
 msgid "On"
 msgstr "An"
 
-#: src/ui/views.js:99
-msgid "Noise Cancellation"
-msgstr "Geräuschunterdrückung"
-
-#: src/ui/views.js:99
-msgid "Noise Control Off"
-msgstr "Geräuschkontrolle aus"
-
-#: src/ui/views.js:993
+#: src/ui/views.js:995
 #, javascript-format
 msgid "%1$s: %2$d notification"
 msgid_plural "%1$s: %2$d notifications"

@@ -123,6 +123,10 @@ export async function run() {
         await activityRegressions(ext, path, screenshot); ext.disable();
         print('NOTCHY_LAYOUT_TEST_OK'); return;
     }
+    if (GLib.getenv('NOTCHY_TEST_SHARE_ONLY')) {
+        await shareRegressions(ext, path, screenshot); ext.disable();
+        print('NOTCHY_SHARE_TEST_OK'); return;
+    }
     if (GLib.getenv('NOTCHY_TEST_ACTIVITIES_ONLY')) {
         await activityRegressions(ext, path, screenshot); ext.disable();
         print('NOTCHY_ACTIVITIES_TEST_OK'); return;
@@ -398,6 +402,7 @@ export async function run() {
     await scrollbarRegressions(ext, path, screenshot);
     await agentRegressions(ext, path, screenshot);
     await activityRegressions(ext, path, screenshot);
+    await shareRegressions(ext, path, screenshot);
     // The AirPods leaving at the end of the agent phase show their pill a moment; the Regal's arrival may still be open.
     mock.force_exit(); for (let i = 0; i < 60 && (ext.media.state || ext.islands[0].toastState || ext.islands[0].link || ext.islands[0].peeking); i++) await Scripting.sleep(100); assert(ext.media.state === null && !styled(ext.islands[0].leftRow, 'notchy-mini-art').length && styled(ext.islands[0].rightRow, 'notchy-shelf-pill').length === 1, `MPRIS player removal empties the capsule but for the Regal's count (${ext.media.state?.title ?? 'no state'}, ${ext.islands[0].panelSurface.get_style_class_name()})`);
     await Scripting.sleep(300);
@@ -2081,5 +2086,103 @@ async function activityRegressions(ext, path, screenshot) {
         for (const id of ['iso', 'build']) await call('EndActivity', '(s)', [id]).catch(() => null);
         ext.settings?.set_int('activities-completed-seconds', saved.completed); ext.settings?.set_boolean('hover-open', saved.hover); ext.settings?.set_string('style', saved.style);
         ext.settings?.reset('activities-enabled');
+    }
+}
+
+// Sharing by QR code in AirDrop's banners (share.js, helper/share.py, Views.shareBanner):
+// sending to and receiving from a "phone" — this test, over HTTP on localhost.
+async function shareRegressions(ext, path, screenshot) {
+    const Soup = (await import('gi://Soup?version=3.0')).default;
+    let island = ext.islands[0];
+    const waitFor = async (condition, ms = 4000) => { for (let i = 0; i < ms / 50 && !condition(); i++) await Scripting.sleep(50); return condition(); };
+    const http = new Soup.Session({timeout: 20});
+    const PIXEL = 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/AP1A) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36';
+    const request = (method, url, body = null, type = 'application/octet-stream') => new Promise((resolve, reject) => {
+        const message = Soup.Message.new(method, url);
+        message.get_request_headers().replace('User-Agent', PIXEL);
+        if (body !== null) message.set_request_body_from_bytes(type, new GLib.Bytes(typeof body === 'string' ? new TextEncoder().encode(body) : body));
+        http.send_and_read_async(message, GLib.PRIORITY_DEFAULT, null, (s, result) => {
+            try { const bytes = s.send_and_read_finish(result); resolve({status: message.get_status(), body: new TextDecoder().decode(bytes.get_data() ?? new Uint8Array())}); } catch (e) { reject(e); }
+        });
+    });
+    // Received files go to a folder of the test's own, never the real home.
+    const received = `${path}/received`; GLib.mkdir_with_parents(received, 0o700);
+    // Fresh for every run: what an earlier run received is gone.
+    for (let e = Gio.File.new_for_path(received).enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null), info; (info = e.next_file(null));) Gio.File.new_for_path(`${received}/${info.get_name()}`).delete(null);
+    ext.settings.set_string('airdrop-folder', received);
+    assert(ext.share.folder === received, 'the test receives into its own folder');
+    const file = Gio.File.new_for_path(`${path}/Urlaub 2026.txt`);
+    file.replace_contents(new TextEncoder().encode('x'.repeat(300000)), null, false, Gio.FileCreateFlags.NONE, null);
+    try {
+        await waitFor(() => !island.peeking && !island.expanded, 5000);
+        assert(ext.share.enabled && !ext.airdrop.available && island.airdropButton.visible, 'without AirDrop\'s backend the QR code is there, and so is the header\'s receive button');
+        // Sending: the banner shows the QR code of the link (no pill without AirDrop).
+        assert(ext.share.sendToPhone([file.get_path()]), 'a file to a phone starts a QR share without AirDrop');
+        assert(await waitFor(() => island.peekKind === 'airdrop' && ext.share.send?.phase === 'ready', 6000), `the AirDrop banner opens with the QR code (${island.peekKind}, ${ext.share.send?.phase})`);
+        await Scripting.sleep(400);
+        const view = island.peekView, url = ext.share.send.url;
+        assert(view.qr.actor.visible && view.qr.text === url && /^http:\/\/127\.0\.0\.1:\d+\/[\w-]{12}$/.test(url) && !view.ways.visible,
+            `the QR code carries the session's link, the pill stays hidden without AirDrop (${url})`);
+        assert(styled(island.body, 'notchy-peek-app')[0]?.text === 'QR-Code' && styled(island.body, 'notchy-share-url')[0]?.text === url.slice(7), 'the banner names the way and shows the link to type');
+        await screenshot('share-qr-send');
+        const page = await request('GET', url);
+        assert(page.status === 200 && page.body.includes('Urlaub 2026.txt'), 'the phone\'s page lists the file');
+        const download = await request('GET', `${url}/f/0/x`);
+        assert(download.status === 200 && download.body.length === 300000, 'the phone downloads it whole');
+        assert(await waitFor(() => ext.share.send?.phase === 'done', 4000), 'downloaded: the banner says sent');
+        assert(ext.share.send.peer === 'Pixel 8' && styled(island.body, 'notchy-peek-body')[0]?.text.includes('Pixel 8'), 'it names the phone from its browser');
+        assert(await waitFor(() => island.peekKind !== 'airdrop', 5000) && !ext.share.sendProc, 'it folds away by itself and the server is gone');
+        // Closing a waiting QR banner ends its link at once.
+        ext.share.sendToPhone([file.get_path()]);
+        await waitFor(() => ext.share.send?.phase === 'ready', 6000);
+        const stale = ext.share.send.url;
+        island.close(); await Scripting.sleep(800);
+        assert(!ext.share.sendProc && ext.share.send.phase === 'cancelled', 'closing the banner ends the link');
+        assert(await request('GET', stale).then(() => false, () => true), 'the old link no longer answers');
+        // Receiving: the header's button opens the QR code to upload.
+        island.toggleReceive();
+        assert(await waitFor(() => island.peekKind === 'receive' && ext.share.incoming?.phase === 'ready', 6000), 'the header\'s button opens the receive banner with a QR code');
+        const upload = ext.share.incoming.url;
+        assert(island.peekView.qr.text === upload && island.airdropButton.has_style_class_name('active'), 'receiving shows its own link; the button is active');
+        await Scripting.sleep(500); await screenshot('share-qr-receive');
+        const asking = request('POST', `${upload}/ask`, JSON.stringify({files: [{name: 'foto.txt', size: 5}]}), 'application/json');
+        assert(await waitFor(() => island.peekKind === 'airdrop-ask', 4000), 'a phone that wants to send gets the AirDrop question');
+        assert(styled(island.body, 'notchy-peek-app')[0]?.text === 'QR-Code' && styled(island.body, 'notchy-peek-title')[0]?.text === 'Pixel 8' && styled(island.body, 'notchy-peek-body')[0]?.text.includes('foto.txt'),
+            'the question names the phone and the file, as AirDrop\'s does');
+        assert(!Gio.File.new_for_path(`${ext.share.folder}/foto.txt`).query_exists(null), 'nothing is stored before the answer');
+        ext.share.question.answer(true);
+        const answer = JSON.parse((await asking).body);
+        assert(answer.ok && answer.ticket, 'accepted: the phone may send');
+        const before = ext.shelf.items.length;
+        const sent = await request('PUT', `${upload}/up/${answer.ticket}/0`, 'hallo');
+        assert(sent.status === 200 && await waitFor(() => ext.shelf.items.length === before + 1, 4000), 'the received file lands in the Shelf');
+        assert(ext.shelf.items.at(-1).name === 'foto.txt', 'under its own name');
+        await waitFor(() => !ext.share.receiveProc, 5000);
+        // Declining: the phone hears no, the QR code to receive comes back.
+        await waitFor(() => !island.peeking, 5000);
+        island.toggleReceive();
+        await waitFor(() => ext.share.incoming?.phase === 'ready', 6000);
+        const second = ext.share.incoming.url;
+        const declined = request('POST', `${second}/ask`, JSON.stringify({files: [{name: 'b.txt', size: 1}]}), 'application/json');
+        await waitFor(() => island.peekKind === 'airdrop-ask', 4000);
+        island.close(); 
+        const no = await declined;
+        const back = await waitFor(() => island.peekKind === 'receive', 3000);
+        assert(no.status === 403 && back, `closing the question declines; the receive banner returns (${no.status}, ${island.peekKind})`);
+        island.cancelShare('receive'); await Scripting.sleep(500);
+        assert(!ext.share.receiveProc && !island.peeking && !island.airdropButton.has_style_class_name('active'), 'its × ends receiving');
+        // The QR code switched off: no button, no QR share.
+        ext.settings.set_boolean('share-qr-enabled', false); await Scripting.sleep(200);
+        assert(!island.airdropButton.visible && !ext.share.sendToPhone([file.get_path()]), 'switched off, nothing offers it');
+        ext.settings.reset('share-qr-enabled');
+        // Disabling Notchy ends any session.
+        ext.share.sendToPhone([file.get_path()]); await waitFor(() => ext.share.send?.phase === 'ready', 6000);
+        const share = ext.share;
+        ext.disable(); await Scripting.sleep(300);
+        assert(!share.sendProc && share.life.closed, 'disabling Notchy ends the QR share');
+        ext.enable(); await Scripting.sleep(800); island = ext.islands[0];
+    } finally {
+        ext.settings?.reset('share-qr-enabled'); ext.settings?.reset('airdrop-folder');
+        try { file.delete(null); } catch { /* Gone. */ }
     }
 }

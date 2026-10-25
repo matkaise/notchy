@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teilen per QR-Code</title>
+<style>
+:root {
+  --page: #e9e7e3; --page-ink: #1d1d1f; --page-muted: #6b6a67; --page-line: #d6d3ce;
+  --desk: #2b2b2d; --ink: #fff; --muted: rgba(255,255,255,0.62); --faint: rgba(255,255,255,0.42);
+  --blue: #3a9bff; --blue-2: #0a6ee6; --green: #34c759; --orange: #ffb38a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #141416; --page-ink: #f2f2f2; --page-muted: #9a9aa0; --page-line: #2a2a2e; }
+}
+:root[data-theme="dark"] { --page: #141416; --page-ink: #f2f2f2; --page-muted: #9a9aa0; --page-line: #2a2a2e; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--page-ink); font: 15px/1.5 Cantarell, Inter, system-ui, sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 40px 16px 80px; }
+h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.01em; }
+h2 { font-size: 19px; margin: 52px 0 6px; }
+.lead, .note { color: var(--page-muted); max-width: 760px; margin: 0; }
+.note { font-size: 14px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; background: var(--page-line); color: var(--page-muted); vertical-align: 3px; margin-left: 6px; }
+
+/* Desktop and bar, as in Notchy's screenshots. */
+.desk { position: relative; margin-top: 16px; border-radius: 14px; overflow: hidden; background: var(--desk); padding-bottom: 26px; }
+.row { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 16px; }
+.row > .desk { flex: 1 1 440px; margin-top: 0; }
+.bar { position: relative; height: 32px; background: #000; color: #fff; font-weight: 700; font-size: 13px; }
+.bar .clock { position: absolute; left: 50%; top: 0; transform: translateX(-50%); height: 32px; display: flex; align-items: center; gap: 22px; white-space: nowrap; }
+.bar .clock .act { display: flex; align-items: center; gap: 6px; color: #fff; }
+.bar .clock svg { width: 16px; height: 16px; }
+.caption { display: block; color: rgba(255,255,255,.55); font-size: 12px; margin: 14px 16px 0; text-align: center; }
+
+/* The banner growing out of the notch (Views.airdropSendView): radar left, words right, × top right. */
+.banner { position: relative; margin: 0 auto; width: 440px; max-width: calc(100% - 32px); color: var(--ink); border-radius: 0 0 26px 26px; padding: 12px 16px 16px;
+  background: linear-gradient(180deg, #000 0%, #000 60%, rgba(22, 22, 26, 0.94) 100%); display: flex; gap: 14px; align-items: center; }
+.banner.liquid { margin-top: 3px; border-radius: 26px; background: rgba(28, 26, 34, 0.8); backdrop-filter: blur(22px); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+.radar { width: 84px; height: 84px; flex: none; position: relative; display: grid; place-items: center; }
+.radar .ring { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid rgba(110, 180, 255, .75); animation: ping 1.8s ease-out infinite; opacity: 0; }
+.radar .ring:nth-child(2) { animation-delay: .6s; } .radar .ring:nth-child(3) { animation-delay: 1.2s; }
+.core { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(180deg, var(--blue), var(--blue-2)); display: grid; place-items: center; position: relative; }
+.core.done { background: linear-gradient(180deg, var(--green), #1f9e42); }
+.core svg { width: 22px; height: 22px; }
+@keyframes ping { 0% { transform: scale(.45); opacity: .82; } 100% { transform: scale(1); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .radar .ring { animation: none; opacity: .3; } }
+.qr { width: 96px; height: 96px; flex: none; background: #fff; border-radius: 14px; padding: 7px; position: relative; }
+.qr canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.qr .mid { position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; margin: -12px 0 0 -12px; border-radius: 7px; background: linear-gradient(180deg, var(--blue), var(--blue-2)); display: grid; place-items: center; box-shadow: 0 0 0 3px #fff; }
+.qr .mid svg { width: 14px; height: 14px; }
+.text { flex: 1; min-width: 0; }
+.meta { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: rgba(255,255,255,.55); }
+.meta .grow { flex: 1; }
+.title { font-size: 13.5px; font-weight: 700; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.body { font-size: 12.5px; color: rgba(255,255,255,.72); margin-top: 2px; }
+.hint { font-size: 11px; color: var(--faint); margin-top: 4px; }
+.url { font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: 11px; color: rgba(255,255,255,.55); margin-top: 4px; }
+.close { align-self: flex-start; flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; color: rgba(255,255,255,.6); font-size: 14px; }
+.close:hover { background: rgba(255,255,255,.1); }
+.track { height: 4px; border-radius: 2px; background: rgba(255,255,255,.12); margin-top: 8px; overflow: hidden; }
+.track i { display: block; height: 100%; background: var(--blue); border-radius: 2px; }
+
+/* The switch between the two ways, like the tab bar's pill. */
+.ways { display: inline-flex; gap: 2px; background: #1c1c1e; border-radius: 99px; padding: 2px; }
+.ways span { font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 99px; color: rgba(255,255,255,.55); }
+.ways span.on { background: #2c2c30; color: #fff; }
+
+.actions { display: flex; gap: 6px; margin-top: 8px; }
+.btn { font: inherit; font-size: 12px; padding: 6px 14px; border-radius: 15px; border: 0; background: rgba(255,255,255,.12); color: #fff; }
+.btn.accept { background: #0a84ff; }
+
+/* The drop zone below the clock while dragging (two cards). */
+.drop { margin: 0 auto; width: 460px; max-width: calc(100% - 32px); border-radius: 0 0 26px 26px; padding: 0 12px 12px; background: linear-gradient(180deg, #000 0%, #000 60%, rgba(22,22,26,.94) 100%); display: grid; grid-template-columns: 1fr 1.5fr; gap: 10px; }
+.zone { border-radius: 18px; background: #141416; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); height: 112px; display: flex; align-items: center; justify-content: center; gap: 12px; color: #fff; padding: 0 14px; }
+.zone.hot { background: linear-gradient(180deg, #19263a, #121a26); box-shadow: inset 0 0 0 1.5px rgba(80,160,255,.9); }
+.zone .shelf { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,170,90,.16); display: grid; place-items: center; color: #ffb38a; font-size: 20px; }
+.zone b { font-size: 14.5px; } .zone small { display: block; color: rgba(255,255,255,.6); font-size: 12px; }
+
+.list { color: var(--page-muted); font-size: 14px; max-width: 780px; padding-left: 18px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 16px; }
+.card { background: var(--page-line); border-radius: 14px; padding: 14px 16px; }
+.card h3 { margin: 0 0 6px; font-size: 15px; }
+.card p, .card li { font-size: 13.5px; color: var(--page-muted); margin: 0; }
+.card ul { margin: 4px 0 0; padding-left: 18px; }
+
+@media (max-width: 600px) {
+  .banner { flex-wrap: wrap; }
+  .drop { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="airdrop" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M7.5 16.5a6.5 6.5 0 1 1 9 0"/><path d="M5 19a10 10 0 1 1 14 0"/><path d="M10 14a2.8 2.8 0 1 1 4 0"/></g><path fill="#fff" d="M12 13.5l2.6 6.5H9.4z"/></symbol>
+  <symbol id="phone" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.4" fill="none" stroke="#fff" stroke-width="2"/><rect x="10.5" y="18" width="3" height="1.4" rx=".7" fill="#fff"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="qr" viewBox="0 0 24 24"><g fill="#fff"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="3" height="3"/><rect x="18" y="18" width="3" height="3"/></g></symbol>
+</svg>
+<main>
+  <h1>Teilen: AirDrop und QR-Code <span class="tag">Entwurf</span></h1>
+  <p class="lead">Wie in Omarchy (LocalSend, Wi-Fi-QR): jedes Handy im selben WLAN bekommt Dateien per QR-Code – ohne App, ohne Konto. Keine zweite Oberfläche: der QR-Code lebt im selben AirDrop-Banner aus der Notch, mit demselben Aufbau. Links Radar <em>oder</em> QR-Code, rechts der Text, oben eine kleine Pille „AirDrop | QR-Code“. Ohne AirDrop-Hardware gibt es nur den QR-Weg – derselbe Banner, ohne Pille.</p>
+
+  <h2>1 · Datei auf die Notch ziehen</h2>
+  <p class="note">Die zwei Karten bleiben. Die rechte heißt nicht mehr nur „Per AirDrop senden“, sondern „An Handy senden“ – AirDrop und QR-Code in einem.</p>
+  <div class="row">
+    <div class="desk">
+      <div class="bar"><div class="clock"><span>25. Okt</span><span>09:55</span></div></div>
+      <div class="drop">
+        <div class="zone"><div style="text-align:center"><div class="shelf" style="margin:0 auto 6px">⤓</div><b>Regal</b></div></div>
+        <div class="zone hot"><div class="core"><svg><use href="#airdrop"/></svg></div><div><b>An Handy senden</b><small>AirDrop oder QR-Code</small></div></div>
+      </div>
+      <span class="caption">Mit AirDrop-Backend</span>
+    </div>
+    <div class="desk">
+      <div class="bar"><div class="clock"><span>25. Okt</span><span>09:55</span></div></div>
+      <div class="drop">
+        <div class="zone"><div style="text-align:center"><div class="shelf" style="margin:0 auto 6px">⤓</div><b>Regal</b></div></div>
+        <div class="zone hot"><div class="core"><svg><use href="#qr"/></svg></div><div><b>An Handy senden</b><small>per QR-Code, jedes Handy</small></div></div>
+      </div>
+      <span class="caption">Ohne AirDrop-Backend (die meisten Rechner)</span>
+    </div>
+  </div>
+
+  <h2>2 · Senden: derselbe Banner, zwei Wege <span class="tag">Hauptvorschlag</span></h2>
+  <p class="note">Mit AirDrop-Backend startet der Banner wie heute mit dem Radar. Ein Klick auf „QR-Code“ in der Pille tauscht das Radar gegen den QR-Code. Dabei endet die AirDrop-Suche, denn AirDrop braucht die WLAN-Karte, der QR-Code dagegen das WLAN. Das Handy scannt mit der Kamera, öffnet eine Seite im Browser und lädt die Datei. Der Balken zeigt echte Bytes, die Notchy ausliefert.</p>
+  <div class="row">
+    <div class="desk">
+      <div class="bar"><div class="clock"><span class="act"><svg><use href="#airdrop"/></svg></span><span>25. Okt</span><span>09:54</span><span>Sucht…</span></div></div>
+      <div class="banner">
+        <div class="radar"><span class="ring"></span><span class="ring"></span><span class="ring"></span><div class="core"><svg><use href="#airdrop"/></svg></div></div>
+        <div class="text">
+          <div class="meta"><span>AirDrop</span><span class="grow"></span><span class="ways"><span class="on">AirDrop</span><span>QR-Code</span></span></div>
+          <div class="title">Urlaub 2026.zip</div>
+          <div class="body">Sucht iPhones in der Nähe…</div>
+          <div class="hint">iPhone: AirDrop „Für jeden“, Teilen-Menü geschlossen</div>
+        </div>
+        <span class="close" title="Senden abbrechen">×</span>
+      </div>
+      <span class="caption">Wie heute: AirDrop sucht</span>
+    </div>
+    <div class="desk">
+      <div class="bar"><div class="clock"><span class="act"><svg><use href="#qr"/></svg></span><span>25. Okt</span><span>09:54</span><span>Bereit</span></div></div>
+      <div class="banner">
+        <div class="qr"><canvas data-seed="7" width="29" height="29"></canvas><div class="mid"><svg><use href="#airdrop"/></svg></div></div>
+        <div class="text">
+          <div class="meta"><span>QR-Code</span><span class="grow"></span><span class="ways"><span>AirDrop</span><span class="on">QR-Code</span></span></div>
+          <div class="title">Urlaub 2026.zip</div>
+          <div class="body">Mit der Kamera des Handys scannen</div>
+          <div class="hint">Gleiches WLAN · gilt, bis du den Banner schließt</div>
+          <div class="url">192.168.1.23:53317/k7Q2-wX9p</div>
+        </div>
+        <span class="close" title="Senden abbrechen">×</span>
+      </div>
+      <span class="caption">Ein Klick auf „QR-Code“: derselbe Banner</span>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="desk">
+      <div class="bar"><div class="clock"><span class="act"><svg><use href="#qr"/></svg></span><span>25. Okt</span><span>09:55</span><span>45 %</span></div></div>
+      <div class="banner">
+        <div class="qr" style="opacity:.35"><canvas data-seed="7" width="29" height="29"></canvas></div>
+        <div class="text">
+          <div class="meta"><span>QR-Code</span></div>
+          <div class="title">Urlaub 2026.zip</div>
+          <div class="body">Pixel 8 lädt herunter · 45 %</div>
+          <div class="track"><i style="width:45%"></i></div>
+        </div>
+        <span class="close">×</span>
+      </div>
+      <span class="caption">Ein Handy lädt: echter Fortschritt</span>
+    </div>
+    <div class="desk">
+      <div class="bar"><div class="clock"><span>25. Okt</span><span>09:55</span></div></div>
+      <div class="banner">
+        <div class="radar"><div class="core done"><svg><use href="#check"/></svg></div></div>
+        <div class="text">
+          <div class="meta"><span>QR-Code</span></div>
+          <div class="title">Urlaub 2026.zip</div>
+          <div class="body">An Pixel 8 gesendet</div>
+          <div class="hint">Der Link ist jetzt ungültig</div>
+        </div>
+      </div>
+      <span class="caption">Fertig – wie bei AirDrop, dann klappt die Notch zu</span>
+    </div>
+  </div>
+
+  <h2>3 · Empfangen: derselbe Knopf, derselbe Weg</h2>
+  <p class="note">Der AirDrop-Knopf im Kopf der Insel wird zu „Empfangen“. Mit Backend: sichtbar für iPhones wie heute, die Pille wechselt zum QR-Code. Ohne Backend: gleich der QR-Code. Das Handy scannt ihn, wählt Fotos oder Dateien aus und sendet. Vorher fragt die Notch – mit der gewohnten AirDrop-Frage.</p>
+  <div class="row">
+    <div class="desk">
+      <div class="bar"><div class="clock"><span class="act"><svg><use href="#qr"/></svg></span><span>25. Okt</span><span>09:54</span><span>Empfängt</span></div></div>
+      <div class="banner">
+        <div class="qr"><canvas data-seed="13" width="29" height="29"></canvas><div class="mid"><svg><use href="#airdrop"/></svg></div></div>
+        <div class="text">
+          <div class="meta"><span>Empfangen</span><span class="grow"></span><span class="ways"><span>AirDrop</span><span class="on">QR-Code</span></span></div>
+          <div class="title">Vom Handy ins Regal</div>
+          <div class="body">Scannen, Dateien wählen, senden</div>
+          <div class="hint">Gleiches WLAN · endet nach 10 Min. oder beim Schließen</div>
+        </div>
+        <span class="close">×</span>
+      </div>
+      <span class="caption">Bereit zum Empfangen</span>
+    </div>
+    <div class="desk">
+      <div class="bar"><div class="clock"><span class="act"><svg><use href="#qr"/></svg></span><span>25. Okt</span><span>09:55</span><span>Empfängt</span></div></div>
+      <div class="banner">
+        <div class="radar"><div class="core"><svg><use href="#phone"/></svg></div></div>
+        <div class="text">
+          <div class="meta"><span>QR-Code</span><span class="grow"></span><span>14 s</span></div>
+          <div class="title">Pixel 8</div>
+          <div class="body">möchte 3 Fotos senden (12,4 MB)</div>
+          <div class="actions"><button class="btn">Ablehnen</button><button class="btn accept">Annehmen</button></div>
+        </div>
+      </div>
+      <span class="caption">Die gleiche Frage wie bei AirDrop; Annehmen legt sie ins Regal</span>
+    </div>
+  </div>
+
+  <h2>Verhalten und Sicherheit</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3>Nur lokal, nur kurz</h3>
+      <ul>
+        <li>Ein kleiner Server in Notchy, nur im lokalen Netz, nur solange der Banner offen ist (Empfangen: höchstens 10 Min.).</li>
+        <li>Der Link enthält einen zufälligen Schlüssel und gilt für genau diese Dateien. Nach dem Herunterladen oder dem Schließen ist er ungültig.</li>
+        <li>Hochladen nur nach „Annehmen“ in der Notch. Dateien landen im Regal und im Download-Ordner, wie bei AirDrop.</li>
+        <li>Kein Internet, kein Konto, keine App auf dem Handy.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Grenzen, ehrlich</h3>
+      <ul>
+        <li>Handy und Rechner müssen im selben Netz sein. Gäste-WLAN mit Client-Isolation verhindert es.</li>
+        <li>AirDrop und QR-Code gleichzeitig geht nicht: AirDrop belegt die WLAN-Karte. Deshalb die Pille statt beides nebeneinander. Am Ethernet-Kabel ginge beides – vorerst trotzdem nur eines.</li>
+        <li>Der Link ist http im lokalen Netz. Wer im selben WLAN mitliest, könnte die Datei sehen. https bräuchte ein selbst signiertes Zertifikat, und das Handy warnt dann.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Offene Fragen</h3>
+      <ul>
+        <li>Soll der QR-Weg ohne AirDrop-Backend der Standard sein? (Vorschlag: ja.)</li>
+        <li>Mehrere Dateien: als ein ZIP anbieten oder als Liste auf der Handy-Seite? (Vorschlag: Liste, „Alle“ als ZIP.)</li>
+        <li>Auch aus dem Regal-Kontextmenü: „Per QR-Code senden“? (Vorschlag: ja, als „An Handy senden“.)</li>
+      </ul>
+    </div>
+  </div>
+</main>
+<script>
+// A placeholder QR code: the three finder squares and a fixed pattern (not scannable).
+for (const canvas of document.querySelectorAll('.qr canvas')) {
+  const n = canvas.width, ctx = canvas.getContext('2d');
+  let seed = Number(canvas.dataset.seed) || 1;
+  const rand = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, n, n); ctx.fillStyle = '#000';
+  const finder = (x, y) => { ctx.fillRect(x, y, 7, 7); ctx.fillStyle = '#fff'; ctx.fillRect(x + 1, y + 1, 5, 5); ctx.fillStyle = '#000'; ctx.fillRect(x + 2, y + 2, 3, 3); };
+  const inFinder = (x, y) => (x < 8 && y < 8) || (x >= n - 8 && y < 8) || (x < 8 && y >= n - 8);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (!inFinder(x, y) && rand() > 0.52) ctx.fillRect(x, y, 1, 1);
+  finder(0, 0); finder(n - 7, 0); finder(0, n - 7);
+}
+</script>
+</body>
+</html>

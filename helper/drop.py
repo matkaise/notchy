@@ -8,7 +8,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
 from gi.repository import Gdk, Gio, GLib, Gtk
 from i18n import _
-from icons import image
+from icons import gicon, image
 
 BACKEND = sys.argv[1] if len(sys.argv) > 1 else 'wayland'
 
@@ -57,12 +57,14 @@ class DropReceiver(Gtk.Application):
                                             default_width=560, default_height=132)
         self.window.add_css_class('notchy-receiver')
         # Below the island's clock: dashed zones that take files into the Regal
-        # or, with AirDrop installed, send them to an iPhone.
+        # or send them to a phone — AirDrop when its backend is installed (the
+        # banner offers the QR code too), else by QR code.
         zones = Gtk.Box(spacing=10)
         self.root = Gtk.Frame(child=zones, css_classes=['notchy-drop'], overflow=Gtk.Overflow.HIDDEN)
         self.window.set_child(self.root)
         self.area = self.zone(zones, 'shelf', image('document-save-symbolic'), (_('Shelf'), _('Add to Shelf')), None)
-        self.airdrop_zone = self.zone(zones, 'airdrop', image('notchy-airdrop-symbolic'), ('AirDrop', _('Send with AirDrop')), _('Send to an iPhone'))
+        self.airdrop_image = image('notchy-airdrop-symbolic')
+        self.airdrop_zone = self.zone(zones, 'airdrop', self.airdrop_image, (_('Phone'), _('Send to Phone')), _('AirDrop or QR code'))
         self.airdrop_zone.set_visible(False)
         self.inside = {'shelf': False, 'airdrop': False}
         self.arrange()
@@ -146,6 +148,9 @@ class DropReceiver(Gtk.Application):
                    if config.get('style') != 'liquid' else '')
             self.shade_provider.load_from_data(css.encode())
             self.airdrop_zone.set_visible(bool(config.get('airdrop')))
+            backend = bool(config.get('airdropBackend', config.get('airdrop')))
+            self.airdrop_zone.notchy_hint.set_label(_('AirDrop or QR code') if backend else _('By QR code, any phone'))
+            self.airdrop_image.set_from_gicon(gicon('notchy-airdrop-symbolic' if backend else 'notchy-qr-symbolic'))
             self.arrange()
             self.window.set_default_size(config['width'], config['height'])
             self.window.set_visible(True)

@@ -306,9 +306,10 @@ class Tray(Gtk.Application):
         self.count = Gtk.Label(xalign=0, hexpand=True, ellipsize=3, css_classes=['count'], margin_start=2)
         header.append(self.count)
         self.actions = Gtk.Box(spacing=6, visible=False, valign=Gtk.Align.CENTER)
-        # AirDrop appears once Notchy reports its backend installed (ShelfConfig / AirDrop signal).
+        # To a phone (AirDrop or a QR code) appears once Notchy reports it can (ShelfConfig / AirDrop signal).
         self.airdrop_available = False
-        self.airdrop_button = pill(airdrop_image(), 'AirDrop', _('Send with AirDrop'), self.airdrop_selected, ('airdrop',))
+        # Translators: a short button label; its tooltip is „Send to Phone“.
+        self.airdrop_button = pill(airdrop_image(), _('Phone'), _('Send to Phone'), self.airdrop_selected, ('airdrop',))
         self.airdrop_button.set_visible(False)
         self.actions.append(self.airdrop_button)
         # Translators: a short button label; its tooltip is „Compress as ZIP“.
@@ -441,7 +442,7 @@ class Tray(Gtk.Application):
         self.to_shelf.set_hexpand(True)
         footer.append(self.to_shelf)
         self.airdrop_available = False
-        self.airdrop_button = Gtk.Button(child=airdrop_image(), tooltip_text=_('Send Everything with AirDrop'), css_classes=['circle', 'airdrop', 'large'], visible=False)
+        self.airdrop_button = Gtk.Button(child=airdrop_image(), tooltip_text=_('Send Everything to a Phone'), css_classes=['circle', 'airdrop', 'large'], visible=False)
         self.airdrop_button.connect('clicked', lambda *_: self.basket_items and self.call('AirDropSend', GLib.Variant('(s)', ('\n'.join(item['uri'] for item in self.basket_items),))))
         footer.append(self.airdrop_button)
         root.append(footer)
@@ -914,7 +915,7 @@ class Tray(Gtk.Application):
              else self.call('Action', GLib.Variant('(sss)', ('zip-many', uris[0], json.dumps(uris))))),
         ]
         if self.airdrop_available:
-            entries.append(('notchy-airdrop', _('Send with AirDrop'), lambda: self.call('AirDropSend', GLib.Variant('(s)', ('\n'.join(uris),)))))
+            entries.append(('notchy-airdrop', _('Send to Phone'), lambda: self.call('AirDropSend', GLib.Variant('(s)', ('\n'.join(uris),)))))
         tools = []
         if images and shutil.which('tesseract'):
             tools.append(('edit-select-all-symbolic', _('Recognize Text') + count(images, pictures), each(images, 'ocr')))

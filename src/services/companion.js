@@ -86,7 +86,8 @@ export class Companion extends Emitter {
                 if (!airdrop) { invocation.return_value(new GLib.Variant('(b)', [false])); return; }
                 airdrop.ask(sender, files, Math.min(Math.max(timeout, 3000), 60000)).then(accepted => invocation.return_value(new GLib.Variant('(b)', [accepted])));
             },
-            AirDropSend: text => extension.airdrop?.sendFiles(text.split(/\r?\n/).filter(Boolean).map(uri => Gio.File.new_for_uri(uri).get_path()).filter(Boolean)) ?? false,
+            // To a phone: AirDrop, or a QR code without its backend (share.js decides).
+            AirDropSend: text => extension.share?.sendToPhone(text.split(/\r?\n/).filter(Boolean).map(uri => Gio.File.new_for_uri(uri).get_path()).filter(Boolean)) ?? false,
             AirDropDropped: text => extension.drops?.airdropped(text) ?? false,
             AirDropReceive: on => extension.airdrop?.receive(on) ?? false,
         });
@@ -96,6 +97,7 @@ export class Companion extends Emitter {
         this.unsubAgents = extension.agents?.subscribe(() => this.dbus.emit_signal('AgentsChanged', new GLib.Variant('(s)', [JSON.stringify(extension.agents.toJSON())])));
         // The native panes show AirDrop's switch and state.
         this.unsubAirDrop = extension.airdrop?.subscribe(() => this.dbus.emit_signal('AirDrop', new GLib.Variant('(s)', [JSON.stringify(this.airdropConfig())])));
+        this.unsubShare = extension.share?.subscribe(() => this.dbus.emit_signal('AirDrop', new GLib.Variant('(s)', [JSON.stringify(this.airdropConfig())])));
         this.life.connect(global.display, 'window-created', (_d, window) => {
             // Set title before mapping is asynchronous on Wayland.
             this.life.connect(window, 'notify::title', () => this._positionWindow(window));
@@ -297,9 +299,11 @@ export class Companion extends Emitter {
         try { proc.force_exit(); } catch { /* Gone. */ }
     }
     airdropConfig() {
-        const airdrop = this.extension.airdrop;
-        return {available: Boolean(airdrop?.available), receiving: Boolean(airdrop?.receiving), state: airdrop?.state ?? 'off', sending: Boolean(airdrop?.sendProc)};
+        // `available`: something can send to a phone (AirDrop, or the QR code); `airdrop`: AirDrop's backend itself.
+        const airdrop = this.extension.airdrop, share = this.extension.share;
+        return {available: Boolean(airdrop?.available || share?.enabled), airdrop: Boolean(airdrop?.available), qr: Boolean(share?.enabled),
+            receiving: Boolean(airdrop?.receiving), state: airdrop?.state ?? 'off', sending: Boolean(airdrop?.sendProc || share?.sending)};
     }
-    dispose() { for (const window of [...this.popups.keys()]) this.untrackPopup(window); this.closeShelf(); this.life.dispose(); this.unsub(); this.unsubAirDrop?.(); this.unsubAgents?.(); this.unsubActivities?.(); this.unsubActions?.(); this.dbus.unexport(); Gio.bus_unown_name(this.owner);
+    dispose() { for (const window of [...this.popups.keys()]) this.untrackPopup(window); this.closeShelf(); this.life.dispose(); this.unsub(); this.unsubAirDrop?.(); this.unsubShare?.(); this.unsubAgents?.(); this.unsubActivities?.(); this.unsubActions?.(); this.dbus.unexport(); Gio.bus_unown_name(this.owner);
         this.proc?.force_exit(); this.proc = null; this.shelfProc?.force_exit(); this.shelfProc = null; }
 }

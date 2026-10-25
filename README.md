@@ -40,7 +40,7 @@ Or install the built package: `gnome-extensions install --force dist/notchy@matt
 - **Calendar („Kalender“):** a week strip with arrows (dots mark days with events), the selected day's agenda with a line at the current time, and GNOME's notifications grouped per app (click a stack to expand it), with Do Not Disturb and „clear all“.
 - **Thunderstorm (Super + Space):** the island becomes a local launcher: apps, files and folders anywhere (GNOME LocalSearch), the shelf, arithmetic and unit conversion, quicklinks („yt lofi“), web search, system and window commands, clipboard history, snippets and emoji. Details below.
 - **AirPods:** connecting grows the island into a card as on an iPhone — the name, the AirPods and their case springing in, battery rings filling up while the percentages count, „Verbunden“ with a check. Afterwards they sit beside the notch as a small symbol in a battery ring; a click opens their controls: left, right and case batteries, ear state, noise control (ANC, transparency, adaptive, off — as the model supports), conversation awareness, the ear pause and disconnect. Details below.
-- **AirDrop:** the AirDrop button in the island's header makes this computer visible to iPhones; an incoming transfer asks in the notch („Annehmen“ / „Ablehnen“, with a countdown) and received files land in the shelf. Send by dropping files on the „AirDrop“ half of the drop zone, or from the shelf (selection or file menu). Details below.
+- **AirDrop:** the AirDrop button in the island's header makes this computer visible to iPhones; an incoming transfer asks in the notch („Annehmen“ / „Ablehnen“, with a countdown) and received files land in the shelf. Send by dropping files on „An Handy senden“ in the drop zone, or from the shelf (selection or file menu). Any phone — without AirDrop's backend, or by switching the banner's pill — gets them by **QR code** instead, through the same banners ([Phones by QR code](#phones-by-qr-code)). Details below.
 - **Radial menu (right click on the island or Super + Shift + R):** area, window, screen, recording, text (OCR). Screenshots land in the shelf, recognised text in the clipboard, recordings use GNOME's screen recorder.
 - **Styles:** *Dynamic Glass* (a black notch fading into glass; the black share is adjustable, 100 % is entirely black without glass; its outer top corners widen as the notch grows) and *Liquid Glass* (a floating glass capsule).
 
@@ -124,6 +124,16 @@ A started process alone never counts as working: only the agent's own events cha
 | ChatGPT (browser, desktop app) | — | — | no status interface; Notchy reads nothing from them. Report manually with `notchyctl` or MCP if you like |
 
 The Codex desktop app and IDE extension share Codex's configuration directory, but whether they run hooks was not verified; ChatGPT's chat in the browser is deliberately not read.
+
+## Phones by QR code
+
+Any phone in the same Wi-Fi can receive files from Notchy and send files to it — Android or iPhone, without an app or an account — through the same banners as AirDrop, not a second surface:
+
+- **Sending:** drop files on „An Handy senden“ below the clock, or use „An Handy senden“ in the Regal and the basket. Without AirDrop's backend the banner shows a QR code at once; with it, AirDrop searches as before and a small pill „AirDrop | QR-Code“ switches to the code (AirDrop is stopped then, as it holds the Wi-Fi card; the code appears once the Wi-Fi is back). The phone scans it with its camera, its browser opens a page with the files („Laden“, „Alle als ZIP laden“ for several), and the banner shows who downloads and how far — bytes Notchy really delivered — then „An Pixel 8 gesendet“. The link ends with the banner.
+- **Receiving:** the button in the island's header (AirDrop's) opens the receive banner: visible to iPhones with AirDrop, or a QR code. The phone picks files and sends; the notch asks first with AirDrop's question („Pixel 8 möchte 3 Dateien senden (12,4 MB)“), and only „Annehmen“ lets them in. They land in the Regal and in the AirDrop folder (Settings). Receiving ends after 10 minutes, with the banner, or after one transfer.
+- **How:** `helper/share.py` runs a small web server for one session, in its own process (nothing of it runs in the Shell). The link carries a random key; only private-network addresses are served (never the internet); file names a phone sends are reduced to plain names inside the chosen folder; nothing is stored before „Annehmen“. The QR code is Notchy's own encoder (`src/qrcode.js`, checked against zbar).
+- **Limits:** phone and computer must be in the same network (guest Wi-Fi with client isolation prevents it). The link is plain http in the local network: someone reading the same Wi-Fi could see the files (https would need a self-signed certificate the phone warns about). AirDrop and the QR code cannot run at the same time with the MediaTek card, hence the pill. A firewall (ufw) must allow incoming connections from the local network on a random port.
+- Settings → „Handys per QR-Code“ switches it off.
 
 ## AirDrop
 

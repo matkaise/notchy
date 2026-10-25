@@ -150,7 +150,7 @@ export class Island {
         this.headerActions.add_child(this.pinButton);
         this.headerActions.add_child(new St.Widget({x_expand: true}));
         // AirDrop: receiving on demand, only offered when its backend is installed.
-        this.airdropButton = button('notchy-airdrop-symbolic', _('AirDrop: become visible to iPhones'), () => this.toggleAirDrop(), 'notchy-round-button notchy-airdrop-button');
+        this.airdropButton = button('notchy-airdrop-symbolic', _('Receive from a phone'), () => this.toggleReceive(), 'notchy-round-button notchy-airdrop-button');
         this.headerActions.add_child(this.airdropButton);
         this.headerActions.add_child(button('emblem-system-symbolic', _('Settings'), () => extension.openPreferences(), 'notchy-round-button'));
         this.panelHeader = new St.Bin({style_class: 'notchy-panel-header-slot', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.FILL});
@@ -221,6 +221,8 @@ export class Island {
         if (this.activities) this.life.cleanups.push(this.activities.subscribe(() => this.updateCompact()));
         this.life.cleanups.push(this.companion.subscribe(() => this.syncVisibility()));
         if (this.airdrop) this.life.cleanups.push(this.airdrop.subscribe(() => this.syncAirDrop()));
+        if (this.share) this.life.cleanups.push(this.share.subscribe(() => this.syncAirDrop()));
+        this.sendWay = 'airdrop'; this.receiveWay = 'airdrop';
         if (this.airpods) {
             this.life.cleanups.push(this.airpods.onEvent(event => this.airpodsEvent(event)));
             this.life.cleanups.push(this.airpods.subscribe(() => { if (this.expanded && !this.peeking && this.page === 'media' && !this.views.outputPicker) this.refresh(); }));
@@ -571,7 +573,16 @@ export class Island {
         // A shown agent card: what its agent finished has been seen.
         if (this.peekKind === 'agent') this.agents?.markSeen(this.agentCardProvider);
         // Folding an AirDrop question away is an answer: no.
-        if (this.peekKind === 'airdrop-ask') this.airdrop?.question?.answer(false);
+        if (this.peekKind === 'airdrop-ask') {
+            // Answering changes the services, which sync the island again: not while it folds.
+            this.answering = true;
+            try { this.airdrop?.question?.answer(false); this.share?.question?.answer(false); } finally { this.answering = false; }
+            // A QR session still receiving shows its banner again once this one folded.
+            if (this.receiveAfterAsk) this.life.later(450, () => this.syncAirDrop());
+        }
+        // A QR link lives as long as its banner (an AirDrop send goes on without it, as before).
+        if (this.peekKind === 'airdrop' && this.share?.sending) this.share.cancelSend();
+        if (this.peekKind === 'receive') this.share?.stopReceive();
         // What waited for the island: the AirPods card, then a held-back notification.
         const card = this.airpodsPending && GLib.get_monotonic_time() - this.airpodsPending < 10000000 && this.peekKind !== 'airpods';
         // The card folds back into the pill with the battery, a moment.
@@ -639,7 +650,7 @@ export class Island {
         if (this.expanded && !this.views.focusEntry?.has_key_focus?.() && !this.views.focusEntry?.clutter_text?.has_key_focus()) this.actor.grab_key_focus();
     }
     cancelCollapse() { this.life.cancel(this.collapseTimeout); this.collapseTimeout = 0; }
-    scheduleCollapse() { this.cancelCollapse(); if (this.pinned || !this.expanded || this.page === 'search' || ['snap', 'airdrop', 'airdrop-ask'].includes(this.peekKind) || (this.nativeShelf && this.companion.shelfHeld) || this.views.menu?.isOpen) return;
+    scheduleCollapse() { this.cancelCollapse(); if (this.pinned || !this.expanded || this.page === 'search' || ['snap', 'airdrop', 'airdrop-ask', 'receive'].includes(this.peekKind) || (this.nativeShelf && this.companion.shelfHeld) || this.views.menu?.isOpen) return;
         this.collapseTimeout = this.life.later(this.settings.get_int('collapse-delay'), () => { this.collapseTimeout = 0; if (!this.hovered && !this.pinned && !(this.nativeShelf && this.companion.shelfHeld) && !this.views.menu?.isOpen) this.close(); }); }
 
     // Live activities in the capsule: cover and waveform frame the clock;
@@ -726,6 +737,7 @@ export class Island {
     }
     // AirDrop as a live activity: what the radio is doing right now.
     get airdropActivity() {
+        const shared = this.share?.activity; if (shared) return shared;
         const airdrop = this.airdrop; if (!airdrop) return null;
         if (airdrop.sendProc) return {icon: 'notchy-airdrop-symbolic', text: airdrop.send?.peer ? fmt(_('To %s'), airdrop.send.peer) : _('Looking for an iPhone…'), progress: null};
         if (airdrop.progress !== null) return {icon: 'notchy-airdrop-symbolic', progress: airdrop.progress};
@@ -733,26 +745,54 @@ export class Island {
         if (airdrop.receiving || airdrop.active) return {icon: 'notchy-airdrop-symbolic', text: airdrop.state === 'waking' ? _('Starting…') : airdrop.state === 'unreachable' ? _('No iPhone') : _('Visible'), progress: null};
         return null;
     }
-    toggleAirDrop() {
-        const airdrop = this.airdrop;
-        if (!airdrop?.available) return;
-        const on = !airdrop.receiving;
-        if (airdrop.receive(on) && on) this.toast('notchy-airdrop-symbolic', _('AirDrop: visible, Wi-Fi paused'));
+    // The header's button: receiving from a phone — AirDrop (visible to
+    // iPhones) when its backend is there, else a QR code; the banner's pill
+    // switches. A second press ends it.
+    toggleReceive() {
+        const airdrop = this.airdrop, share = this.share;
+        if (airdrop?.receiving || share?.receiving) { this.cancelShare('receive'); return; }
+        this.receiveWay = airdrop?.available ? 'airdrop' : 'qr';
+        const started = this.receiveWay === 'airdrop' ? airdrop.receive(true) : share?.receive();
+        if (!started) return;
+        if (this.expanded) this.close(true);
+        this.peek('receive', 0, () => this.views.receiveView());
+    }
+    // The banner's ×: the send or the receiving ends, whichever way it runs.
+    cancelShare(mode) {
+        if (mode === 'send') { if (this.sendWay === 'airdrop') this.airdrop?.cancelSend(); else this.share?.cancelSend(); }
+        else { this.share?.stopReceive(); if (this.airdrop?.receiving) this.airdrop.receive(false); }
+        if (this.peekKind === (mode === 'send' ? 'airdrop' : 'receive')) this.close();
+    }
+    // The banner's pill: the same files (or the receiving) the other way.
+    switchShareWay(mode, way) {
+        if (!this.share) return;
+        if (mode === 'send') { this.sendWay = way; this.share.switchSend(way); }
+        else { this.receiveWay = way; this.share.switchReceive(way); }
+        this.peekView?.draw?.();
     }
     syncAirDrop() {
         if (this.life.closed) return;
-        const airdrop = this.airdrop;
-        this.airdropButton.visible = Boolean(airdrop?.available);
-        airdrop?.receiving ? this.airdropButton.add_style_class_name('active') : this.airdropButton.remove_style_class_name('active');
-        this.airdropButton.accessible_name = airdrop?.receiving ? _('AirDrop: stop receiving') : _('AirDrop: become visible to iPhones');
+        const airdrop = this.airdrop, share = this.share, receiving = Boolean(airdrop?.receiving || share?.receiving);
+        // The header's button: AirDrop or a QR code, whichever there is.
+        this.airdropButton.visible = Boolean(airdrop?.available || share?.enabled);
+        receiving ? this.airdropButton.add_style_class_name('active') : this.airdropButton.remove_style_class_name('active');
+        this.airdropButton.accessible_name = receiving ? _('Stop receiving') : _('Receive from a phone');
         // A transfer asking for consent always gets the notch, even over an open tab.
-        if (airdrop?.question && this.peekKind !== 'airdrop-ask') {
+        const question = airdrop?.question ?? share?.question ?? null;
+        if (question && (this.peekKind !== 'airdrop-ask' || this.askShown !== question)) {
             if (this.expanded && !this.peeking) this.close(true);
-            const question = airdrop.question;
+            this.askShown = question; if (question.via === 'qr') this.receiveAfterAsk = true;
             this.peek('airdrop-ask', 0, () => this.views.airdropAskView(question));
-        } else if (!airdrop?.question && this.peekKind === 'airdrop-ask') this.close();
-        // A send shows its own view until it settles.
-        if (airdrop?.send && ['searching', 'waiting', 'sending'].includes(airdrop.send.phase) && !airdrop.question && this.peekKind !== 'airdrop' && this.peekKind !== 'airdrop-ask') {
+        } else if (!question && this.peekKind === 'airdrop-ask' && !this.answering) this.close();
+        // Declined, or the files are on their way: the QR code to receive comes back.
+        if (!question && !this.answering && this.receiveAfterAsk && share?.receiving && !this.expanded && this.canPeek) {
+            this.receiveAfterAsk = false; this.receiveWay = 'qr';
+            this.peek('receive', 0, () => this.views.receiveView());
+        }
+        // A send shows its own view until it settles, whichever way it goes.
+        const airdropSending = airdrop?.send && ['searching', 'waiting', 'sending'].includes(airdrop.send.phase), qrSending = share?.sending;
+        if ((airdropSending || qrSending) && !question && this.peekKind !== 'airdrop' && this.peekKind !== 'airdrop-ask') {
+            this.sendWay = qrSending ? 'qr' : 'airdrop';
             if (this.expanded && !this.peeking) this.close(true);
             this.peek('airdrop', 0, () => this.views.airdropSendView());
         }

@@ -79,6 +79,9 @@ export default class NotchyPreferences extends ExtensionPreferences {
         toggle(live, 'notifications-enabled', _('Show notifications in Notchy'), _('New notifications appear as a banner from the island instead of GNOME’s banner. Do Not Disturb is respected.'));
         const preferred = new Adw.EntryRow({title: _('Preferred MPRIS bus name (empty = automatic)'), text: settings.get_string('preferred-player')});
         preferred.connect('changed', () => settings.set_string('preferred-player', preferred.text)); live.add(preferred);
+        // Any phone, by QR code: in the same banners as AirDrop.
+        const phones = group(general, _('Phones by QR Code'), _('Send files to any phone in the same Wi-Fi and receive from it: the phone scans a QR code and uses its browser. No app, no account, no internet. The link carries a random key, only the local network is served, nothing is taken without your “Accept”, and it ends with its banner. With AirDrop installed, its banner switches between both.'));
+        toggle(phones, 'share-qr-enabled', _('Send and receive by QR code'));
         // AirDrop: Notchy is the front end of airdrop-mt7921, which the user installs.
         const airdrop = group(general, _('AirDrop (experimental)'), _('Sending to and receiving from iPhones through the airdrop-mt7921 project. Works with MediaTek Wi-Fi (MT7921/MT7922). While AirDrop is active, Wi-Fi is paused; it reconnects by itself afterwards. Only “Everyone for 10 Minutes” on the iPhone.'));
         toggle(airdrop, 'airdrop-enabled', _('Offer AirDrop in Notchy'), _('A button in the island’s header, an AirDrop area while dragging, “Send with AirDrop” in the Shelf.'));

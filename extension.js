@@ -21,6 +21,7 @@ import {Spectrum} from './src/services/spectrum.js';
 import {Outputs} from './src/services/outputs.js';
 import {Snap} from './src/services/snap.js';
 import {AirDrop} from './src/services/airdrop.js';
+import {Share} from './src/services/share.js';
 import {Cover} from './src/services/cover.js';
 import {Capture} from './src/services/capture.js';
 import {RadialMenu} from './src/ui/radial.js';
@@ -72,6 +73,8 @@ export default class Notchy extends Extension {
             this.productivity = new Productivity(); this.agents = new Agents(this, this.settings); this.calendar = new Calendar(); this.notifications = new Notifications();
             this.capture = new Capture(this); this.radial = new RadialMenu(this);
             this.airdrop = new AirDrop(this, this.shelf, this.settings);
+            // Files to and from any phone by QR code, in AirDrop's banners.
+            this.share = new Share(this, this.shelf, this.settings);
             this.operations = new Operations(this, this.shelf); this.companion = new Companion(this, this.shelf, this.operations, this.productivity);
             this.drops = new Drops(this); this.snap = new Snap(this);
             this.files = new FileSearch(this, this.settings); this.launcher = new Launcher(this, this.files);
@@ -108,7 +111,7 @@ export default class Notchy extends Extension {
         for (const island of this.islands) island.dispose(); this.islands = [];
         // Notchy lives in the top bar, which GNOME shows on the primary monitor.
         const services = {cover: this.cover, spectrum: this.spectrum, calendar: this.calendar, notifications: this.notifications, productivity: this.productivity, settings: this.settings, store: this.store, shelf: this.shelf, clipboard: this.clipboard,
-            media: this.media, system: this.system, outputs: this.outputs, airdrop: this.airdrop, operations: this.operations, companion: this.companion, launcher: this.launcher, airpods: this.airpods, agents: this.agents,
+            media: this.media, system: this.system, outputs: this.outputs, airdrop: this.airdrop, share: this.share, operations: this.operations, companion: this.companion, launcher: this.launcher, airpods: this.airpods, agents: this.agents,
             activities: this.activities, timers: this.timers};
         this.services = services;
         const monitor = Main.layoutManager.primaryMonitor;
@@ -208,7 +211,7 @@ export default class Notchy extends Extension {
         for (const island of this.islands ?? []) island.dispose(); this.islands = [];
         this.activities?.dispose(); this.activities = null; this.timers?.dispose(); this.timers = null; this.launcherEntry?.dispose(); this.launcherEntry = null; this.notifier?.dispose(); this.notifier = null;
         this.files?.dispose(); this.files = this.launcher = null; this.airpods?.dispose(); this.airpods = null;
-        this.companion?.dispose(); this.operations?.dispose(); this.clipboard?.dispose(); this.cover?.dispose(); this.cover = null; this.spectrum?.dispose(); this.spectrum = null; this.outputs?.dispose(); this.outputs = null; this.snap?.dispose(); this.snap = null; this.airdrop?.dispose(); this.airdrop = null; this.media?.dispose(); this.system?.dispose(); this.productivity?.dispose(); this.agents?.dispose(); this.agents = null; this.calendar?.dispose(); this.calendar = null; this.notifications?.dispose(); this.notifications = null; this.shelf?.dispose(); this.store?.dispose();
+        this.companion?.dispose(); this.operations?.dispose(); this.clipboard?.dispose(); this.cover?.dispose(); this.cover = null; this.spectrum?.dispose(); this.spectrum = null; this.outputs?.dispose(); this.outputs = null; this.snap?.dispose(); this.snap = null; this.share?.dispose(); this.share = null; this.airdrop?.dispose(); this.airdrop = null; this.media?.dispose(); this.system?.dispose(); this.productivity?.dispose(); this.agents?.dispose(); this.agents = null; this.calendar?.dispose(); this.calendar = null; this.notifications?.dispose(); this.notifications = null; this.shelf?.dispose(); this.store?.dispose();
         this.companion = this.operations = this.clipboard = this.media = this.system = this.shelf = this.store = this.life = this.settings = null;
         this.notificationSources?.clear(); this.productivity = this.radial = this.capture = this.services = null;
     }

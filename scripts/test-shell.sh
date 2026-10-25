@@ -36,6 +36,8 @@ export NOTCHY_AIRPODS_NAME=org.notchy.AirPodsTest
 export NOTCHY_NO_SYSTEM_BLUETOOTH=1
 export NOTCHY_AAP_REPLAY="$PWD/tests/fixtures/aap-airpods-pro2.hex"
 export NOTCHY_AAP_LOG="$PWD/tests/output/aap-sent.log"
+# The QR share serves this computer only (never the real network).
+export NOTCHY_SHARE_ADDRESS=127.0.0.1
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
 filters=(--extra-filter org.notchy.FileTray --extra-filter org.notchy.DropTarget --extra-filter org.notchy.DropSource --extra-filter tray.py --extra-filter python3 --extra-filter gjs --extra-filter org.gnome.Shell.Extensions --extra-filter org.notchy.PreferencesTest --extra-filter org.notchy.LayerFixture)
 bundle="$PWD/dist/notchy@matthias.local.shell-extension.zip"
@@ -62,6 +64,8 @@ elif [[ -n "${NOTCHY_TEST_LAUNCHER_ONLY:-}" ]]; then
     grep -q NOTCHY_LAUNCHER_TEST_OK tests/output/shell.log
 elif [[ -n "${NOTCHY_TEST_LAYOUT_ONLY:-}" ]]; then
     grep -q NOTCHY_LAYOUT_TEST_OK tests/output/shell.log
+elif [[ -n "${NOTCHY_TEST_SHARE_ONLY:-}" ]]; then
+    grep -q NOTCHY_SHARE_TEST_OK tests/output/shell.log
 elif [[ -n "${NOTCHY_TEST_ACTIVITIES_ONLY:-}" ]]; then
     grep -q NOTCHY_ACTIVITIES_TEST_OK tests/output/shell.log
 elif [[ -n "${NOTCHY_TEST_AIRPODS_ONLY:-}" ]]; then

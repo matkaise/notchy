@@ -143,6 +143,16 @@ export function relativeTime(then, now = Date.now()) {
     const days = Math.floor(hours / 24);
     return fmt(ngettext('%d day ago', '%d days ago', days), days);
 }
+// A size in bytes as files show it: "312 MB", "1,2 GB" (decimal units, as GNOME's Files).
+export function formatBytes(bytes, lang = language()) {
+    const value = Math.max(0, Number(bytes) || 0);
+    if (value < 1000) return `${Math.round(value)} B`;
+    const units = ['kB', 'MB', 'GB', 'TB'];
+    let scaled = value / 1000, unit = 0;
+    while (scaled >= 1000 && unit < units.length - 1) { scaled /= 1000; unit++; }
+    const digits = scaled < 10 ? 2 : 3;
+    return `${formatNumber(Number(scaled.toPrecision(digits)), digits, lang)} ${units[unit]}`;
+}
 // A running time: "12 s", "4 min", "1 h 5 min".
 export function duration(ms) {
     const seconds = Math.max(0, Math.floor(ms / 1000));

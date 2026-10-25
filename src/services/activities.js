@@ -34,7 +34,7 @@ export class Activities extends Emitter {
             timers: () => this.timerActivities(), progress: () => this.progressActivities(), accessory: () => this.accessoryActivities(),
         };
         const watch = (service, source) => { if (service?.subscribe) this.life.cleanups.push(service.subscribe(() => this.queue(source))); };
-        watch(extension.agents, 'agents'); watch(extension.productivity, 'legacy'); watch(extension.operations, 'operations'); watch(extension.airdrop, 'airdrop');
+        watch(extension.agents, 'agents'); watch(extension.productivity, 'legacy'); watch(extension.operations, 'operations'); watch(extension.airdrop, 'airdrop'); watch(extension.share, 'airdrop');
         watch(extension.media, 'media'); watch(extension.timers, 'timers'); watch(extension.launcherEntry, 'progress'); watch(extension.airpods, 'accessory');
         try { this.life.connect(Main.screenshotUI, 'notify::screencast-in-progress', () => this.queue('recording')); } catch (e) { console.warn(`Notchy activities: no screen recording state (${e.message})`); }
         this.life.connect(settings, 'changed', (_s, key) => {
@@ -176,6 +176,9 @@ export class Activities extends Emitter {
             icon: 'adwaita:package-x-generic-symbolic', actions: job.state === 'running' ? [{id: 'cancel', label: _('Cancel')}] : []}));
     }
     airdropActivities() {
+        // A QR session (share.js) shows in the same place as AirDrop.
+        const shared = this.extension.share?.activity;
+        if (shared) return [activity({id: 'airdrop', type: 'airdrop', name: _('QR Code'), icon: shared.icon, description: shared.text ?? '', progress: shared.progress === null ? null : shared.progress / 100})];
         const airdrop = this.extension.airdrop; if (!airdrop) return [];
         const base = {id: 'airdrop', type: 'airdrop', name: 'AirDrop', icon: 'notchy-airdrop-symbolic'};
         if (airdrop.sendProc) return [activity({...base, description: airdrop.send?.peer ? fmt(_('To %s'), airdrop.send.peer) : _('Looking for an iPhone…')})];
