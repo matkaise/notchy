@@ -1276,7 +1276,8 @@ export class Views {
         const setTrack = state => {
             const known = state && state.total > 0 && ['sending', 'receiving'].includes(state.phase);
             track.visible = Boolean(known);
-            if (known) fill.width = Math.round(Math.max(1, track.width || 240) * Math.min(1, state.done / state.total));
+            // A banner pushed out by another one (the Regal's) still hears its service: no sizes off the stage.
+            if (known && track.get_stage()) fill.width = Math.round(Math.max(1, track.width || 240) * Math.min(1, state.done / state.total));
         };
         track.connect('notify::width', () => draw());
         const settle = failed => {
@@ -1333,7 +1334,8 @@ export class Views {
                 qr.actor.visible = ['starting', 'ready', 'receiving'].includes(phase); radar.visible = !qr.actor.visible;
                 qr.setText(incoming.url); qr.actor.opacity = phase === 'receiving' ? 90 : incoming.url ? 255 : 90;
                 coreIcon.gicon = gicon(done ? 'object-select-symbolic' : 'dialog-warning-symbolic');
-                status.text = {starting: incoming.waiting ? _('Waiting for Wi-Fi…') : _('Starting…'), ready: _('Scan, choose files, send'), receiving: fmt(_('%1$s is sending · %2$s'), incoming.peer, Share.percent(incoming)),
+                const ready = incoming.count ? fmt(ngettext('%d file received · ready for more', '%d files received · ready for more', incoming.count), incoming.count) : _('Scan, choose files, send');
+                status.text = {starting: incoming.waiting ? _('Waiting for Wi-Fi…') : _('Starting…'), ready, receiving: fmt(_('%1$s is sending · %2$s'), incoming.peer, Share.percent(incoming)),
                     done: fmt(ngettext('%d file received', '%d files received', incoming.count ?? 0), incoming.count ?? 0), expired: _('Ended'), failed: incoming.error || _('Receiving failed')}[phase] ?? '';
                 hint.text = phase === 'ready' ? _('Same Wi-Fi · ends after 10 minutes or when closed') : '';
                 url.text = phase === 'ready' ? incoming.url.replace(/^http:\/\//, '') : ''; url.visible = Boolean(url.text);

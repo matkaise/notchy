@@ -19,7 +19,7 @@ msgstr "Helligkeit"
 msgid "Microphone"
 msgstr "Mikrofon"
 
-#: extension.js:127 src/ui/island.js:864
+#: extension.js:127 src/ui/island.js:870
 msgid "Volume"
 msgstr "Lautstärke"
 
@@ -77,7 +77,7 @@ msgid "Shelf"
 msgstr "Regal"
 
 #. Translators: a short button label; its tooltip is „Send to Phone“.
-#: src/services/share.js:159 src/ui/views.js:1315 helper/drop.py:67 helper/share.py:89
+#: src/services/share.js:158 src/ui/views.js:1315 helper/drop.py:67 helper/share.py:89
 #: helper/tray.py:312
 msgid "Phone"
 msgstr "Handy"
@@ -162,60 +162,171 @@ msgstr "Die Quelldatei existiert nicht mehr."
 msgid "A required program is missing: %s"
 msgstr "Benötigtes Programm fehlt: %s"
 
-#: helper/share.py:216
-msgid "Download"
-msgstr "Laden"
-
-#: helper/share.py:219
-msgid "Download All as ZIP"
-msgstr "Alle als ZIP laden"
-
-#: helper/share.py:221
-#, python-format
-msgid "%d file from Notchy"
-msgid_plural "%d files from Notchy"
-msgstr[0] "%d Datei von Notchy"
-msgstr[1] "%d Dateien von Notchy"
-
-#: helper/share.py:284
-msgid "Declined on the computer."
-msgstr "Am Rechner abgelehnt."
-
-#: helper/share.py:284
-msgid "Send"
-msgstr "Senden"
-
-#: helper/share.py:284
-msgid "Waiting for the computer to accept…"
-msgstr "Warte, bis der Rechner annimmt …"
-
-#: helper/share.py:285
-msgid "Choose files first."
-msgstr "Wähle zuerst Dateien aus."
-
-#: src/services/airdrop.js:239 helper/share.py:285
-msgid "Sending failed."
-msgstr "Senden fehlgeschlagen."
-
-#: helper/share.py:285
-msgid "Sending…"
-msgstr "Wird gesendet …"
-
-#: helper/share.py:285
-msgid "Sent. The files are on the computer."
-msgstr "Gesendet. Die Dateien sind auf dem Rechner."
-
-#: helper/share.py:310
-msgid "Send files to this computer. It asks before it takes them."
-msgstr "Dateien an diesen Rechner senden. Er fragt, bevor er sie annimmt."
-
-#: helper/share.py:414
+#: helper/share.py:393
 msgid "A file to share no longer exists."
 msgstr "Eine Datei zum Teilen gibt es nicht mehr."
 
-#: helper/share.py:427
+#: helper/share.py:406
 msgid "Not connected to a local network."
 msgstr "Nicht mit einem lokalen Netz verbunden."
+
+#: src/model.js:66 src/ui/shelfBubble.js:44 src/ui/views.js:522 src/ui/views.js:597
+#: src/ui/views.js:1297 src/ui/views.js:1309 helper/share_page.py:179 helper/share_page.py:222
+#: helper/share_page.py:222 helper/tray.py:711 helper/tray.py:796
+#, javascript-format, python-format
+msgid "%d file"
+msgid_plural "%d files"
+msgstr[0] "%d Datei"
+msgstr[1] "%d Dateien"
+
+#: helper/share_page.py:179
+msgid "For you"
+msgstr "Für dich"
+
+#: helper/share_page.py:180
+msgid "Download All (ZIP)"
+msgstr "Alle laden (ZIP)"
+
+#: helper/share_page.py:181
+#, python-format
+msgid "shares %d file"
+msgid_plural "shares %d files"
+msgstr[0] "teilt %d Datei"
+msgstr[1] "teilt %d Dateien"
+
+#: helper/share_page.py:183
+msgid "Valid while the banner on the computer is open"
+msgstr "Gilt, solange der Banner auf dem Rechner offen ist"
+
+#: helper/share_page.py:184
+msgid "Transferred – look in your phone’s downloads."
+msgstr "Übertragen – sieh in den Downloads deines Handys nach."
+
+#: helper/share_page.py:184
+msgid "transferred"
+msgstr "übertragen"
+
+#: helper/share_page.py:206
+msgid "Link expired"
+msgstr "Link abgelaufen"
+
+#: helper/share_page.py:208
+msgid "This link is no longer valid"
+msgstr "Dieser Link gilt nicht mehr"
+
+#: helper/share_page.py:209
+msgid "The banner on the computer was closed. Scan the new code."
+msgstr "Der Banner auf dem Rechner wurde geschlossen. Scanne den neuen Code."
+
+#: helper/share_page.py:215
+msgid "accepts files"
+msgstr "nimmt Dateien an"
+
+#: helper/share_page.py:215
+msgid "declined"
+msgstr "hat abgelehnt"
+
+#: helper/share_page.py:215
+msgid "is asking"
+msgstr "fragt gerade"
+
+#: helper/share_page.py:215
+msgid "is receiving"
+msgstr "empfängt"
+
+#: helper/share_page.py:216
+#, python-format
+msgid "%d chosen"
+msgstr "%d gewählt"
+
+#: helper/share_page.py:216
+msgid "Choose more"
+msgstr "Mehr wählen"
+
+#: helper/share_page.py:216
+msgid "Choose photos or files"
+msgstr "Fotos oder Dateien wählen"
+
+#: helper/share_page.py:217
+#, python-format
+msgid "%1$s of %2$s"
+msgstr "%1$s von %2$s"
+
+#: src/services/airdrop.js:239 helper/share_page.py:217
+msgid "Sending failed."
+msgstr "Senden fehlgeschlagen."
+
+#: helper/share_page.py:217
+msgid "Sending…"
+msgstr "Wird gesendet …"
+
+#: src/ui/views.js:1300 helper/share_page.py:217
+msgid "Sent"
+msgstr "Gesendet"
+
+#: helper/share_page.py:218
+msgid "Declined"
+msgstr "Abgelehnt"
+
+#: helper/share_page.py:218
+msgid "“Decline” was chosen on the computer – or nobody answered."
+msgstr "Am Rechner wurde „Ablehnen“ gewählt – oder niemand hat geantwortet."
+
+#: helper/share_page.py:219
+msgid "Send More"
+msgstr "Weitere senden"
+
+#: helper/share_page.py:219
+msgid "Try Again"
+msgstr "Nochmal versuchen"
+
+#: helper/share_page.py:220 helper/share_page.py:220
+#, python-format
+msgid "has %d file"
+msgid_plural "has %d files"
+msgstr[0] "hat %d Datei"
+msgstr[1] "hat %d Dateien"
+
+#: helper/share_page.py:221 helper/share_page.py:221
+#, python-format
+msgid "%d file is in the Shelf now"
+msgid_plural "%d files are in the Shelf now"
+msgstr[0] "%d Datei liegt jetzt im Regal"
+msgstr[1] "%d Dateien liegen jetzt im Regal"
+
+#: helper/share_page.py:226
+msgid "To the computer"
+msgstr "An den Rechner"
+
+#: helper/share_page.py:228
+msgid "Send"
+msgstr "Senden"
+
+#: helper/share_page.py:229
+msgid "The computer asks before it takes anything"
+msgstr "Der Rechner fragt, bevor er etwas annimmt"
+
+#: helper/share_page.py:233
+msgid "Waiting for “Accept”"
+msgstr "Warte auf „Annehmen“"
+
+#: helper/share_page.py:234
+msgid "The question appears in the computer’s notch"
+msgstr "Auf dem Rechner erscheint die Frage in der Notch"
+
+#: helper/share_page.py:43
+msgid "computer"
+msgstr "Rechner"
+
+#: helper/share_page.py:43
+msgid "laptop"
+msgstr "Laptop"
+
+#. Translators: how the computer is named on the phone, e.g. „Laptop von Matthias“.
+#: helper/share_page.py:52
+#, python-format
+msgid "%(name)s’s %(device)s"
+msgstr "%(device)s von %(name)s"
 
 #: helper/tray.py:1026
 #, python-format
@@ -309,14 +420,6 @@ msgstr "Alles an ein Handy senden"
 #: src/ui/views.js:556 src/ui/views.js:589 src/ui/views.js:799 helper/tray.py:640
 msgid "FILE"
 msgstr "DATEI"
-
-#: src/model.js:66 src/ui/shelfBubble.js:44 src/ui/views.js:522 src/ui/views.js:597
-#: src/ui/views.js:1297 src/ui/views.js:1309 helper/tray.py:711 helper/tray.py:796
-#, javascript-format, python-format
-msgid "%d file"
-msgid_plural "%d files"
-msgstr[0] "%d Datei"
-msgstr[1] "%d Dateien"
 
 #: helper/tray.py:714
 #, python-format
@@ -925,7 +1028,7 @@ msgstr "Läuft"
 msgid "Running (version %s)"
 msgstr "Läuft (Version %s)"
 
-#: prefs.js:385 src/ui/island.js:819
+#: prefs.js:385 src/ui/island.js:825
 #, javascript-format
 msgid "%s connected"
 msgstr "%s verbunden"
@@ -1570,7 +1673,7 @@ msgid_plural "%d days ago"
 msgstr[0] "vor %d Tag"
 msgstr[1] "vor %d Tagen"
 
-#: src/i18n/core.js:159 src/ui/views.js:1378
+#: src/i18n/core.js:159 src/ui/views.js:1379
 #, javascript-format
 msgid "%d s"
 msgstr "%d s"
@@ -2330,15 +2433,15 @@ msgstr "Das Fenster des Agenten lässt sich nicht sicher bestimmen"
 msgid "Switch"
 msgstr "Wechseln"
 
-#: src/services/activities.js:181 src/ui/views.js:1252 src/ui/views.js:1292 src/ui/views.js:1361
+#: src/services/activities.js:181 src/ui/views.js:1252 src/ui/views.js:1292 src/ui/views.js:1362
 msgid "QR Code"
 msgstr "QR-Code"
 
-#: src/services/activities.js:184 src/ui/island.js:736
+#: src/services/activities.js:184 src/ui/island.js:742
 msgid "Looking for an iPhone…"
 msgstr "Sucht iPhone …"
 
-#: src/services/activities.js:184 src/ui/island.js:736
+#: src/services/activities.js:184 src/ui/island.js:742
 #, javascript-format
 msgid "To %s"
 msgstr "An %s"
@@ -2347,20 +2450,20 @@ msgstr "An %s"
 msgid "Receiving"
 msgstr "Empfängt"
 
-#: src/services/activities.js:186 src/ui/island.js:738
+#: src/services/activities.js:186 src/ui/island.js:744
 msgid "Wi-Fi reconnecting…"
 msgstr "WLAN verbindet …"
 
-#: src/services/activities.js:187 src/ui/island.js:739
+#: src/services/activities.js:187 src/ui/island.js:745
 msgid "No iPhone"
 msgstr "Kein iPhone"
 
-#: src/services/activities.js:187 src/services/share.js:188 src/ui/island.js:739 src/ui/views.js:1314
-#: src/ui/views.js:1325 src/ui/views.js:1336
+#: src/services/activities.js:187 src/services/share.js:188 src/ui/island.js:745 src/ui/views.js:1314
+#: src/ui/views.js:1325 src/ui/views.js:1337
 msgid "Starting…"
 msgstr "Startet …"
 
-#: src/services/activities.js:187 src/ui/island.js:739
+#: src/services/activities.js:187 src/ui/island.js:745
 msgid "Visible"
 msgstr "Sichtbar"
 
@@ -2590,7 +2693,7 @@ msgstr "Unbekanntes Ereignis: %s"
 msgid "update without state, status or progress"
 msgstr "update ohne Zustand, Status oder Fortschritt"
 
-#: src/services/agentModel.js:53 src/ui/views.js:1337
+#: src/services/agentModel.js:53 src/ui/views.js:1338
 msgid "Ended"
 msgstr "Beendet"
 
@@ -2839,14 +2942,14 @@ msgstr "PipeWire ist nicht verfügbar."
 msgid "Sharing ended unexpectedly"
 msgstr "Das Teilen endete unerwartet"
 
-#: src/services/share.js:158
+#: src/services/share.js:157
 #, javascript-format
 msgid "wants to send %1$d file (%2$s)"
 msgid_plural "wants to send %1$d files (%2$s)"
 msgstr[0] "möchte %1$d Datei senden (%2$s)"
 msgstr[1] "möchte %1$d Dateien senden (%2$s)"
 
-#: src/services/share.js:158 src/ui/views.js:1365
+#: src/services/share.js:157 src/ui/views.js:1366
 #, javascript-format
 msgid "wants to send “%s”"
 msgstr "möchte „%s“ senden"
@@ -3039,7 +3142,7 @@ msgstr "AirPods: %s"
 msgid "Keep Open"
 msgstr "Offen halten"
 
-#: src/ui/island.js:153 src/ui/island.js:773
+#: src/ui/island.js:153 src/ui/island.js:779
 msgid "Receive from a phone"
 msgstr "Von einem Handy empfangen"
 
@@ -3055,50 +3158,50 @@ msgstr "Schließt beim Verlassen"
 msgid "Stays open"
 msgstr "Bleibt geöffnet"
 
-#: src/ui/island.js:705
+#: src/ui/island.js:711
 msgid "Processing…"
 msgstr "Verarbeitung …"
 
-#: src/ui/island.js:773
+#: src/ui/island.js:779
 msgid "Stop receiving"
 msgstr "Empfangen beenden"
 
-#: src/ui/island.js:793 src/ui/views.js:1325
+#: src/ui/island.js:799 src/ui/views.js:1325
 msgid "AirDrop could not start"
 msgstr "AirDrop konnte nicht starten"
 
-#: src/ui/island.js:834
+#: src/ui/island.js:840
 #, javascript-format
 msgid "%s disconnected"
 msgstr "%s getrennt"
 
 #. Translators: a low battery: "AirPods left: 10 %".
 #. Translators: L and R are the left and the right AirPod.
-#: src/ui/island.js:837 src/ui/views.js:107 src/ui/views.js:363
+#: src/ui/island.js:843 src/ui/views.js:107 src/ui/views.js:363
 msgid "Case"
 msgstr "Case"
 
 #. Translators: a low battery: "AirPods left: 10 %".
-#: src/ui/island.js:837
+#: src/ui/island.js:843
 msgid "left"
 msgstr "links"
 
 #. Translators: a low battery: "AirPods left: 10 %".
-#: src/ui/island.js:837
+#: src/ui/island.js:843
 msgid "right"
 msgstr "rechts"
 
-#: src/ui/island.js:838
+#: src/ui/island.js:844
 #, javascript-format
 msgid "%1$s: %2$s"
 msgstr "%1$s: %2$s"
 
-#: src/ui/island.js:953
+#: src/ui/island.js:959
 #, javascript-format
 msgid "In the Shelf · %s"
 msgstr "Im Regal · %s"
 
-#: src/ui/island.js:954 src/ui/views.js:571
+#: src/ui/island.js:960 src/ui/views.js:571
 #, javascript-format
 msgid "%d file in the Shelf"
 msgid_plural "%d files in the Shelf"
@@ -3145,7 +3248,7 @@ msgstr "Geräuschunterdrückung"
 msgid "Noise Control Off"
 msgstr "Geräuschkontrolle aus"
 
-#: src/ui/views.js:995 src/ui/views.js:1011 src/ui/views.js:1408
+#: src/ui/views.js:995 src/ui/views.js:1011 src/ui/views.js:1409
 #, javascript-format
 msgid "Open: %s"
 msgstr "Öffnen: %s"
@@ -3273,10 +3376,6 @@ msgstr "Abgebrochen"
 msgid "Sending failed"
 msgstr "Senden fehlgeschlagen"
 
-#: src/ui/views.js:1300
-msgid "Sent"
-msgstr "Gesendet"
-
 #: src/ui/views.js:1300 src/ui/views.js:1315
 #, javascript-format
 msgid "Sent to %s"
@@ -3299,7 +3398,7 @@ msgstr "%1$s lädt herunter · %2$s"
 msgid "Scan with the phone’s camera"
 msgstr "Mit der Kamera des Handys scannen"
 
-#: src/ui/views.js:1314 src/ui/views.js:1336
+#: src/ui/views.js:1314 src/ui/views.js:1337
 msgid "Waiting for Wi-Fi…"
 msgstr "Warte auf das WLAN …"
 
@@ -3334,8 +3433,10 @@ msgstr "Im Regal"
 
 #: src/ui/views.js:1336
 #, javascript-format
-msgid "%1$s is sending · %2$s"
-msgstr "%1$s sendet · %2$s"
+msgid "%d file received · ready for more"
+msgid_plural "%d files received · ready for more"
+msgstr[0] "%d Datei empfangen · bereit für mehr"
+msgstr[1] "%d Dateien empfangen · bereit für mehr"
 
 #: src/ui/views.js:1336
 msgid "Scan, choose files, send"
@@ -3343,40 +3444,45 @@ msgstr "Scannen, Dateien wählen, senden"
 
 #: src/ui/views.js:1337
 #, javascript-format
+msgid "%1$s is sending · %2$s"
+msgstr "%1$s sendet · %2$s"
+
+#: src/ui/views.js:1338
+#, javascript-format
 msgid "%d file received"
 msgid_plural "%d files received"
 msgstr[0] "%d Datei empfangen"
 msgstr[1] "%d Dateien empfangen"
 
-#: src/ui/views.js:1337
+#: src/ui/views.js:1338
 msgid "Receiving failed"
 msgstr "Empfangen fehlgeschlagen"
 
-#: src/ui/views.js:1338
+#: src/ui/views.js:1339
 msgid "Same Wi-Fi · ends after 10 minutes or when closed"
 msgstr "Gleiches WLAN · endet nach 10 Min. oder beim Schließen"
 
-#: src/ui/views.js:1364
+#: src/ui/views.js:1365
 msgid "A device nearby"
 msgstr "Ein Gerät in der Nähe"
 
-#: src/ui/views.js:1365
+#: src/ui/views.js:1366
 msgid "wants to send something"
 msgstr "möchte etwas senden"
 
-#: src/ui/views.js:1368
+#: src/ui/views.js:1369
 msgid "Decline"
 msgstr "Ablehnen"
 
-#: src/ui/views.js:1369
+#: src/ui/views.js:1370
 msgid "Accept"
 msgstr "Annehmen"
 
-#: src/ui/views.js:975 src/ui/views.js:1402
+#: src/ui/views.js:975 src/ui/views.js:1403
 msgid "Notification"
 msgstr "Benachrichtigung"
 
-#: src/ui/views.js:1417
+#: src/ui/views.js:1418
 msgid "Hide Banner"
 msgstr "Banner ausblenden"
 

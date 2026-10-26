@@ -19,7 +19,7 @@ msgstr ""
 msgid "Microphone"
 msgstr ""
 
-#: extension.js:127 src/ui/island.js:864
+#: extension.js:127 src/ui/island.js:870
 msgid "Volume"
 msgstr ""
 
@@ -77,7 +77,7 @@ msgid "Shelf"
 msgstr ""
 
 #. Translators: a short button label; its tooltip is „Send to Phone“.
-#: src/services/share.js:159 src/ui/views.js:1315 helper/drop.py:67 helper/share.py:89
+#: src/services/share.js:158 src/ui/views.js:1315 helper/drop.py:67 helper/share.py:89
 #: helper/tray.py:312
 msgid "Phone"
 msgstr ""
@@ -162,59 +162,170 @@ msgstr ""
 msgid "A required program is missing: %s"
 msgstr ""
 
-#: helper/share.py:216
-msgid "Download"
-msgstr ""
-
-#: helper/share.py:219
-msgid "Download All as ZIP"
-msgstr ""
-
-#: helper/share.py:221
-#, python-format
-msgid "%d file from Notchy"
-msgid_plural "%d files from Notchy"
-msgstr[0] ""
-msgstr[1] ""
-
-#: helper/share.py:284
-msgid "Declined on the computer."
-msgstr ""
-
-#: helper/share.py:284
-msgid "Send"
-msgstr ""
-
-#: helper/share.py:284
-msgid "Waiting for the computer to accept…"
-msgstr ""
-
-#: helper/share.py:285
-msgid "Choose files first."
-msgstr ""
-
-#: src/services/airdrop.js:239 helper/share.py:285
-msgid "Sending failed."
-msgstr ""
-
-#: helper/share.py:285
-msgid "Sending…"
-msgstr ""
-
-#: helper/share.py:285
-msgid "Sent. The files are on the computer."
-msgstr ""
-
-#: helper/share.py:310
-msgid "Send files to this computer. It asks before it takes them."
-msgstr ""
-
-#: helper/share.py:414
+#: helper/share.py:393
 msgid "A file to share no longer exists."
 msgstr ""
 
-#: helper/share.py:427
+#: helper/share.py:406
 msgid "Not connected to a local network."
+msgstr ""
+
+#: src/model.js:66 src/ui/shelfBubble.js:44 src/ui/views.js:522 src/ui/views.js:597
+#: src/ui/views.js:1297 src/ui/views.js:1309 helper/share_page.py:179 helper/share_page.py:222
+#: helper/share_page.py:222 helper/tray.py:711 helper/tray.py:796
+#, javascript-format, python-format
+msgid "%d file"
+msgid_plural "%d files"
+msgstr[0] ""
+msgstr[1] ""
+
+#: helper/share_page.py:179
+msgid "For you"
+msgstr ""
+
+#: helper/share_page.py:180
+msgid "Download All (ZIP)"
+msgstr ""
+
+#: helper/share_page.py:181
+#, python-format
+msgid "shares %d file"
+msgid_plural "shares %d files"
+msgstr[0] ""
+msgstr[1] ""
+
+#: helper/share_page.py:183
+msgid "Valid while the banner on the computer is open"
+msgstr ""
+
+#: helper/share_page.py:184
+msgid "Transferred – look in your phone’s downloads."
+msgstr ""
+
+#: helper/share_page.py:184
+msgid "transferred"
+msgstr ""
+
+#: helper/share_page.py:206
+msgid "Link expired"
+msgstr ""
+
+#: helper/share_page.py:208
+msgid "This link is no longer valid"
+msgstr ""
+
+#: helper/share_page.py:209
+msgid "The banner on the computer was closed. Scan the new code."
+msgstr ""
+
+#: helper/share_page.py:215
+msgid "accepts files"
+msgstr ""
+
+#: helper/share_page.py:215
+msgid "declined"
+msgstr ""
+
+#: helper/share_page.py:215
+msgid "is asking"
+msgstr ""
+
+#: helper/share_page.py:215
+msgid "is receiving"
+msgstr ""
+
+#: helper/share_page.py:216
+#, python-format
+msgid "%d chosen"
+msgstr ""
+
+#: helper/share_page.py:216
+msgid "Choose more"
+msgstr ""
+
+#: helper/share_page.py:216
+msgid "Choose photos or files"
+msgstr ""
+
+#: helper/share_page.py:217
+#, python-format
+msgid "%1$s of %2$s"
+msgstr ""
+
+#: src/services/airdrop.js:239 helper/share_page.py:217
+msgid "Sending failed."
+msgstr ""
+
+#: helper/share_page.py:217
+msgid "Sending…"
+msgstr ""
+
+#: src/ui/views.js:1300 helper/share_page.py:217
+msgid "Sent"
+msgstr ""
+
+#: helper/share_page.py:218
+msgid "Declined"
+msgstr ""
+
+#: helper/share_page.py:218
+msgid "“Decline” was chosen on the computer – or nobody answered."
+msgstr ""
+
+#: helper/share_page.py:219
+msgid "Send More"
+msgstr ""
+
+#: helper/share_page.py:219
+msgid "Try Again"
+msgstr ""
+
+#: helper/share_page.py:220 helper/share_page.py:220
+#, python-format
+msgid "has %d file"
+msgid_plural "has %d files"
+msgstr[0] ""
+msgstr[1] ""
+
+#: helper/share_page.py:221 helper/share_page.py:221
+#, python-format
+msgid "%d file is in the Shelf now"
+msgid_plural "%d files are in the Shelf now"
+msgstr[0] ""
+msgstr[1] ""
+
+#: helper/share_page.py:226
+msgid "To the computer"
+msgstr ""
+
+#: helper/share_page.py:228
+msgid "Send"
+msgstr ""
+
+#: helper/share_page.py:229
+msgid "The computer asks before it takes anything"
+msgstr ""
+
+#: helper/share_page.py:233
+msgid "Waiting for “Accept”"
+msgstr ""
+
+#: helper/share_page.py:234
+msgid "The question appears in the computer’s notch"
+msgstr ""
+
+#: helper/share_page.py:43
+msgid "computer"
+msgstr ""
+
+#: helper/share_page.py:43
+msgid "laptop"
+msgstr ""
+
+#. Translators: how the computer is named on the phone, e.g. „Laptop von Matthias“.
+#: helper/share_page.py:52
+#, python-format
+msgid "%(name)s’s %(device)s"
 msgstr ""
 
 #: helper/tray.py:1026
@@ -309,14 +420,6 @@ msgstr ""
 #: src/ui/views.js:556 src/ui/views.js:589 src/ui/views.js:799 helper/tray.py:640
 msgid "FILE"
 msgstr ""
-
-#: src/model.js:66 src/ui/shelfBubble.js:44 src/ui/views.js:522 src/ui/views.js:597
-#: src/ui/views.js:1297 src/ui/views.js:1309 helper/tray.py:711 helper/tray.py:796
-#, javascript-format, python-format
-msgid "%d file"
-msgid_plural "%d files"
-msgstr[0] ""
-msgstr[1] ""
 
 #: helper/tray.py:714
 #, python-format
@@ -925,7 +1028,7 @@ msgstr ""
 msgid "Running (version %s)"
 msgstr ""
 
-#: prefs.js:385 src/ui/island.js:819
+#: prefs.js:385 src/ui/island.js:825
 #, javascript-format
 msgid "%s connected"
 msgstr ""
@@ -1570,7 +1673,7 @@ msgid_plural "%d days ago"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/i18n/core.js:159 src/ui/views.js:1378
+#: src/i18n/core.js:159 src/ui/views.js:1379
 #, javascript-format
 msgid "%d s"
 msgstr ""
@@ -2330,15 +2433,15 @@ msgstr ""
 msgid "Switch"
 msgstr ""
 
-#: src/services/activities.js:181 src/ui/views.js:1252 src/ui/views.js:1292 src/ui/views.js:1361
+#: src/services/activities.js:181 src/ui/views.js:1252 src/ui/views.js:1292 src/ui/views.js:1362
 msgid "QR Code"
 msgstr ""
 
-#: src/services/activities.js:184 src/ui/island.js:736
+#: src/services/activities.js:184 src/ui/island.js:742
 msgid "Looking for an iPhone…"
 msgstr ""
 
-#: src/services/activities.js:184 src/ui/island.js:736
+#: src/services/activities.js:184 src/ui/island.js:742
 #, javascript-format
 msgid "To %s"
 msgstr ""
@@ -2347,20 +2450,20 @@ msgstr ""
 msgid "Receiving"
 msgstr ""
 
-#: src/services/activities.js:186 src/ui/island.js:738
+#: src/services/activities.js:186 src/ui/island.js:744
 msgid "Wi-Fi reconnecting…"
 msgstr ""
 
-#: src/services/activities.js:187 src/ui/island.js:739
+#: src/services/activities.js:187 src/ui/island.js:745
 msgid "No iPhone"
 msgstr ""
 
-#: src/services/activities.js:187 src/services/share.js:188 src/ui/island.js:739 src/ui/views.js:1314
-#: src/ui/views.js:1325 src/ui/views.js:1336
+#: src/services/activities.js:187 src/services/share.js:188 src/ui/island.js:745 src/ui/views.js:1314
+#: src/ui/views.js:1325 src/ui/views.js:1337
 msgid "Starting…"
 msgstr ""
 
-#: src/services/activities.js:187 src/ui/island.js:739
+#: src/services/activities.js:187 src/ui/island.js:745
 msgid "Visible"
 msgstr ""
 
@@ -2590,7 +2693,7 @@ msgstr ""
 msgid "update without state, status or progress"
 msgstr ""
 
-#: src/services/agentModel.js:53 src/ui/views.js:1337
+#: src/services/agentModel.js:53 src/ui/views.js:1338
 msgid "Ended"
 msgstr ""
 
@@ -2839,14 +2942,14 @@ msgstr ""
 msgid "Sharing ended unexpectedly"
 msgstr ""
 
-#: src/services/share.js:158
+#: src/services/share.js:157
 #, javascript-format
 msgid "wants to send %1$d file (%2$s)"
 msgid_plural "wants to send %1$d files (%2$s)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/services/share.js:158 src/ui/views.js:1365
+#: src/services/share.js:157 src/ui/views.js:1366
 #, javascript-format
 msgid "wants to send “%s”"
 msgstr ""
@@ -3039,7 +3142,7 @@ msgstr ""
 msgid "Keep Open"
 msgstr ""
 
-#: src/ui/island.js:153 src/ui/island.js:773
+#: src/ui/island.js:153 src/ui/island.js:779
 msgid "Receive from a phone"
 msgstr ""
 
@@ -3055,50 +3158,50 @@ msgstr ""
 msgid "Stays open"
 msgstr ""
 
-#: src/ui/island.js:705
+#: src/ui/island.js:711
 msgid "Processing…"
 msgstr ""
 
-#: src/ui/island.js:773
+#: src/ui/island.js:779
 msgid "Stop receiving"
 msgstr ""
 
-#: src/ui/island.js:793 src/ui/views.js:1325
+#: src/ui/island.js:799 src/ui/views.js:1325
 msgid "AirDrop could not start"
 msgstr ""
 
-#: src/ui/island.js:834
+#: src/ui/island.js:840
 #, javascript-format
 msgid "%s disconnected"
 msgstr ""
 
 #. Translators: a low battery: "AirPods left: 10 %".
 #. Translators: L and R are the left and the right AirPod.
-#: src/ui/island.js:837 src/ui/views.js:107 src/ui/views.js:363
+#: src/ui/island.js:843 src/ui/views.js:107 src/ui/views.js:363
 msgid "Case"
 msgstr ""
 
 #. Translators: a low battery: "AirPods left: 10 %".
-#: src/ui/island.js:837
+#: src/ui/island.js:843
 msgid "left"
 msgstr ""
 
 #. Translators: a low battery: "AirPods left: 10 %".
-#: src/ui/island.js:837
+#: src/ui/island.js:843
 msgid "right"
 msgstr ""
 
-#: src/ui/island.js:838
+#: src/ui/island.js:844
 #, javascript-format
 msgid "%1$s: %2$s"
 msgstr ""
 
-#: src/ui/island.js:953
+#: src/ui/island.js:959
 #, javascript-format
 msgid "In the Shelf · %s"
 msgstr ""
 
-#: src/ui/island.js:954 src/ui/views.js:571
+#: src/ui/island.js:960 src/ui/views.js:571
 #, javascript-format
 msgid "%d file in the Shelf"
 msgid_plural "%d files in the Shelf"
@@ -3145,7 +3248,7 @@ msgstr ""
 msgid "Noise Control Off"
 msgstr ""
 
-#: src/ui/views.js:995 src/ui/views.js:1011 src/ui/views.js:1408
+#: src/ui/views.js:995 src/ui/views.js:1011 src/ui/views.js:1409
 #, javascript-format
 msgid "Open: %s"
 msgstr ""
@@ -3273,10 +3376,6 @@ msgstr ""
 msgid "Sending failed"
 msgstr ""
 
-#: src/ui/views.js:1300
-msgid "Sent"
-msgstr ""
-
 #: src/ui/views.js:1300 src/ui/views.js:1315
 #, javascript-format
 msgid "Sent to %s"
@@ -3299,7 +3398,7 @@ msgstr ""
 msgid "Scan with the phone’s camera"
 msgstr ""
 
-#: src/ui/views.js:1314 src/ui/views.js:1336
+#: src/ui/views.js:1314 src/ui/views.js:1337
 msgid "Waiting for Wi-Fi…"
 msgstr ""
 
@@ -3334,8 +3433,10 @@ msgstr ""
 
 #: src/ui/views.js:1336
 #, javascript-format
-msgid "%1$s is sending · %2$s"
-msgstr ""
+msgid "%d file received · ready for more"
+msgid_plural "%d files received · ready for more"
+msgstr[0] ""
+msgstr[1] ""
 
 #: src/ui/views.js:1336
 msgid "Scan, choose files, send"
@@ -3343,40 +3444,45 @@ msgstr ""
 
 #: src/ui/views.js:1337
 #, javascript-format
+msgid "%1$s is sending · %2$s"
+msgstr ""
+
+#: src/ui/views.js:1338
+#, javascript-format
 msgid "%d file received"
 msgid_plural "%d files received"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ui/views.js:1337
+#: src/ui/views.js:1338
 msgid "Receiving failed"
 msgstr ""
 
-#: src/ui/views.js:1338
+#: src/ui/views.js:1339
 msgid "Same Wi-Fi · ends after 10 minutes or when closed"
 msgstr ""
 
-#: src/ui/views.js:1364
+#: src/ui/views.js:1365
 msgid "A device nearby"
 msgstr ""
 
-#: src/ui/views.js:1365
+#: src/ui/views.js:1366
 msgid "wants to send something"
 msgstr ""
 
-#: src/ui/views.js:1368
+#: src/ui/views.js:1369
 msgid "Decline"
 msgstr ""
 
-#: src/ui/views.js:1369
+#: src/ui/views.js:1370
 msgid "Accept"
 msgstr ""
 
-#: src/ui/views.js:975 src/ui/views.js:1402
+#: src/ui/views.js:975 src/ui/views.js:1403
 msgid "Notification"
 msgstr ""
 
-#: src/ui/views.js:1417
+#: src/ui/views.js:1418
 msgid "Hide Banner"
 msgstr ""
 

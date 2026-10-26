@@ -21,7 +21,6 @@ Events go to stdout as JSON lines (Notchy reads them):
 Commands come on stdin, one per line: "accept ID", "decline ID", "stop".
 """
 import argparse
-import html
 import ipaddress
 import json
 import mimetypes
@@ -37,7 +36,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import quote, unquote
 import zipfile
 
-from i18n import _, language, ngettext, number
+from i18n import _
+import share_page
 
 CHUNK = 256 * 1024
 MAX_FILES, MAX_BYTES = 200, 50 * 1024 ** 3
@@ -105,32 +105,24 @@ def unique(folder, name):
     return path
 
 
-def size_text(size):
-    for unit, factor in (('GB', 1e9), ('MB', 1e6), ('kB', 1e3)):
-        if size >= factor:
-            return f'{number(size / factor)} {unit}'
-    return f'{size} B'
+def preview(path, size=360):
+    """A picture scaled down for its tile as JPEG bytes, or None (not a picture GdkPixbuf reads, too large)."""
+    try:
+        if path.stat().st_size > 80 * 1024 ** 2:
+            return None
+        import gi
+        gi.require_version('GdkPixbuf', '2.0')
+        from gi.repository import GdkPixbuf
+        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), size, size, True)
+        pixbuf = pixbuf.apply_embedded_orientation() or pixbuf
+        ok, data = pixbuf.save_to_bufferv('jpeg', ['quality'], ['82'])
+        return bytes(data) if ok else None
+    except Exception:  # noqa: BLE001 - any picture that cannot be read simply has no preview
+        return None
 
 
-STYLE = """
-:root { color-scheme: dark; }
-body { margin: 0; background: #000; color: #fff; font: 16px/1.45 -apple-system, system-ui, sans-serif; }
-main { max-width: 520px; margin: 0 auto; padding: 28px 18px 40px; }
-h1 { font-size: 22px; margin: 0 0 4px; } p { color: rgba(255,255,255,.6); margin: 0 0 18px; }
-.file { display: flex; align-items: center; gap: 12px; background: #1c1c1e; border-radius: 16px; padding: 12px 14px; margin: 8px 0; }
-.file div { flex: 1; min-width: 0; } .file b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file small { color: rgba(255,255,255,.55); }
-a.btn, button { font: inherit; font-weight: 700; border: 0; border-radius: 99px; padding: 9px 18px; background: #0a84ff; color: #fff; text-decoration: none; }
-a.btn.all { display: block; text-align: center; margin-top: 14px; background: #2c2c30; }
-input[type=file] { width: 100%; margin: 8px 0 16px; color: #fff; }
-.state { margin-top: 16px; color: rgba(255,255,255,.7); }
-.bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.14); overflow: hidden; margin-top: 10px; } .bar i { display: block; height: 100%; width: 0; background: #0a84ff; }
-"""
 
 
-def page(title, body, script=''):
-    return f"""<!doctype html><html lang="{language()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)}</title><style>{STYLE}</style></head><body><main>{body}</main>{script}</body></html>""".encode()
 
 
 class Session:
@@ -144,6 +136,10 @@ class Session:
         self.last_progress = 0.0
         self.question = None   # {id, event, accepted, files, ticket}
         self.ticket = None
+        self.name = share_page.computer_name()
+        self.previews = {}
+        # Receiving ends this long after its start or its last transfer.
+        self.until = time.monotonic() + timeout
 
     def progress(self, peer, done, total, force=False):
         now = time.monotonic()
@@ -173,7 +169,11 @@ class Handler(BaseHTTPRequestHandler):
             return None
         parts = self.path.split('?', 1)[0].split('/')
         if len(parts) < 2 or not secrets.compare_digest(parts[1], self.session.token):
-            self.send_error(404)
+            # A page asked for with an old or wrong key: a calm page instead of a bare 404.
+            if self.command == 'GET' and len(parts) == 2:
+                self.answer(404, share_page.gone_page(self.session.name))
+            else:
+                self.send_error(404)
             return None
         return [unquote(p) for p in parts[2:] if p]
 
@@ -185,7 +185,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
-        self.send_header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'")
+        self.send_header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' blob:")
         for key, value in extra:
             self.send_header(key, value)
         self.end_headers()
@@ -201,25 +201,20 @@ class Handler(BaseHTTPRequestHandler):
         session = self.session
         if session.mode == 'send':
             if not rest:
-                return self.answer(200, self.send_page())
+                return self.answer(200, share_page.send_page(session.token, session.name, session.files, session.sizes))
             if rest[0] == 'f' and len(rest) >= 2 and rest[1].isdigit() and int(rest[1]) < len(session.files):
                 return self.send_file(int(rest[1]))
+            if rest[0] == 'p' and len(rest) == 2 and rest[1].isdigit() and int(rest[1]) < len(session.files):
+                return self.send_preview(int(rest[1]))
+            if rest == ['state']:
+                with session.lock:
+                    done = [d >= s for d, s in zip(session.delivered, session.sizes)]
+                return self.answer(200, json.dumps({'delivered': done}).encode(), 'application/json')
             if rest == ['all.zip'] and len(session.files) > 1:
                 return self.send_zip()
         elif not rest:
-            return self.answer(200, self.receive_page())
+            return self.answer(200, share_page.receive_page(session.token, session.name))
         self.send_error(404)
-
-    def send_page(self):
-        session = self.session
-        rows = ''.join(f'<div class="file"><div><b>{html.escape(f.name)}</b><small>{size_text(s)}</small></div>'
-                       f'<a class="btn" href="/{session.token}/f/{i}/{quote(f.name)}" download>{html.escape(_("Download"))}</a></div>'
-                       for i, (f, s) in enumerate(zip(session.files, session.sizes)))
-        if len(session.files) > 1:
-            rows += f'<a class="btn all" href="/{session.token}/all.zip" download>{html.escape(_("Download All as ZIP"))}</a>'
-        count = len(session.files)
-        intro = ngettext('%d file from Notchy', '%d files from Notchy', count) % count
-        return page('Notchy', f'<h1>Notchy</h1><p>{html.escape(intro)}</p>{rows}')
 
     def delivered(self, index, sent):
         session, peer = self.session, self.peer()
@@ -231,6 +226,19 @@ class Handler(BaseHTTPRequestHandler):
         if complete and not session.finished.is_set():
             session.finished.set()
             emit(event='sent', peer=peer)
+
+    def send_preview(self, index):
+        """A small JPEG of a picture for its tile (made once, kept for the session)."""
+        session = self.session
+        with session.lock:
+            cached = session.previews.get(index, False)
+        if cached is False:
+            cached = preview(session.files[index])
+            with session.lock:
+                session.previews[index] = cached
+        if not cached:
+            return self.send_error(404)
+        self.answer(200, cached, 'image/jpeg')
 
     def send_file(self, index):
         path, size = self.session.files[index], self.session.sizes[index]
@@ -278,38 +286,6 @@ class Handler(BaseHTTPRequestHandler):
                         sent += len(block)
                         self.delivered(index, sent)
                 self.delivered(index, sent)
-
-    def receive_page(self):
-        token = self.session.token
-        texts = {'send': _('Send'), 'waiting': _('Waiting for the computer to accept…'), 'declined': _('Declined on the computer.'),
-                 'sending': _('Sending…'), 'done': _('Sent. The files are on the computer.'), 'failed': _('Sending failed.'), 'pick': _('Choose files first.')}
-        script = f"""<script>
-const T = {json.dumps(texts)}, base = '/{token}';
-const state = document.querySelector('.state'), bar = document.querySelector('.bar i'), pick = document.querySelector('input'), go = document.querySelector('button');
-go.onclick = async () => {{
-  const files = [...pick.files]; if (!files.length) {{ state.textContent = T.pick; return; }}
-  go.disabled = true; state.textContent = T.waiting;
-  let answer;
-  try {{ const r = await fetch(base + '/ask', {{method: 'POST', headers: {{'Content-Type': 'application/json'}}, body: JSON.stringify({{files: files.map(f => ({{name: f.name, size: f.size}}))}})}}); answer = await r.json(); }}
-  catch {{ state.textContent = T.failed; go.disabled = false; return; }}
-  if (!answer.ok) {{ state.textContent = T.declined; return; }}
-  state.textContent = T.sending;
-  const total = files.reduce((n, f) => n + f.size, 0); let done = 0;
-  for (const [i, file] of files.entries()) {{
-    const ok = await new Promise(resolve => {{
-      const x = new XMLHttpRequest(); x.open('PUT', `${{base}}/up/${{answer.ticket}}/${{i}}`);
-      x.upload.onprogress = e => {{ bar.style.width = `${{Math.round((done + e.loaded) / Math.max(1, total) * 100)}}%`; }};
-      x.onload = () => resolve(x.status === 200); x.onerror = () => resolve(false); x.send(file);
-    }});
-    if (!ok) {{ state.textContent = T.failed; return; }}
-    done += file.size;
-  }}
-  bar.style.width = '100%'; state.textContent = T.done;
-}};
-</script>"""
-        body = (f'<h1>Notchy</h1><p>{html.escape(_("Send files to this computer. It asks before it takes them."))}</p>'
-                f'<input type="file" multiple><button>{html.escape(texts["send"])}</button><div class="state"></div><div class="bar"><i></i></div>')
-        return page('Notchy', body, script)
 
     def do_POST(self):
         rest = self.check()
@@ -385,7 +361,10 @@ go.onclick = async () => {{
         if complete:
             session.progress(ticket['peer'], total, total, force=True)
             emit(event='received', peer=ticket['peer'], paths=ticket['paths'])
-            session.finished.set()
+            # Open for more ("Send More" on the phone) until the banner closes or time runs out.
+            with session.lock:
+                session.ticket = None
+                session.until = time.monotonic() + session.timeout
 
 
 def commands(session, stop):
@@ -440,13 +419,12 @@ def main():
     emit(event='ready', url=f'http://{address}:{server.server_address[1]}/{session.token}')
     stop = threading.Event()
     threading.Thread(target=commands, args=(session, stop), daemon=True).start()
-    deadline = time.monotonic() + args.timeout if args.mode == 'receive' else None
     while not stop.is_set():
         if session.finished.is_set():
             # The last bytes are on their way; then the link is gone.
             time.sleep(1.5)
             break
-        if deadline and time.monotonic() > deadline and not session.question and not session.ticket:
+        if args.mode == 'receive' and time.monotonic() > session.until and not session.question and not session.ticket:
             emit(event='expired')
             break
         stop.wait(0.2)

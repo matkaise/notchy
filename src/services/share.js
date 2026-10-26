@@ -20,7 +20,7 @@ export const SENDING = ['starting', 'ready', 'sending'];
 // stall the Shell.
 //
 // send     {files, paths, phase: starting | ready | sending | done | failed | cancelled, url, peer, done, total, error}
-// incoming {phase: starting | ready | receiving | done | expired | failed, url, peer, done, total, error}
+// incoming {phase: starting | ready | receiving | expired | failed, url, peer, done, total, count (received so far), error}
 // question {sender, what, timeout, asked, via: 'qr', answer(accepted)} — the AirDrop question's shape
 export class Share extends Emitter {
     constructor(extension, shelf, settings) {
@@ -164,11 +164,12 @@ export class Share extends Emitter {
         question.timer = this.life.later(ASK_MS, () => question.answer(false));
         this.question = question;
     }
+    // Files arrived: into the Regal; the session stays open for more („Weitere senden“ on the phone).
     received(incoming, event) {
-        incoming.phase = 'done'; incoming.peer = String(event.peer ?? incoming.peer);
+        incoming.phase = 'ready'; incoming.peer = String(event.peer ?? incoming.peer); incoming.done = 0; incoming.total = 0;
         const paths = (Array.isArray(event.paths) ? event.paths : []).map(String).filter(path => GLib.file_test(path, GLib.FileTest.IS_REGULAR));
         for (const path of paths) this.shelf.add(Gio.File.new_for_path(path).get_uri());
-        incoming.count = paths.length;
+        incoming.count = (incoming.count ?? 0) + paths.length;
     }
     stopReceive() {
         const proc = this.receiveProc;

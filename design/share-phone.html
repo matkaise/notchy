@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notchy auf dem Handy</title>
+<style>
+:root {
+  --page: #e9e7e3; --page-ink: #1d1d1f; --page-muted: #6b6a67; --page-line: #d6d3ce;
+  --blue: #3a9bff; --blue-2: #0a6ee6; --accept: #0a84ff; --green: #34c759; --orange: #ff9f0a; --red: #ff453a;
+  --tile: #161618; --tile-line: rgba(255,255,255,.07); --muted: rgba(255,255,255,.55); --faint: rgba(255,255,255,.38);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #141416; --page-ink: #f2f2f2; --page-muted: #9a9aa0; --page-line: #2a2a2e; }
+}
+:root[data-theme="dark"] { --page: #141416; --page-ink: #f2f2f2; --page-muted: #9a9aa0; --page-line: #2a2a2e; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--page-ink); font: 15px/1.5 Cantarell, Inter, system-ui, sans-serif; }
+main { max-width: 1180px; margin: 0 auto; padding: 40px 16px 80px; }
+h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.01em; }
+h2 { font-size: 19px; margin: 48px 0 6px; }
+.lead, .note { color: var(--page-muted); max-width: 780px; margin: 0; }
+.note { font-size: 14px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; background: var(--page-line); color: var(--page-muted); vertical-align: 3px; margin-left: 6px; }
+.phones { display: flex; flex-wrap: wrap; gap: 26px; margin-top: 18px; align-items: flex-start; }
+figure { margin: 0; }
+figcaption { font-size: 12.5px; color: var(--page-muted); text-align: center; margin-top: 10px; max-width: 300px; }
+
+/* A phone, roughly an iPhone 15 at 76 %. */
+.phone { width: 300px; height: 620px; border-radius: 44px; background: #000; padding: 10px; box-shadow: 0 0 0 2px #2a2a2e, 0 20px 50px rgba(0,0,0,.35); position: relative; }
+.screen { width: 100%; height: 100%; border-radius: 36px; overflow: hidden; background: #000; color: #fff; position: relative; font: 14px/1.4 -apple-system, "SF Pro Text", Inter, system-ui, sans-serif; }
+.safari { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; background: rgba(28,28,30,.92); display: flex; align-items: flex-start; justify-content: center; padding-top: 10px; }
+.safari span { width: 86%; height: 32px; border-radius: 12px; background: #2c2c30; font-size: 11.5px; color: rgba(255,255,255,.75); display: grid; place-items: center; }
+.status { height: 34px; display: flex; justify-content: space-between; align-items: center; padding: 0 22px; font-size: 12px; font-weight: 600; }
+
+/* The page: Notchy's notch hangs from the top and grows into a glass surface. */
+.page { position: absolute; inset: 34px 0 64px 0; overflow: hidden; }
+.notch { margin: 0 auto; width: 74%; min-height: 40px; border-radius: 0 0 22px 22px; background: #000; box-shadow: 0 0 0 1px rgba(255,255,255,.06); display: flex; align-items: center; gap: 9px; padding: 8px 14px; }
+.notch .badge { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(180deg, var(--blue), var(--blue-2)); display: grid; place-items: center; flex: none; }
+.notch .badge svg { width: 12px; height: 12px; }
+.notch b { font-size: 12.5px; display: block; line-height: 1.2; }
+.notch small { font-size: 10.5px; color: var(--muted); display: block; line-height: 1.2; }
+.surface { margin: 12px 12px 0; border-radius: 26px; padding: 14px 12px 16px; background: linear-gradient(180deg, #0b0b0d 0%, #121216 100%); box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+.head { display: flex; align-items: baseline; gap: 8px; padding: 0 4px 10px; }
+.head b { font-size: 15px; } .head span { font-size: 11.5px; color: var(--muted); }
+
+/* Regal tiles (helper/tray.py): a document with its type, or the picture; the name and size below. */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.tile { text-align: center; }
+.tile .card { height: 86px; border-radius: 16px; background: var(--tile); box-shadow: inset 0 0 0 1px var(--tile-line); display: grid; place-items: center; position: relative; overflow: hidden; }
+.tile .doc { width: 34px; height: 44px; border-radius: 6px; background: #2c2c30; position: relative; }
+.tile .doc i { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); font-style: normal; font-size: 8px; font-weight: 800; padding: 1px 5px; border-radius: 4px; background: #d0d0d4; color: #1c1c1e; }
+.tile .doc i.heic { background: #6fd39a; } .tile .doc i.pdf { background: #ff8a80; } .tile .doc i.zip { background: #ffd27a; }
+.tile .photo { position: absolute; inset: 0; background: linear-gradient(135deg, #3b6ea8, #c9845e 60%, #f2c66d); }
+.tile .name { font-size: 11.5px; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
+.tile .size { font-size: 10.5px; color: var(--faint); }
+.tile .get { position: absolute; right: 7px; bottom: 7px; width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,.55); display: grid; place-items: center; }
+.tile .get svg { width: 12px; height: 12px; }
+.tile .ok { position: absolute; right: 7px; bottom: 7px; width: 22px; height: 22px; border-radius: 50%; background: var(--green); display: grid; place-items: center; }
+.tile .ok svg { width: 12px; height: 12px; }
+.tile.add .card { box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.18); background: transparent; font-size: 28px; color: var(--muted); }
+
+.pill { display: block; width: 100%; margin-top: 14px; border: 0; border-radius: 99px; padding: 11px; font: inherit; font-weight: 700; font-size: 14px; color: #fff; background: var(--accept); text-align: center; }
+.pill.quiet { background: #2c2c30; }
+.hint { font-size: 11px; color: var(--faint); text-align: center; margin-top: 10px; }
+
+/* The middle states: AirDrop's radar while waiting, an AirPods-like ring for progress. */
+.hero { display: grid; place-items: center; padding: 22px 0 8px; }
+.radar { width: 110px; height: 110px; position: relative; display: grid; place-items: center; }
+.radar .r { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid rgba(110,180,255,.75); animation: ping 1.8s ease-out infinite; opacity: 0; }
+.radar .r:nth-child(2) { animation-delay: .6s; } .radar .r:nth-child(3) { animation-delay: 1.2s; }
+.core { width: 58px; height: 58px; border-radius: 50%; background: linear-gradient(180deg, var(--blue), var(--blue-2)); display: grid; place-items: center; position: relative; }
+.core svg { width: 26px; height: 26px; }
+.core.done { background: linear-gradient(180deg, var(--green), #1f9e42); }
+.core.off { background: rgba(255,255,255,.14); }
+@keyframes ping { 0% { transform: scale(.45); opacity: .85; } 100% { transform: scale(1); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .radar .r { animation: none; opacity: .3; } }
+.ring { width: 110px; height: 110px; position: relative; display: grid; place-items: center; }
+.ring svg.r { position: absolute; inset: 0; transform: rotate(-90deg); }
+.ring svg.r circle { fill: none; stroke-width: 6; stroke-linecap: round; }
+.ring .value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.big { text-align: center; font-size: 17px; font-weight: 700; margin-top: 12px; }
+.small { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.list { margin-top: 16px; display: flex; flex-direction: column; gap: 6px; }
+.row { display: flex; align-items: center; gap: 10px; background: var(--tile); border-radius: 14px; padding: 8px 10px; box-shadow: inset 0 0 0 1px var(--tile-line); }
+.row .mini { width: 26px; height: 32px; border-radius: 5px; background: #2c2c30; flex: none; position: relative; }
+.row .mini.photo { background: linear-gradient(135deg, #3b6ea8, #c9845e 60%, #f2c66d); }
+.row div { flex: 1; min-width: 0; } .row b { display: block; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .row small { color: var(--faint); font-size: 10.5px; }
+.row .st { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; }
+.row .st.done { background: var(--green); } .row .st.now { border: 2px solid rgba(255,255,255,.15); border-top-color: var(--blue); animation: spin 1s linear infinite; }
+.row .st svg { width: 11px; height: 11px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 16px; }
+.card2 { background: var(--page-line); border-radius: 14px; padding: 14px 16px; }
+.card2 h3 { margin: 0 0 6px; font-size: 15px; }
+.card2 li { font-size: 13.5px; color: var(--page-muted); }
+.card2 ul { margin: 4px 0 0; padding-left: 18px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="airdrop" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M7.5 16.5a6.5 6.5 0 1 1 9 0"/><path d="M5 19a10 10 0 1 1 14 0"/><path d="M10 14a2.8 2.8 0 1 1 4 0"/></g><path fill="#fff" d="M12 13.5l2.6 6.5H9.4z"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="down" viewBox="0 0 24 24"><path d="M12 4v12m-5-5 5 5 5-5M5 20h14" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="laptop" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="1.6" fill="none" stroke="#fff" stroke-width="2"/><path d="M2 19h20" stroke="#fff" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></symbol>
+</svg>
+<main>
+  <h1>Notchy auf dem Handy <span class="tag">Entwurf</span></h1>
+  <p class="lead">Die Seite, die das Handy nach dem Scannen öffnet, im Notchy-Design: oben hängt Notchys schwarze Notch und nennt den Rechner. Darunter eine dunkle Glasfläche mit den Kacheln des Regals: Dokument mit farbiger Dateiart, oder das Bild selbst. Während das Handy wartet, zieht AirDrops Radar seine Kreise; während es sendet, füllt sich ein Ring wie bei den AirPods. Alles steckt in der Seite selbst (kein Nachladen, keine fremden Schriften), dunkel, auch wenn das Handy hell eingestellt ist.</p>
+
+  <h2>1 · Herunterladen</h2>
+  <p class="note">Antippen einer Kachel lädt die Datei, der Knopf unten alle zusammen als ZIP. Bilder zeigen eine kleine Vorschau statt der Dateiart. Ein geladenes Element bekommt einen grünen Haken.</p>
+  <div class="phones">
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="page">
+          <div class="notch"><span class="badge"><svg><use href="#airdrop"/></svg></span><div><b>Matthias’ Laptop</b><small>teilt 3 Dateien</small></div></div>
+          <div class="surface">
+            <div class="head"><b>Für dich</b><span>3 Dateien · 14,2 MB</span></div>
+            <div class="tiles">
+              <div class="tile"><div class="card"><div class="photo"></div><span class="get"><svg><use href="#down"/></svg></span></div><div class="name">IMG_2048.JPG</div><div class="size">4,1 MB</div></div>
+              <div class="tile"><div class="card"><div class="doc"><i class="pdf">PDF</i></div><span class="get"><svg><use href="#down"/></svg></span></div><div class="name">Rechnung Oktober.pdf</div><div class="size">212 kB</div></div>
+              <div class="tile"><div class="card"><div class="doc"><i class="zip">ZIP</i></div><span class="get"><svg><use href="#down"/></svg></span></div><div class="name">Urlaub 2026.zip</div><div class="size">9,9 MB</div></div>
+            </div>
+            <button class="pill">Alle laden (ZIP)</button>
+            <div class="hint">Gilt, solange der Banner auf dem Rechner offen ist</div>
+          </div>
+        </div>
+        <div class="safari"><span>192.168.1.23</span></div>
+      </div></div>
+      <figcaption>Mehrere Dateien: Kacheln wie im Regal, „Alle laden“ unten</figcaption>
+    </figure>
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>9:42</span><span>●●● ▮</span></div>
+        <div class="page">
+          <div class="notch"><span class="badge"><svg><use href="#airdrop"/></svg></span><div><b>Matthias’ Laptop</b><small>teilt 1 Datei</small></div></div>
+          <div class="surface">
+            <div class="tiles" style="grid-template-columns: 1fr;">
+              <div class="tile"><div class="card" style="height:190px"><div class="photo"></div><span class="ok"><svg><use href="#check"/></svg></span></div><div class="name" style="font-size:13px">IMG_2048.JPG</div><div class="size">4,1 MB · geladen</div></div>
+            </div>
+            <button class="pill quiet">Nochmal laden</button>
+            <div class="hint">Liegt in „Dateien“ → „Downloads“</div>
+          </div>
+        </div>
+        <div class="safari"><span>192.168.1.23</span></div>
+      </div></div>
+      <figcaption>Eine Datei: groß, nach dem Laden ein grüner Haken</figcaption>
+    </figure>
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>9:50</span><span>●●● ▮</span></div>
+        <div class="page">
+          <div class="notch"><span class="badge" style="background:rgba(255,255,255,.14)"><svg><use href="#laptop"/></svg></span><div><b>Notchy</b><small>Link abgelaufen</small></div></div>
+          <div class="surface">
+            <div class="hero"><div class="core off"><svg><use href="#x"/></svg></div></div>
+            <div class="big">Dieser Link gilt nicht mehr</div>
+            <div class="small">Der Banner auf dem Rechner wurde geschlossen. Scanne den neuen Code.</div>
+          </div>
+        </div>
+        <div class="safari"><span>192.168.1.23</span></div>
+      </div></div>
+      <figcaption>Abgelaufen oder falscher Schlüssel: eine ruhige Seite statt „404“</figcaption>
+    </figure>
+  </div>
+
+  <h2>2 · Senden an den Rechner</h2>
+  <p class="note">Eine leere Kachel mit „＋“ öffnet die Auswahl des Handys (Fotos, Dateien). Gewählte Dateien erscheinen als Kacheln. Danach erst „Senden“; der Rechner fragt in seiner Notch, und das Handy zeigt so lange AirDrops Radar.</p>
+  <div class="phones">
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="page">
+          <div class="notch"><span class="badge"><svg><use href="#laptop"/></svg></span><div><b>Matthias’ Laptop</b><small>nimmt Dateien an</small></div></div>
+          <div class="surface">
+            <div class="head"><b>An den Rechner</b><span>3 gewählt · 12,4 MB</span></div>
+            <div class="tiles">
+              <div class="tile"><div class="card"><div class="photo"></div></div><div class="name">IMG_3101.HEIC</div><div class="size">4,3 MB</div></div>
+              <div class="tile"><div class="card"><div class="photo" style="background:linear-gradient(135deg,#1f3b2c,#6aa27a 60%,#d9e8b0)"></div></div><div class="name">IMG_3102.HEIC</div><div class="size">3,9 MB</div></div>
+              <div class="tile"><div class="card"><div class="doc"><i class="pdf">PDF</i></div></div><div class="name">Scan.pdf</div><div class="size">4,2 MB</div></div>
+              <div class="tile add"><div class="card">＋</div><div class="name" style="color:var(--muted)">Mehr wählen</div></div>
+            </div>
+            <button class="pill">Senden</button>
+            <div class="hint">Der Rechner fragt, bevor er etwas annimmt</div>
+          </div>
+        </div>
+        <div class="safari"><span>192.168.1.23</span></div>
+      </div></div>
+      <figcaption>Auswahl: Kacheln wie im Regal, „＋“ für mehr</figcaption>
+    </figure>
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="page">
+          <div class="notch"><span class="badge"><svg><use href="#laptop"/></svg></span><div><b>Matthias’ Laptop</b><small>fragt gerade</small></div></div>
+          <div class="surface">
+            <div class="hero"><div class="radar"><span class="r"></span><span class="r"></span><span class="r"></span><div class="core"><svg><use href="#airdrop"/></svg></div></div></div>
+            <div class="big">Warte auf „Annehmen“</div>
+            <div class="small">3 Dateien · 12,4 MB</div>
+            <div class="hint" style="margin-top:18px">Auf dem Rechner erscheint die Frage in der Notch</div>
+          </div>
+        </div>
+        <div class="safari"><span>192.168.1.23</span></div>
+      </div></div>
+      <figcaption>Warten: AirDrops Radar, bis der Rechner antwortet</figcaption>
+    </figure>
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>9:42</span><span>●●● ▮</span></div>
+        <div class="page">
+          <div class="notch"><span class="badge"><svg><use href="#laptop"/></svg></span><div><b>Matthias’ Laptop</b><small>empfängt</small></div></div>
+          <div class="surface">
+            <div class="hero"><div class="ring"><svg class="r" viewBox="0 0 110 110" width="110" height="110"><circle cx="55" cy="55" r="50" stroke="rgba(255,255,255,.13)"/><circle cx="55" cy="55" r="50" stroke="var(--blue)" stroke-dasharray="204 315"/></svg><span class="value">65 %</span></div></div>
+            <div class="big">Wird gesendet …</div>
+            <div class="small">8,1 von 12,4 MB</div>
+            <div class="list">
+              <div class="row"><span class="mini photo"></span><div><b>IMG_3101.HEIC</b><small>4,3 MB</small></div><span class="st done"><svg><use href="#check"/></svg></span></div>
+              <div class="row"><span class="mini photo" style="background:linear-gradient(135deg,#1f3b2c,#6aa27a 60%,#d9e8b0)"></span><div><b>IMG_3102.HEIC</b><small>3,9 MB</small></div><span class="st now"></span></div>
+              <div class="row"><span class="mini"></span><div><b>Scan.pdf</b><small>4,2 MB</small></div><span class="st"></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="safari"><span>192.168.1.23</span></div>
+      </div></div>
+      <figcaption>Senden: der Ring füllt sich mit echten Bytes, Datei für Datei</figcaption>
+    </figure>
+  </div>
+  <div class="phones">
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>9:42</span><span>●●● ▮</span></div>
+        <div class="page">
+          <div class="notch"><span class="badge" style="background:linear-gradient(180deg,var(--green),#1f9e42)"><svg><use href="#check"/></svg></span><div><b>Matthias’ Laptop</b><small>hat 3 Dateien</small></div></div>
+          <div class="surface">
+            <div class="hero"><div class="core done"><svg><use href="#check"/></svg></div></div>
+            <div class="big">Gesendet</div>
+            <div class="small">3 Dateien liegen jetzt im Regal</div>
+            <button class="pill quiet" style="margin-top:22px">Weitere senden</button>
+          </div>
+        </div>
+        <div class="safari"><span>192.168.1.23</span></div>
+      </div></div>
+      <figcaption>Fertig: grüner Haken, wie im Banner auf dem Rechner</figcaption>
+    </figure>
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>9:42</span><span>●●● ▮</span></div>
+        <div class="page">
+          <div class="notch"><span class="badge" style="background:rgba(255,255,255,.14)"><svg><use href="#laptop"/></svg></span><div><b>Matthias’ Laptop</b><small>hat abgelehnt</small></div></div>
+          <div class="surface">
+            <div class="hero"><div class="core off"><svg><use href="#x"/></svg></div></div>
+            <div class="big">Abgelehnt</div>
+            <div class="small">Am Rechner wurde „Ablehnen“ gewählt – oder niemand hat geantwortet.</div>
+            <button class="pill quiet" style="margin-top:22px">Nochmal versuchen</button>
+          </div>
+        </div>
+        <div class="safari"><span>192.168.1.23</span></div>
+      </div></div>
+      <figcaption>Abgelehnt: ruhig und grau, mit „Nochmal“</figcaption>
+    </figure>
+  </div>
+
+  <h2>Umsetzung</h2>
+  <div class="grid2">
+    <div class="card2">
+      <h3>Was die Seite braucht</h3>
+      <ul>
+        <li>Alles in der Seite selbst (CSS, SVG, ein kleines Skript): die Seite lädt nichts nach, die strenge Content-Security-Policy bleibt.</li>
+        <li>Die Schrift des Handys (San Francisco auf dem iPhone, Roboto auf Android) – keine Webfonts.</li>
+        <li>Vorschauen für Bilder vom Rechner: kleine JPEG-Vorschauen, die Notchy erzeugt (GdkPixbuf), nur für JPEG/PNG/WebP; HEIC und alles andere zeigt die Dateiart. Beim Senden vom Handy zeigt der Browser des Handys selbst die Vorschau der gewählten Fotos.</li>
+        <li>Deutsch oder Englisch, wie Notchy eingestellt ist.</li>
+      </ul>
+    </div>
+    <div class="card2">
+      <h3>Was sie zeigt, ehrlich</h3>
+      <ul>
+        <li>Der Name des Rechners (aus seinem Gerätenamen) – sonst nichts über ihn.</li>
+        <li>Der grüne Haken beim Herunterladen kommt, wenn Notchy die letzten Bytes ausgeliefert hat; ob das Handy sie gespeichert hat, weiß nur das Handy.</li>
+        <li>Fortschritt beim Senden: die Bytes, die der Browser hochgeladen hat.</li>
+      </ul>
+    </div>
+  </div>
+</main>
+</body>
+</html>

@@ -2039,7 +2039,7 @@ async function activityRegressions(ext, path, screenshot) {
         ext.settings.set_int('agents-completed-seconds', 2);
         await agent({provider: 'claude', session: 'act-1', event: 'update', state: 'working', source: 'cli'});
         await agent({provider: 'claude', session: 'act-1', event: 'stop', source: 'cli'});
-        await Scripting.sleep(2600);
+        await Scripting.sleep(2000); await waitFor(() => ext.agents.registry.get('claude', 'act-1')?.task === 'idle', 4000);
         const act = ext.agents.registry.get('claude', 'act-1'), bubble = island.agentIndicators.bubbles.get('claude');
         // (Other Claude sessions of earlier phases may still work: the most urgent one decides the indicator.)
         const alone = bubble.group.sessions.filter(x => x.connected).length === 1;
@@ -2157,11 +2157,10 @@ async function shareRegressions(ext, path, screenshot) {
         const sent = await request('PUT', `${upload}/up/${answer.ticket}/0`, 'hallo');
         assert(sent.status === 200 && await waitFor(() => ext.shelf.items.length === before + 1, 4000), 'the received file lands in the Shelf');
         assert(ext.shelf.items.at(-1).name === 'foto.txt', 'under its own name');
-        await waitFor(() => !ext.share.receiveProc, 5000);
+        // The session stays open for more: after the Regal's banner the receive banner returns, counting what arrived.
+        assert(await waitFor(() => island.peekKind === 'receive' && ext.share.receiveProc && styled(island.body, 'notchy-peek-body')[0]?.text.startsWith('1 Datei empfangen'), 6000),
+            `after a transfer the receive banner stays, ready for more (${island.peekKind}, ${styled(island.body, 'notchy-peek-body')[0]?.text})`);
         // Declining: the phone hears no, the QR code to receive comes back.
-        await waitFor(() => !island.peeking, 5000);
-        island.toggleReceive();
-        await waitFor(() => ext.share.incoming?.phase === 'ready', 6000);
         const second = ext.share.incoming.url;
         const declined = request('POST', `${second}/ask`, JSON.stringify({files: [{name: 'b.txt', size: 1}]}), 'application/json');
         await waitFor(() => island.peekKind === 'airdrop-ask', 4000);

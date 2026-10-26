@@ -1,5 +1,6 @@
 """The QR share helper (helper/share.py): a real server on localhost, driven
 as Notchy drives it (JSON lines out, commands in) and fetched as a phone would."""
+import html
 import importlib.util
 import io
 import json
@@ -164,6 +165,17 @@ class ShareTest(unittest.TestCase):
             self.assertEqual([p.read_bytes() for p in paths], [b'abc', b'hello'])
             self.assertTrue(all(p.parent == folder for p in paths), 'every file lands in the chosen folder, never outside')
             self.assertFalse(any(p.name.startswith('.notchy-upload') for p in folder.iterdir()))
+            # Open for more („Weitere senden“ on the phone) until Notchy stops it.
+            self.assertIsNone(helper.proc.poll(), 'receiving stays open after a transfer')
+            more = []
+            asking = threading.Thread(target=self.ask, args=(url, [{'name': 'zwei.txt', 'size': 2}], more))
+            asking.start()
+            again = helper.next('ask')
+            helper.send(f"accept {again['id']}")
+            asking.join(10)
+            fetch(f"{url}/up/{json.loads(more[0][1])['ticket']}/0", b'ok', method='PUT')
+            self.assertEqual(Path(helper.next('received')['paths'][0]).read_bytes(), b'ok', 'a second transfer in the same session')
+            helper.send('stop')
             self.assertEqual(helper.proc.wait(10), 0)
         finally:
             helper.close()
@@ -197,6 +209,66 @@ class ShareTest(unittest.TestCase):
             self.assertEqual(helper.proc.wait(10), 0)
         finally:
             helper.close()
+
+    def test_the_page_in_notchys_design(self):
+        photo = self.dir / 'Foto.png'
+        import gi
+        gi.require_version('GdkPixbuf', '2.0')
+        from gi.repository import GdkPixbuf
+        GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, False, 8, 800, 600).savev(str(photo), 'png', [], [])
+        hostile = self.dir / '"><img src=x onerror=alert(1)><script>x.pdf'
+        hostile.write_text('x')
+        helper = Helper('send', str(photo), str(hostile))
+        try:
+            url = helper.next('ready')['url']
+            status, page, headers = fetch(url)
+            text = page.decode()
+            self.assertIn('class="notch"', text, 'Notchy\'s notch heads the page')
+            self.assertIn('class="tile"', text, 'the files are the Regal\'s tiles')
+            sys.modules['i18n'].set_language('en')   # as the helper speaks here
+            try:
+                self.assertIn(html.escape(share.share_page.computer_name()), text, 'the computer is named')
+            finally:
+                sys.modules['i18n'].set_language(None)
+            self.assertNotIn('<img src=x', text, 'file names are escaped')
+            self.assertNotIn('<script>x', text, 'not even inside the script')
+            self.assertIn("img-src 'self' blob:", headers['Content-Security-Policy'])
+            self.assertNotIn('http://', text.replace(url, ''), 'nothing is loaded from elsewhere')
+            _, image, headers = fetch(url + '/p/0')
+            self.assertEqual(headers['Content-Type'], 'image/jpeg')
+            self.assertEqual(image[:2], b'\xff\xd8', 'a picture gets a JPEG preview')
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                fetch(url + '/p/1')
+            self.assertEqual(caught.exception.code, 404, 'a PDF has no preview')
+            caught.exception.close()
+            _, state, _ = fetch(url + '/state')
+            self.assertEqual(json.loads(state), {'delivered': [False, False]})
+            fetch(url + '/f/1/x')
+            _, state, _ = fetch(url + '/state')
+            self.assertEqual(json.loads(state), {'delivered': [False, True]}, 'the page learns what was delivered')
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                fetch(url.rsplit('/', 1)[0] + '/oldkey')
+            gone = caught.exception.read().decode()
+            caught.exception.close()
+            self.assertEqual(caught.exception.code, 404)
+            self.assertIn('class="notch"', gone, 'an old link gets a calm page in the same design')
+        finally:
+            helper.close()
+
+    def test_the_receive_page(self):
+        helper = Helper('receive', '--folder', str(self.dir))
+        try:
+            url = helper.next('ready')['url']
+            _, page, _ = fetch(url)
+            text = page.decode()
+            for part in ('id="pick"', 'id="wait"', 'class="radar"', 'id="run"', 'class="ring"', 'id="end"', 'type="file"'):
+                self.assertIn(part, text, part)
+        finally:
+            helper.close()
+
+    def test_the_computer_has_a_name(self):
+        name = share.share_page.computer_name()
+        self.assertTrue(name and len(name) <= 60)
 
     def test_only_the_local_network(self):
         for address in ('192.168.1.4', '10.0.0.7', '172.20.1.1', '127.0.0.1', 'fe80::1', 'fd00::5', '::ffff:192.168.1.9'):

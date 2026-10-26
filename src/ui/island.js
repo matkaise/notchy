@@ -577,9 +577,9 @@ export class Island {
             // Answering changes the services, which sync the island again: not while it folds.
             this.answering = true;
             try { this.airdrop?.question?.answer(false); this.share?.question?.answer(false); } finally { this.answering = false; }
-            // A QR session still receiving shows its banner again once this one folded.
-            if (this.receiveAfterAsk) this.life.later(450, () => this.syncAirDrop());
         }
+        // A QR session still receiving shows its banner again once this one folded.
+        if (this.receiveReturns && this.peekKind !== 'receive') this.life.later(450, () => this.syncAirDrop());
         // A QR link lives as long as its banner (an AirDrop send goes on without it, as before).
         if (this.peekKind === 'airdrop' && this.share?.sending) this.share.cancelSend();
         if (this.peekKind === 'receive') this.share?.stopReceive();
@@ -779,14 +779,16 @@ export class Island {
         this.airdropButton.accessible_name = receiving ? _('Stop receiving') : _('Receive from a phone');
         // A transfer asking for consent always gets the notch, even over an open tab.
         const question = airdrop?.question ?? share?.question ?? null;
+        let folding = false;
         if (question && (this.peekKind !== 'airdrop-ask' || this.askShown !== question)) {
             if (this.expanded && !this.peeking) this.close(true);
-            this.askShown = question; if (question.via === 'qr') this.receiveAfterAsk = true;
+            this.askShown = question; if (question.via === 'qr') this.receiveReturns = true;
             this.peek('airdrop-ask', 0, () => this.views.airdropAskView(question));
-        } else if (!question && this.peekKind === 'airdrop-ask' && !this.answering) this.close();
-        // Declined, or the files are on their way: the QR code to receive comes back.
-        if (!question && !this.answering && this.receiveAfterAsk && share?.receiving && !this.expanded && this.canPeek) {
-            this.receiveAfterAsk = false; this.receiveWay = 'qr';
+        } else if (!question && this.peekKind === 'airdrop-ask' && !this.answering) { this.close(); folding = true; }
+        // Declined, or the files are on their way: the QR code to receive comes back
+        // (after a folding question, once it folded: close() syncs again then).
+        if (!question && !this.answering && !folding && this.receiveReturns && share?.receiving && !this.expanded && this.canPeek) {
+            this.receiveReturns = false; this.receiveWay = 'qr';
             this.peek('receive', 0, () => this.views.receiveView());
         }
         // A send shows its own view until it settles, whichever way it goes.
@@ -883,6 +885,8 @@ export class Island {
     }
     peek(kind, duration, build) {
         if (!this.canPeek) return false;
+        // Another banner over a QR session's (the Regal's for what just arrived): receiving comes back after it.
+        if (this.peekKind === 'receive' && kind !== 'receive' && this.share?.receiving) this.receiveReturns = true;
         this.life.cancel(this.peekTimeout); this.peekTimeout = 0; this.cancelCollapse(); this.clearHud();
         if (!this.peeking) {
             this.dateMenu.menu.close(); this.attachPanelHeader();
