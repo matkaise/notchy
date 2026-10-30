@@ -494,6 +494,8 @@
 .notchy-agent-card-sub { font-size: 12px; color: rgba(255,255,255,0.55); padding-bottom: 12px; }
 .notchy-agent-card-body { spacing: 20px; }
 .notchy-agent-card-hero { color: rgba(255,255,255,0.92); }
+.notchy-agent-card-scroll { max-height: 400px; }
+.notchy-agent-card-grid { spacing: 10px; }
 .notchy-agent-card-rings { spacing: 14px; }
 .notchy-agent-card-session { width: 88px; padding: 4px 0 4px 0; border-radius: 16px; }
 .notchy-agent-card-session:hover, .notchy-agent-card-session:focus { background-color: rgba(255,255,255,0.06); }

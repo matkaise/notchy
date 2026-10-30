@@ -11,6 +11,8 @@ import {_, N_, fmt, ngettext, duration, formatPercent} from '../i18n/core.js';
 // Ring colours per state (RGBA), as the indicators beside the notch draw them.
 const COLOR = {working: [0.42, 0.71, 1, 1], waiting: [1, 0.62, 0.04, 1], error: [1, 0.27, 0.23, 1], completed: [0.2, 0.78, 0.35, 1]};
 const RING = 64;
+// Rings per row: as many as stand beside the agent's symbol in the card's width.
+const PER_ROW = 3;
 const MARK = {waiting: '?', completed: '✓', error: '!'};
 // Short words under a ring (the card's rings are narrow).
 const SHORT = {working: N_('Working'), waiting: N_('Waiting'), idle: N_('Ready'), completed: N_('Done'), error: N_('Error')};
@@ -19,7 +21,8 @@ const shortText = view => (SHORT[view] ? _(SHORT[view]) : stateText(view));
 // An agent's card: a click on its indicator springs the notch open into it,
 // as the AirPods card does — the agent's symbol large on the left, each of
 // its sessions as a ring on the right (waiting, working, done but not seen
-// yet, quiet), its project and state below. A click on a ring switches to
+// yet, quiet), its project and state below; more sessions wrap into rows, and
+// past about three rows those scroll. A click on a ring switches to
 // that session's window when it can be named for sure. A session that waits
 // for the user adds one line with two buttons, as the AirDrop question does;
 // Notchy answers nothing itself. With several agents a small pill of their
@@ -38,8 +41,22 @@ export function agentCard(island, provider) {
     root.add_child(title); root.add_child(sub);
     const body = box(false, {style_class: 'notchy-agent-card-body', x_expand: true});
     const hero = new St.Icon({gicon: appIcon(), icon_size: 56, style_class: 'notchy-agent-card-hero', y_align: Clutter.ActorAlign.CENTER});
-    const row = box(false, {style_class: 'notchy-agent-card-rings', x_expand: true, x_align: Clutter.ActorAlign.CENTER});
-    body.add_child(hero); body.add_child(row); root.add_child(body);
+    const rows = box(true, {style_class: 'notchy-agent-card-grid', x_expand: true});
+    const scroller = new St.ScrollView({style_class: 'notchy-scroll notchy-agent-card-scroll', x_expand: true, overlay_scrollbars: true});
+    scroller.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC); scroller.set_child(rows);
+    body.add_child(hero); body.add_child(scroller); root.add_child(body);
+    const ringButtons = () => rows.get_children().flatMap(row => row.get_children());
+    const rowAt = index => {
+        const at = Math.floor(index / PER_ROW);
+        if (at === rows.get_n_children()) rows.add_child(box(false, {style_class: 'notchy-agent-card-rings', x_expand: true, x_align: Clutter.ActorAlign.CENTER}));
+        return rows.get_child_at_index(at);
+    };
+    // The keyboard scrolls along: the focused ring's row stays in view.
+    const reveal = button => {
+        const row = button.get_parent(), adjustment = scroller.vadjustment, [, y] = row.get_position(), height = row.height;
+        if (y < adjustment.value) adjustment.value = y;
+        else if (y + height > adjustment.value + adjustment.page_size) adjustment.value = y + height - adjustment.page_size;
+    };
     // Needs you: what it waits for and where to answer.
     const ask = box(false, {style_class: 'notchy-agent-card-ask', visible: false});
     const askText = label('', 'notchy-agent-card-ask-text', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
@@ -99,6 +116,7 @@ export function agentCard(island, provider) {
         };
         life.connect(spinner, 'notify::mapped', () => ring.spin());
         button.connect('clicked', () => switchTo(ring.session));
+        button.connect('key-focus-in', () => reveal(button));
         return ring;
     };
     const time = session => {
@@ -154,7 +172,7 @@ export function agentCard(island, provider) {
         title.text = g.name; sub.text = summary(g);
         sessions.forEach((session, index) => {
             let ring = rings.get(session.id);
-            if (!ring) { ring = makeRing(); rings.set(session.id, ring); row.insert_child_at_index(ring.button, index); }
+            if (!ring) { ring = makeRing(); rings.set(session.id, ring); rowAt(index).add_child(ring.button); }
             updateRing(ring, session);
         });
         waitingSession = sessions.find(s => viewState(s) === 'waiting') ?? null;
@@ -181,17 +199,22 @@ export function agentCard(island, provider) {
     life.every(1000, () => { for (const ring of rings.values()) if (ring.session) updateRing(ring, ring.session); });
     root.connect('destroy', () => life.dispose());
     update();
-    // Arrows move between the rings; Enter switches; Esc closes (the island).
+    // Arrows move between the rings, up and down by a row; Enter switches; Esc closes (the island).
     island.views.keyPress = event => {
-        const key = event.get_key_symbol(), buttons = [...row.get_children(), ...(ask.visible ? [later, go].filter(b => b.visible) : []), ...pill.get_children()];
+        const key = event.get_key_symbol(), buttons = [...ringButtons(), ...(ask.visible ? [later, go].filter(b => b.visible) : []), ...pill.get_children()];
         const at = buttons.findIndex(b => b.has_key_focus());
         if (key === Clutter.KEY_Right || key === Clutter.KEY_Left) {
             const next = buttons[Math.max(0, Math.min(buttons.length - 1, (at < 0 ? -1 : at) + (key === Clutter.KEY_Right ? 1 : -1)))];
             next?.grab_key_focus(); return Clutter.EVENT_STOP;
         }
+        if (key === Clutter.KEY_Down || key === Clutter.KEY_Up) {
+            const count = ringButtons().length, target = (at < 0 ? 0 : at) + (key === Clutter.KEY_Down ? PER_ROW : -PER_ROW);
+            if (at < count && target >= 0) buttons[Math.min(target, count - 1)]?.grab_key_focus();
+            return Clutter.EVENT_STOP;
+        }
         return Clutter.EVENT_PROPAGATE;
     };
     return {actor: root, provider, rings, ask, go, pill,
         // The most urgent session takes the keyboard (the rings are sorted by urgency).
-        focus: () => row.get_first_child()?.grab_key_focus()};
+        focus: () => ringButtons()[0]?.grab_key_focus()};
 }

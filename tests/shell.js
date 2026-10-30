@@ -2051,6 +2051,23 @@ async function activityRegressions(ext, path, screenshot) {
         assert(!act.unseen && (!alone || island.agentIndicators.bubbles.get('claude').group.state === 'idle'), 'once its card was shown it is ready again');
         ext.settings.reset('agents-completed-seconds');
         await agent({provider: 'claude', session: 'act-1', event: 'end', source: 'cli'});
+        // Many sessions wrap into rows inside the card; past about three rows they scroll, the keyboard along.
+        const many = Array.from({length: 11}, (_x, i) => `many-${i}`);
+        for (const [i, session] of many.entries()) await agent({provider: 'claude', session, event: 'update', state: 'working', source: 'cli', project: `Projekt ${i + 1}`});
+        await waitFor(() => !island.peeking, 3000);
+        island.showAgentCard('claude'); await waitFor(() => island.peekKind === 'agent' && !island.morphing, 3000); await Scripting.sleep(500);
+        const crowded = island.agentCard, grid = styled(island.body, 'notchy-agent-card-grid')[0], [surfaceX] = island.surface.get_transformed_position();
+        const inside = [...crowded.rings.values()].every(({button}) => { const [x] = button.get_transformed_position(); return x >= surfaceX && x + button.width <= surfaceX + island.surface.width; });
+        assert(crowded.rings.size >= many.length && inside && grid.get_children().every(row => row.get_n_children() <= 3), `many sessions stay inside the card, in rows (${crowded.rings.size} rings, ${grid.get_n_children()} rows)`);
+        const scroller = styled(island.body, 'notchy-agent-card-scroll')[0], [, surfaceY] = island.surface.get_transformed_position();
+        assert(scroller.vadjustment.upper > scroller.vadjustment.page_size && scroller.height <= 400 && surfaceY + island.surface.height <= island.monitor.y + island.monitor.height, `past about three rows they scroll, and the card fits the screen (${scroller.vadjustment.upper} in ${scroller.vadjustment.page_size})`);
+        await screenshot('agent-card-many');
+        const down = {get_key_symbol: () => Clutter.KEY_Down}, buttons = grid.get_children().flatMap(row => row.get_children());
+        for (let i = 0; i < 4; i++) island.views.keyPress(down);
+        const lastRow = grid.get_last_child();
+        assert(buttons.indexOf(global.stage.get_key_focus()) >= (grid.get_n_children() - 1) * 3 && scroller.vadjustment.value + scroller.vadjustment.page_size >= lastRow.y + lastRow.height - 1, 'the arrow keys reach the last row, which scrolls into view');
+        island.close(true); await Scripting.sleep(300);
+        for (const session of many) await agent({provider: 'claude', session, event: 'end', source: 'cli'});
         // Opening and closing the notch keeps its width and place.
         await waitFor(() => !island.peeking, 3000);
         const width = island.compactWidth;
