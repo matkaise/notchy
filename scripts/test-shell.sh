@@ -25,6 +25,8 @@ trap 'rm -rf "$notchy_test_services"' EXIT
 export XDG_CONFIG_HOME="$notchy_test_services/config"
 export XDG_DATA_HOME="$notchy_test_services/data"
 export XDG_CACHE_HOME="$notchy_test_services/cache"
+# Codex's limits are read from its session files: never the real ones in a test.
+export CODEX_HOME="$notchy_test_services/codex"
 # The AirDrop test uses a stand-in backend; keep its state away from a real one.
 export NOTCHY_AIRDROP_RUNDIR="$notchy_test_services/airdropd"
 # Thunderstorm talks to a stand-in index and never crawls the real home folder.

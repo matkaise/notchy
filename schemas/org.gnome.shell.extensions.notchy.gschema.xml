@@ -67,6 +67,10 @@
   <key name="agents-notify-completed" type="b"><default>false</default><summary>Notify when an agent finished a task</summary></key>
   <key name="agents-notify-error" type="b"><default>true</default><summary>Notify when an agent's task failed</summary></key>
   <key name="agents-notify-sound" type="b"><default>false</default><summary>Play a sound with agent notifications</summary></key>
+  <key name="agents-show-commands" type="b"><default>true</default><summary>Show what an agent works on: the command's first line, a file's name, a search (shortened, recognisable secrets masked)</summary></key>
+  <key name="agents-show-limits" type="b"><default>true</default><summary>Show the 5-hour and weekly usage limits of Claude (Pro/Max, from Notchy's silent status line) and Codex (from its session files) in the agent list</summary></key>
+  <key name="agents-moments" type="b"><default>true</default><summary>Open the notch for an agent that needs you, finished its task or failed (not while its own window has the focus)</summary></key>
+  <key name="agents-moment-sound" type="b"><default>true</default><summary>Play a sound when an agent needs you</summary></key>
   <key name="agents-position" type="s"><default>'auto'</default><choices><choice value="auto"/><choice value="left"/><choice value="right"/></choices><summary>Where agent indicators go beside the notch: automatic, left or right (a side chosen per agent wins)</summary></key>
   <key name="indicators-max" type="i"><default>0</default><range min="0" max="12"/><summary>Maximum number of indicators beside the notch; further ones join the "+N" group (0 = as many as fit)</summary></key>
   <key name="toggle-search" type="as"><default>['&lt;Super&gt;space']</default><summary>Thunderstorm search in the island</summary></key>

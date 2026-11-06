@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseEvent, AgentRegistry, hookEvent, shownState, statusText, stateText, COMPLETED_MS, QUIET_IDLE_MS, QUIET_WORKING_MS, GONE_MS, TOMBSTONE_MS, PRIORITY} from '../src/services/agentModel.js';
+import {parseEvent, AgentRegistry, hookEvent, shownState, statusText, stateText, toolKind, activityText, usageWindow, claudeUsage, codexUsage, COMPLETED_MS, QUIET_IDLE_MS, QUIET_WORKING_MS, GONE_MS, TOMBSTONE_MS, PRIORITY} from '../src/services/agentModel.js';
 import {useLanguage} from './i18n-helper.js';
 
 useLanguage('de');
@@ -340,4 +340,49 @@ test('beside the notch: AirPods with several agents on a narrow screen; one that
     const without = planSides(many.filter(i => i.id !== 'codex'), 400, before.sides);
     const back = planSides(many, 400, new Map([...without.sides, ['codex', before.sides.get('codex')]]));
     assert.deepEqual([...back.sides].sort(), [...before.sides].sort());
+});
+
+test('what a tool works on: one line from the adapter, cleared after the tool; a turn’s clock and tool count', () => {
+    const agents = new AgentRegistry(), s = 'turn';
+    agents.apply(hook('claude', {hook_event_name: 'SessionStart', session_id: s}, T), T);
+    agents.apply(hook('claude', {hook_event_name: 'UserPromptSubmit', session_id: s}, T + 1000), T + 1000);
+    let session = agents.get('claude', s);
+    assert.equal(session.turnStarted, T + 1000); assert.equal(session.toolCount, 0); assert.equal(activityText(session), 'Denkt nach');
+    agents.apply(hook('claude', {hook_event_name: 'PreToolUse', session_id: s, tool_name: 'Bash', detail: 'npm test', tool_input: {command: 'never read here'}}, T + 2000), T + 2000);
+    session = agents.get('claude', s);
+    assert.equal(session.detail, 'npm test'); assert.equal(activityText(session), 'Führt aus'); assert.equal(session.toolCount, 1);
+    assert.ok(!JSON.stringify(agents.toJSON()).includes('never read'), 'only the adapter\'s masked line, never the tool input');
+    agents.apply(hook('claude', {hook_event_name: 'PostToolUse', session_id: s, tool_name: 'Bash'}, T + 3000), T + 3000);
+    assert.equal(agents.get('claude', s).detail, '', 'the tool ended: nothing left of its line');
+    agents.apply(hook('claude', {hook_event_name: 'PreToolUse', session_id: s, tool_name: 'Edit', detail: 'agentCard.js'}, T + 4000), T + 4000);
+    agents.apply(hook('claude', {hook_event_name: 'PermissionRequest', session_id: s, tool_name: 'Bash', detail: 'git push'}, T + 5000), T + 5000);
+    session = agents.get('claude', s);
+    assert.equal(shownState(session), 'waiting'); assert.equal(session.detail, 'git push', 'waiting names what it wants to run');
+    assert.equal(session.toolCount, 2, 'an approval is not another tool');
+    agents.apply(hook('claude', {hook_event_name: 'Stop', session_id: s}, T + 61000), T + 61000);
+    session = agents.get('claude', s);
+    assert.equal(session.lastTurnMs, 60000); assert.equal(session.detail, ''); assert.equal(session.toolCount, 2);
+    agents.apply(hook('claude', {hook_event_name: 'UserPromptSubmit', session_id: s}, T + 70000), T + 70000);
+    assert.equal(agents.get('claude', s).toolCount, 0, 'a new turn counts anew');
+    assert.equal(parseEvent({provider: 'x', session: 'y', event: 'tool', tool: 'Bash', detail: 'z'.repeat(400)}).event.detail.length, 160);
+});
+test('tools by kind: the symbol beside the agent', () => {
+    for (const [tool, kind] of [['Bash', 'terminal'], ['exec_command', 'terminal'], ['run_command', 'terminal'], ['Edit', 'edit'], ['apply_patch', 'edit'], ['Write', 'edit'],
+        ['Grep', 'search'], ['Glob', 'search'], ['WebFetch', 'web'], ['web_search', 'web'], ['Read', 'read'], ['Task', 'team'], ['TodoWrite', 'plan'], ['update_plan', 'plan'],
+        ['mcp__github__create_issue', 'mcp'], ['Frobnicate', 'tool'], ['', '']]) assert.equal(toolKind(tool), kind, tool);
+});
+test('usage limits: Claude from its status line, Codex from its session file; a passed reset is empty again', () => {
+    const now = T, later = T / 1000 + 3600;
+    assert.deepEqual(usageWindow({used: 23.5, resetsAt: later}, now), {used: 23.5, resetsAt: later});
+    assert.deepEqual(usageWindow({used: 90, resetsAt: T / 1000 - 1}, now), {used: 0, resetsAt: null}, 'reset: from zero');
+    assert.equal(usageWindow({used: 'x'}, now), null);
+    assert.deepEqual(claudeUsage(JSON.stringify({time: 1, fiveHour: {used: 41, resetsAt: later}, week: {used: 120, resetsAt: null}}), now),
+        {fiveHour: {used: 41, resetsAt: later}, week: {used: 100, resetsAt: null}, time: 1});
+    assert.equal(claudeUsage('{ broken', now), null); assert.equal(claudeUsage('{"time": 3}', now), null);
+    const line = rate => JSON.stringify({timestamp: '2026-10-18T09:00:00Z', type: 'event_msg', payload: {type: 'token_count', rate_limits: rate}});
+    const file = [line({primary: {used_percent: 10, window_minutes: 300, resets_at: later}}), '{"type":"other"}',
+        line({primary: {used_percent: 77, window_minutes: 300, resets_at: later}, secondary: {used_percent: 4, window_minutes: 10080, resets_at: later + 86400}}), 'not json'].join('\n');
+    const codex = codexUsage(file, now);
+    assert.deepEqual([codex.fiveHour, codex.week], [{used: 77, resetsAt: later}, {used: 4, resetsAt: later + 86400}], 'the newest numbers, by window length');
+    assert.equal(codexUsage('{"type":"session_meta"}', now), null);
 });

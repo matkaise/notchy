@@ -3,7 +3,7 @@ import GLib from 'gi://GLib';
 import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Emitter, Lifetime} from '../lifecycle.js';
-import {AgentRegistry, parseEvent, hookEvent, pickWindow, statusText, providerName, PROVIDERS, COMPLETED_MS} from './agentModel.js';
+import {AgentRegistry, parseEvent, hookEvent, pickWindow, statusText, providerName, claudeUsage, codexUsage, usageWindow, PROVIDERS, COMPLETED_MS} from './agentModel.js';
 import {_, fmt} from '../i18n/core.js';
 
 // How often running agent processes are checked while sessions with a
@@ -17,6 +17,8 @@ const AWAY_GRACE_MS = 3000;
 const SHELL_PID = new Gio.Credentials().get_unix_pid();
 // Sessions saved at disable come back within this time.
 const RESTORE_MS = 15 * 60 * 1000;
+// Codex's limits are read from the end of its newest session file, at most this often.
+const CODEX_USAGE_MS = 10000, CODEX_TAIL = 512 * 1024;
 
 // The agent service: sessions from hook adapters (helper/agent_hook.py),
 // notchyctl and the MCP bridge arrive as events over Notchy's D-Bus interface
@@ -27,10 +29,16 @@ export class Agents extends Emitter {
     constructor(extension, settings) {
         super(); this.extension = extension; this.settings = settings; this.life = new Lifetime();
         this.registry = new AgentRegistry(); this.events = new Set(); this.ticker = 0; this.liveness = 0;
-        this.life.connect(settings, 'changed', (_s, key) => { if (key.startsWith('agents-')) this.changed(); });
+        this.usage = {}; this.codexRead = 0;
+        this.life.connect(settings, 'changed', (_s, key) => {
+            if (key === 'agents-show-commands' && !settings.get_boolean(key)) for (const session of this.registry.list()) session.detail = '';
+            if (key === 'agents-show-limits') this.watchUsage();
+            if (key.startsWith('agents-')) this.changed();
+        });
         // Looking at an agent's window counts as having seen what it finished.
         this.life.connect(global.display, 'notify::focus-window', () => this.focusChanged());
         this.restore();
+        this.watchUsage();
     }
     // Disabling Notchy (or logging the Shell out of a lock) must not forget
     // a task that is still running: sessions are kept for a while and come
@@ -71,6 +79,8 @@ export class Agents extends Emitter {
         if (typeof data === 'string') { try { data = JSON.parse(data); } catch { return _('Not valid JSON'); } }
         const mapped = hookEvent(String(provider), data);
         if (!mapped) return '';
+        // „Befehle anzeigen“ off: the adapter's line is dropped here, unseen.
+        if (!this.settings.get_boolean('agents-show-commands')) delete mapped.detail;
         const {event, error} = parseEvent({...mapped, time: data.time, pid: data.pid, pidStart: data.pidStart, ancestors: data.ancestors});
         if (error) return error;
         if (!this.providerEnabled(event.provider)) return '';
@@ -83,7 +93,62 @@ export class Agents extends Emitter {
         if (transition === 'completed' && session && this.settings.get_boolean('agents-done-until-seen') && !this.focused(session)) session.unseen = true;
         if (transition && session) { this.emit({type: transition, session}); this.notify(transition, session); }
         if (changed) { this.schedule(); this.changed(); }
+        if (event.provider === 'codex') this.readCodexUsage();
         return '';
+    }
+    // Usage limits per agent, as the list shows them: [{provider, name, fiveHour, week}]
+    // with each window {used, resetsAt}; a window whose reset passed is empty again.
+    usageRows(now = Date.now()) {
+        if (!this.enabled || !this.settings.get_boolean('agents-show-limits')) return [];
+        return ['claude', 'codex'].filter(provider => this.providerEnabled(provider) && this.usage[provider]).map(provider => ({
+            provider, name: providerName(provider), fiveHour: usageWindow(this.usage[provider].fiveHour, now), week: usageWindow(this.usage[provider].week, now)}))
+            .filter(row => row.fiveHour || row.week);
+    }
+    // Claude's limits arrive in Notchy's cache from its silent status line
+    // (helper/agent_status.py); Codex's are in its own session files.
+    watchUsage() {
+        this.usageMonitor?.cancel(); this.usageMonitor = null;
+        if (!this.settings.get_boolean('agents-show-limits')) { this.usage = {}; return; }
+        const folder = Gio.File.new_for_path(GLib.build_filenamev([GLib.get_user_cache_dir(), 'notchy']));
+        try { folder.make_directory_with_parents(null); } catch { /* Exists. */ }
+        const file = folder.get_child('agent-usage-claude.json');
+        try {
+            this.usageMonitor = folder.monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, null);
+            this.life.connect(this.usageMonitor, 'changed', (_m, child, other) => { if ([child, other].some(f => f?.get_basename() === 'agent-usage-claude.json')) this.readClaudeUsage(file); });
+            this.life.cleanups.push(() => { this.usageMonitor?.cancel(); this.usageMonitor = null; });
+        } catch (e) { console.warn(`Notchy agents: ${e.message}`); }
+        this.readClaudeUsage(file);
+        this.codexRead = 0; this.readCodexUsage();
+    }
+    readClaudeUsage(file) {
+        file.load_contents_async(this.life.cancellable, (f, result) => {
+            let usage = null;
+            try { const [, bytes] = f.load_contents_finish(result); usage = claudeUsage(new TextDecoder().decode(bytes)); } catch { return; }
+            if (!usage || this.life.closed) return;
+            this.usage.claude = usage; this.changed();
+        });
+    }
+    // The end of Codex's newest session file (sessions/YYYY/MM/DD/rollout-….jsonl).
+    readCodexUsage() {
+        if (this.life.closed || !this.settings.get_boolean('agents-show-limits') || Date.now() - this.codexRead < CODEX_USAGE_MS) return;
+        this.codexRead = Date.now();
+        const newest = codexSession(GLib.getenv('CODEX_HOME') || GLib.build_filenamev([GLib.get_home_dir(), '.codex']));
+        if (!newest) return;
+        newest.read_async(GLib.PRIORITY_LOW, this.life.cancellable, (f, result) => {
+            let stream;
+            try {
+                stream = f.read_finish(result);
+                const size = stream.query_info('standard::size', null).get_size();
+                if (size > CODEX_TAIL) stream.seek(size - CODEX_TAIL, GLib.SeekType.SET, null);
+            } catch { return; }
+            stream.read_bytes_async(CODEX_TAIL, GLib.PRIORITY_LOW, this.life.cancellable, (s, done) => {
+                let usage = null;
+                try { usage = codexUsage(new TextDecoder().decode(s.read_bytes_finish(done).toArray())); } catch { /* Unreadable: unchanged. */ }
+                try { s.close(null); } catch { /* Closed. */ }
+                if (!usage || this.life.closed) return;
+                this.usage.codex = usage; this.changed();
+            });
+        });
     }
     // Notifications for what needs the user or just ended (Settings → Agents):
     // the agent, its project folder's name and its state — never a prompt or
@@ -98,9 +163,10 @@ export class Agents extends Emitter {
         const name = providerName(session.provider), project = session.project ? ` · ${session.project}` : '';
         const title = kind === 'waiting' ? fmt(_('%s needs you'), name) + project : kind === 'error' ? fmt(_('%s: task failed'), name) + project : fmt(_('%s finished its task'), name) + project;
         const body = kind === 'waiting' ? [statusText(session), window ? _('Click to switch to the agent') : _('Answer in the agent’s window')].filter(Boolean).join(' · ') : statusText(session);
-        const sound = this.settings.get_boolean('agents-notify-sound') ? (kind === 'completed' ? 'complete' : kind === 'error' ? 'dialog-error' : 'message-new-instant') : null;
-        // While Smart Live Activities show it in the notch, the notification is not a second banner.
-        const activities = this.extension.activities, quiet = Boolean(activities?.enabled && activities.typeEnabled('agent') && this.extension.activeIsland?.());
+        // While the notch shows it (its moment, or Smart Live Activities), the notification is not a second banner or sound.
+        const activities = this.extension.activities, moments = this.settings.get_boolean('agents-moments') && Boolean(this.extension.activeIsland?.());
+        const quiet = moments || Boolean(activities?.enabled && activities.typeEnabled('agent') && this.extension.activeIsland?.());
+        const sound = this.settings.get_boolean('agents-notify-sound') && !moments ? (kind === 'completed' ? 'complete' : kind === 'error' ? 'dialog-error' : 'message-new-instant') : null;
         this.extension.notifier?.send({title, body, icon: PROVIDERS[session.provider]?.icon ?? 'notchy-agent-symbolic', urgent: kind === 'waiting', sound, quiet,
             activate: () => { const target = this.window(session); if (target) Main.activateWindow(target); }});
     }
@@ -186,6 +252,28 @@ export class Agents extends Emitter {
         this.extension.store?.write('agents-sessions', {at: Date.now(), sessions: this.registry.list().filter(s => s.connected)});
         this.life.dispose(); this.events.clear(); this.listeners.clear();
     }
+}
+
+// Codex's newest session file: the newest dated folders, then the newest file in them.
+function codexSession(home) {
+    const children = (folder, type) => {
+        const out = [];
+        try {
+            const items = folder.enumerate_children('standard::name,standard::type,time::modified', Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
+            for (let info = items.next_file(null); info; info = items.next_file(null)) if (info.get_file_type() === type && !info.get_name().startsWith('.')) out.push(info);
+            items.close(null);
+        } catch { /* Missing: none. */ }
+        return out;
+    };
+    let folder = Gio.File.new_for_path(GLib.build_filenamev([home, 'sessions']));
+    for (let depth = 0; depth < 3; depth++) {
+        const names = children(folder, Gio.FileType.DIRECTORY).map(info => info.get_name()).sort();
+        if (!names.length) return null;
+        folder = folder.get_child(names.at(-1));
+    }
+    const files = children(folder, Gio.FileType.REGULAR).filter(info => info.get_name().endsWith('.jsonl'));
+    files.sort((a, b) => a.get_modification_date_time().to_unix() - b.get_modification_date_time().to_unix());
+    return files.length ? folder.get_child(files.at(-1).get_name()) : null;
 }
 
 // /proc/<pid>/stat field 22 is the process start time in clock ticks.

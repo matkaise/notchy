@@ -1,75 +1,51 @@
-import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
 import Graphene from 'gi://Graphene';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {box, label, gicon} from './widgets.js';
+import {agentGlyph, toolGlyph, clock} from './agentBubble.js';
 import {Lifetime} from '../lifecycle.js';
-import {PROVIDERS, stateText, viewState} from '../services/agentModel.js';
-import {_, N_, fmt, ngettext, duration, formatPercent} from '../i18n/core.js';
+import {PROVIDERS, PRIORITY, providerName, statusText, viewState, activityText} from '../services/agentModel.js';
+import {_, fmt, ngettext, duration, relativeTime, formatPercent} from '../i18n/core.js';
 
-// Ring colours per state (RGBA), as the indicators beside the notch draw them.
-const COLOR = {working: [0.42, 0.71, 1, 1], waiting: [1, 0.62, 0.04, 1], error: [1, 0.27, 0.23, 1], completed: [0.2, 0.78, 0.35, 1]};
-const RING = 64;
-// Rings per row: as many as stand beside the agent's symbol in the card's width.
-const PER_ROW = 3;
-const MARK = {waiting: '?', completed: '✓', error: '!'};
-// Short words under a ring (the card's rings are narrow).
-const SHORT = {working: N_('Working'), waiting: N_('Waiting'), idle: N_('Ready'), completed: N_('Done'), error: N_('Error')};
-const shortText = view => (SHORT[view] ? _(SHORT[view]) : stateText(view));
+// Rows visible before the list scrolls.
+const VISIBLE_ROWS = 4;
+// A limit's bar: green, amber from 60 %, red from 85 % (as Nosy Notch).
+const meterClass = used => (used >= 85 ? 'high' : used >= 60 ? 'mid' : 'low');
+const SPINS = new Set(['claude']);
 
-// An agent's card: a click on its indicator springs the notch open into it,
-// as the AirPods card does — the agent's symbol large on the left, each of
-// its sessions as a ring on the right (waiting, working, done but not seen
-// yet, quiet), its project and state below; more sessions wrap into rows, and
-// past about three rows those scroll. A click on a ring switches to
-// that session's window when it can be named for sure. A session that waits
-// for the user adds one line with two buttons, as the AirDrop question does;
-// Notchy answers nothing itself. With several agents a small pill of their
-// symbols at the foot switches between their cards.
+// The agent list: a click on an agent's indicator opens the notch into it,
+// as Nosy Notch's hover list — every session of every agent, the most urgent
+// first. A row: the agent's symbol in its state's colour, the project, a small
+// label naming the agent, what it does in colour (pulsing while it works) and,
+// below, what its tool works on in monospace (the masked line from the hook,
+// or the tool's name with „Befehle anzeigen“ off); the task's running time on
+// the right. A click switches to the session's window when it can be named
+// for sure; ✕ on a quiet row hides that session. Past four rows the list
+// scrolls. At its foot the 5-hour and weekly limits of Claude and Codex, as
+// bars; hovering one tells when it resets.
 //
-// The card follows the agent service: a state changing updates the rings in
-// place (the keyboard focus stays); only sessions coming or going rebuild it.
+// The list follows the agent service: states and times change in place (the
+// keyboard focus stays); sessions coming, going or reordering rebuild it.
 export function agentCard(island, provider) {
-    const agents = island.agents, life = new Lifetime(), rings = new Map();
-    const group = () => agents.providers().find(g => g.provider === provider) ?? null;
-    const sessionsOf = g => (g?.sessions ?? []).filter(s => s.connected);
-    const appIcon = () => agents.appIcon(provider) ?? gicon(PROVIDERS[provider]?.icon ?? 'notchy-agent-symbolic');
-    const root = box(true, {style_class: 'notchy-peek notchy-agent-card', reactive: true});
-    const title = label('', 'notchy-agent-card-title', {x_align: Clutter.ActorAlign.CENTER});
-    const sub = label('', 'notchy-agent-card-sub', {x_align: Clutter.ActorAlign.CENTER});
-    root.add_child(title); root.add_child(sub);
-    const body = box(false, {style_class: 'notchy-agent-card-body', x_expand: true});
-    const hero = new St.Icon({gicon: appIcon(), icon_size: 56, style_class: 'notchy-agent-card-hero', y_align: Clutter.ActorAlign.CENTER});
-    const rows = box(true, {style_class: 'notchy-agent-card-grid', x_expand: true});
-    const scroller = new St.ScrollView({style_class: 'notchy-scroll notchy-agent-card-scroll', x_expand: true, overlay_scrollbars: true});
-    scroller.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC); scroller.set_child(rows);
-    body.add_child(hero); body.add_child(scroller); root.add_child(body);
-    const ringButtons = () => rows.get_children().flatMap(row => row.get_children());
-    const rowAt = index => {
-        const at = Math.floor(index / PER_ROW);
-        if (at === rows.get_n_children()) rows.add_child(box(false, {style_class: 'notchy-agent-card-rings', x_expand: true, x_align: Clutter.ActorAlign.CENTER}));
-        return rows.get_child_at_index(at);
-    };
-    // The keyboard scrolls along: the focused ring's row stays in view.
-    const reveal = button => {
-        const row = button.get_parent(), adjustment = scroller.vadjustment, [, y] = row.get_position(), height = row.height;
-        if (y < adjustment.value) adjustment.value = y;
-        else if (y + height > adjustment.value + adjustment.page_size) adjustment.value = y + height - adjustment.page_size;
-    };
-    // Needs you: what it waits for and where to answer.
-    const ask = box(false, {style_class: 'notchy-agent-card-ask', visible: false});
-    const askText = label('', 'notchy-agent-card-ask-text', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-    askText.clutter_text.set_line_wrap(true); askText.clutter_text.ellipsize = 0;
-    const later = new St.Button({style_class: 'notchy-button notchy-pill-button', label: _('Later'), can_focus: true, y_align: Clutter.ActorAlign.CENTER});
-    const go = new St.Button({style_class: 'notchy-button notchy-pill-button notchy-agent-card-go', label: _('Go to Window'), can_focus: true, y_align: Clutter.ActorAlign.CENTER});
-    later.connect('clicked', () => island.close());
-    ask.add_child(askText); ask.add_child(later); ask.add_child(go);
-    root.add_child(ask);
-    // Several agents: their symbols in a pill, like the tab bar.
-    const pill = box(false, {style_class: 'notchy-agent-card-switch', x_align: Clutter.ActorAlign.CENTER, visible: false});
-    root.add_child(pill);
-    let waitingSession = null, layout = '';
+    const agents = island.agents, life = new Lifetime(), rows = new Map();
+    const sessionsNow = () => agents.providers().flatMap(group => group.sessions.filter(s => s.connected))
+        .sort((a, b) => PRIORITY[viewState(b)] - PRIORITY[viewState(a)] || b.lastActivity - a.lastActivity);
+    const keyOf = session => `${session.provider}\u0000${session.id}`;
+    const root = box(true, {style_class: 'notchy-peek notchy-agent-list', reactive: true});
+    const head = box(false, {style_class: 'notchy-agent-list-head'});
+    const title = label(_('Agents'), 'notchy-agent-list-title', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+    const count = label('', 'notchy-agent-list-count', {y_align: Clutter.ActorAlign.CENTER});
+    head.add_child(title); head.add_child(count); root.add_child(head);
+    const list = box(true, {style_class: 'notchy-agent-list-rows', x_expand: true});
+    const scroller = new St.ScrollView({style_class: 'notchy-scroll notchy-agent-list-scroll', x_expand: true, overlay_scrollbars: true});
+    scroller.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC); scroller.set_child(list);
+    root.add_child(scroller);
+    const more = label('', 'notchy-agent-list-more', {x_align: Clutter.ActorAlign.CENTER, visible: false});
+    root.add_child(more);
+    const limits = box(true, {style_class: 'notchy-agent-limits', visible: false});
+    root.add_child(limits);
+    let layout = '', meters = [];
 
     const switchTo = session => {
         const window = session ? agents.window(session) : null;
@@ -77,144 +53,173 @@ export function agentCard(island, provider) {
         agents.markSeen(session.provider, session.id);
         island.close(); Main.activateWindow(window);
     };
-    go.connect('clicked', () => switchTo(waitingSession));
+    // The keyboard scrolls along: the focused row stays in view.
+    const reveal = actor => {
+        const adjustment = scroller.vadjustment, [, y] = actor.get_position(), height = actor.height;
+        if (y < adjustment.value) adjustment.value = y;
+        else if (y + height > adjustment.value + adjustment.page_size) adjustment.value = y + height - adjustment.page_size;
+    };
 
-    const makeRing = () => {
-        const button = new St.Button({style_class: 'notchy-agent-card-session', can_focus: true, track_hover: true, x_align: Clutter.ActorAlign.CENTER});
-        const column = box(true, {x_align: Clutter.ActorAlign.CENTER});
-        const stack = new St.Widget({layout_manager: new Clutter.BinLayout(), width: RING, height: RING, x_align: Clutter.ActorAlign.CENTER});
-        const area = new St.DrawingArea({width: RING, height: RING});
-        // Working without a reported progress: a short arc turning (a transform, no repaints).
-        const spinner = new St.DrawingArea({width: RING, height: RING, visible: false, pivot_point: new Graphene.Point({x: 0.5, y: 0.5})});
-        const symbol = new St.Icon({icon_size: 22, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
-        const mark = label('', 'notchy-agent-card-mark', {x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
-        for (const child of [area, spinner, symbol, mark]) stack.add_child(child);
-        const project = label('', 'notchy-agent-card-project', {x_align: Clutter.ActorAlign.CENTER});
-        const state = label('', 'notchy-agent-card-state', {x_align: Clutter.ActorAlign.CENTER});
-        column.add_child(stack); column.add_child(project); column.add_child(state);
-        button.set_child(column);
-        const ring = {button, area, spinner, symbol, mark, project, state, session: null, view: 'idle', spinning: false};
-        area.connect('repaint', () => {
-            const cr = area.get_context(), [w, h] = area.get_surface_size(), r = Math.min(w, h) / 2 - 2.5;
-            try {
-                cr.setLineWidth(3); cr.setSourceRGBA(1, 1, 1, 0.14); cr.arc(w / 2, h / 2, r, 0, 2 * Math.PI); cr.stroke();
-                const color = COLOR[ring.view]; if (!color) return;
-                cr.setSourceRGBA(...color); cr.setLineCap(Cairo.LineCap.ROUND);
-                const progress = ring.view === 'working' ? ring.session?.progress : null;
-                if (ring.view === 'working' && (progress === null || progress === undefined)) return;
-                cr.arc(w / 2, h / 2, r, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * (ring.view === 'working' ? Math.max(0.02, progress) : 1)); cr.stroke();
-            } finally { cr.$dispose(); }
-        });
-        spinner.connect('repaint', () => {
-            const cr = spinner.get_context(), [w, h] = spinner.get_surface_size(), r = Math.min(w, h) / 2 - 2.5;
-            try { cr.setLineWidth(3); cr.setLineCap(Cairo.LineCap.ROUND); cr.setSourceRGBA(...COLOR.working); cr.arc(w / 2, h / 2, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 0.45); cr.stroke(); } finally { cr.$dispose(); }
-        });
-        ring.spin = () => {
-            if (!ring.spinning || !spinner.mapped || spinner.get_transition('rotation-angle-z')) return;
-            spinner.rotation_angle_z = 0;
-            spinner.ease({rotation_angle_z: 360, duration: 1400, mode: Clutter.AnimationMode.LINEAR, repeatCount: -1});
-        };
-        life.connect(spinner, 'notify::mapped', () => ring.spin());
-        button.connect('clicked', () => switchTo(ring.session));
+    const makeRow = () => {
+        const button = new St.Button({style_class: 'notchy-agent-row', can_focus: true, track_hover: true, x_expand: true});
+        const line = box(false, {x_expand: true, style_class: 'notchy-agent-row-box'});
+        const mark = new St.Widget({layout_manager: new Clutter.BinLayout(), width: 22, height: 22, y_align: Clutter.ActorAlign.CENTER});
+        const glyph = new St.Icon({icon_size: 18, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, pivot_point: new Graphene.Point({x: 0.5, y: 0.5})});
+        const unseen = new St.Widget({style_class: 'notchy-agent-unseen small', x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.START, visible: false});
+        mark.add_child(glyph); mark.add_child(unseen);
+        const text = box(true, {x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'notchy-agent-row-text'});
+        const top = box(false, {style_class: 'notchy-agent-row-top'});
+        const project = label('', 'notchy-agent-row-project', {y_align: Clutter.ActorAlign.CENTER});
+        const tag = label('', 'notchy-agent-tag', {y_align: Clutter.ActorAlign.CENTER});
+        const state = label('', 'notchy-agent-row-state', {y_align: Clutter.ActorAlign.CENTER});
+        top.add_child(project); top.add_child(tag); top.add_child(state);
+        const bottom = box(false, {style_class: 'notchy-agent-row-detail'});
+        const tool = new St.Icon({icon_size: 11, style_class: 'notchy-agent-row-tool', y_align: Clutter.ActorAlign.CENTER});
+        const detail = label('', 'notchy-agent-row-command', {y_align: Clutter.ActorAlign.CENTER, x_expand: true});
+        detail.clutter_text.ellipsize = 2; // The middle of a long command goes first (Pango.EllipsizeMode.MIDDLE).
+        bottom.add_child(tool); bottom.add_child(detail);
+        text.add_child(top); text.add_child(bottom);
+        const time = label('', 'notchy-agent-row-time', {y_align: Clutter.ActorAlign.CENTER});
+        const close = new St.Button({style_class: 'notchy-agent-row-close', can_focus: false, y_align: Clutter.ActorAlign.CENTER, visible: false, accessible_name: _('Hide Session'),
+            child: new St.Icon({gicon: gicon('window-close-symbolic'), icon_size: 9})});
+        for (const child of [mark, text, time, close]) line.add_child(child);
+        button.set_child(line);
+        const row = {button, glyph, unseen, project, tag, state, bottom, tool, detail, time, close, session: null, view: '', motion: ''};
+        button.connect('clicked', () => switchTo(row.session));
+        close.connect('clicked', () => { const s = row.session; if (s) agents.end(s.provider, s.id); });
+        button.connect('notify::hover', () => updateRow(row, row.session));
         button.connect('key-focus-in', () => reveal(button));
-        return ring;
+        return row;
     };
-    const time = session => {
-        const now = Date.now(), view = viewState(session);
-        if (view === 'completed') return session.unseen ? _('new') : duration(now - (session.completedAt || session.lastEvent || now));
-        if (view === 'waiting') return duration(now - session.lastActivity);
-        if (view === 'working') return duration(now - session.started);
-        return duration(now - (session.lastEvent || session.started));
+    // The symbol's motion, as on the indicator: turning, breathing, still.
+    const move = (row, motion) => {
+        if (row.motion === motion && (row.glyph.mapped ? row.moving : true)) return;
+        row.motion = motion; row.moving = false;
+        row.glyph.remove_all_transitions(); row.glyph.rotation_angle_z = 0; row.glyph.scale_x = row.glyph.scale_y = 1;
+        row.state.remove_all_transitions(); row.state.opacity = 255;
+        if (!motion || !row.glyph.mapped) return;
+        row.moving = true;
+        if (motion === 'spin') row.glyph.ease({rotation_angle_z: 360, duration: 1100, mode: Clutter.AnimationMode.LINEAR, repeatCount: -1});
+        else row.glyph.ease({scale_x: 0.84, scale_y: 0.84, duration: 700, mode: Clutter.AnimationMode.EASE_IN_OUT_SINE, repeatCount: -1, autoReverse: true});
+        // The state's word pulses while the agent works (Nosy Notch's shimmer).
+        row.state.ease({opacity: 140, duration: 900, mode: Clutter.AnimationMode.EASE_IN_OUT_SINE, repeatCount: -1, autoReverse: true});
     };
-    const updateRing = (ring, session) => {
-        ring.session = session;
-        const view = viewState(session), progress = view === 'working' ? session.progress : null, known = progress !== null && progress !== undefined;
-        ring.view = view;
-        const name = session.project || fmt(_('Session %s'), session.id.length > 18 ? session.id.slice(0, 8) : session.id);
-        if (ring.project.text !== name) ring.project.text = name;
-        const words = `${shortText(view)} · ${time(session)}`;
-        if (ring.state.text !== words) ring.state.text = words;
-        ring.button.set_style_class_name(`notchy-agent-card-session ${view}`);
-        ring.button.accessible_name = `${name}: ${stateText(view)}`;
-        // In the middle: ?, ✓ or !, a real percentage, else the agent's symbol (dim while quiet).
-        const mark = MARK[view] ?? (known ? formatPercent(Math.round(progress * 100)) : '');
-        ring.mark.text = mark; ring.mark.visible = Boolean(mark);
-        ring.mark.set_style_class_name(`notchy-agent-card-mark ${view}${known ? ' value' : ''}`);
-        ring.symbol.visible = !mark;
-        if (!mark && ring.symbol.notchyIcon !== provider) { ring.symbol.notchyIcon = provider; ring.symbol.gicon = appIcon(); }
-        ring.symbol.opacity = view === 'idle' ? 110 : 255;
-        const spinning = view === 'working' && !known;
-        if (spinning !== ring.spinning) { ring.spinning = spinning; ring.spinner.visible = spinning; ring.spinner.remove_all_transitions(); ring.spinner.rotation_angle_z = 0; ring.spin(); }
-        ring.area.queue_repaint();
+    // Below the project: what the tool works on, what it waits for, how the task went.
+    const detailOf = (session, view) => {
+        if (view === 'working' && session.tool) return session.detail || session.tool;
+        if (view === 'waiting') return session.detail || statusText(session) || _('Needs you');
+        if (view === 'completed') {
+            const parts = [];
+            if (session.toolCount) parts.push(fmt(ngettext('%d tool call', '%d tool calls', session.toolCount), session.toolCount));
+            if (session.lastTurnMs >= 1000) parts.push(clock(session.lastTurnMs));
+            return parts.join(' · ');
+        }
+        if (view === 'error') return statusText(session);
+        return statusText(session);
     };
-    const summary = g => {
-        const sessions = sessionsOf(g), waiting = sessions.filter(s => viewState(s) === 'waiting').length, done = sessions.filter(s => viewState(s) === 'completed').length;
-        const parts = [fmt(ngettext('%d session', '%d sessions', sessions.length), sessions.length)];
-        if (waiting) parts.push(fmt(ngettext('%d waits for you', '%d wait for you', waiting), waiting));
-        else if (done) parts.push(fmt(ngettext('%d finished', '%d finished', done), done));
-        return parts.join(' · ');
+    const updateRow = (row, session) => {
+        if (!session) return;
+        row.session = session;
+        const now = Date.now(), view = viewState(session), name = session.project || providerName(session.provider);
+        row.view = view;
+        row.button.set_style_class_name(`notchy-agent-row ${view}`);
+        row.glyph.set_style_class_name(`notchy-agent-glyph ${session.provider} ${view}`);
+        if (row.glyph.notchyProvider !== session.provider) { row.glyph.notchyProvider = session.provider; row.glyph.gicon = agentGlyph(session.provider); }
+        row.unseen.visible = view === 'completed' && session.unseen;
+        if (row.project.text !== name) row.project.text = name;
+        row.tag.text = PROVIDERS[session.provider]?.name.split(' ')[0] ?? providerName(session.provider);
+        row.tag.set_style_class_name(`notchy-agent-tag ${session.provider}`);
+        row.state.text = activityText(session);
+        row.state.set_style_class_name(`notchy-agent-row-state ${view} ${session.provider}`);
+        const detail = detailOf(session, view);
+        row.detail.text = detail; row.bottom.visible = Boolean(detail);
+        const tool = (view === 'working' || view === 'waiting') && session.tool;
+        row.tool.visible = Boolean(tool);
+        if (tool && row.tool.notchyTool !== session.tool) { row.tool.notchyTool = session.tool; row.tool.gicon = toolGlyph(session.tool); }
+        row.time.text = view === 'working' ? clock(now - (session.turnStarted || session.lastActivity))
+            : view === 'waiting' ? clock(now - session.lastActivity)
+                : view === 'completed' && session.completedAt ? relativeTime(session.completedAt, now) : '';
+        // ✕ on a quiet row under the pointer: working or waiting ones stay.
+        const closable = !['working', 'waiting'].includes(view);
+        row.close.visible = closable && row.button.hover; row.time.visible = !row.close.visible;
+        row.button.accessible_name = [name, providerName(session.provider), activityText(session), detail].filter(Boolean).join(', ');
+        move(row, view === 'working' ? (SPINS.has(session.provider) && session.tool ? 'spin' : 'breathe') : '');
     };
-    const askFor = session => {
-        const name = session.project || PROVIDERS[provider]?.name || provider, window = agents.window(session);
-        const where = window ? _('confirm in its window') : _('answer where it runs');
-        if (session.note === 'permission' && session.tool) return fmt(_('%1$s wants to run %2$s – %3$s.'), name, session.tool, where);
-        if (session.note === 'question') return fmt(_('%1$s has a question for you – %2$s.'), name, where);
-        return fmt(_('%1$s waits for you – %2$s.'), name, where);
+
+    // The limits at the foot: per agent its 5-hour and weekly window.
+    const meter = (labelText, window) => {
+        const actor = box(false, {style_class: 'notchy-agent-meter', x_expand: true, reactive: true, track_hover: true});
+        const name = label(labelText, 'notchy-agent-meter-label', {y_align: Clutter.ActorAlign.CENTER});
+        const track = new St.Widget({style_class: 'notchy-agent-meter-track', x_expand: true, y_align: Clutter.ActorAlign.CENTER, layout_manager: new Clutter.BinLayout()});
+        const fill = new St.Widget({style_class: 'notchy-agent-meter-fill', x_align: Clutter.ActorAlign.START, x_expand: false});
+        track.add_child(fill);
+        const value = label('', 'notchy-agent-meter-value', {y_align: Clutter.ActorAlign.CENTER});
+        actor.add_child(name); actor.add_child(track); actor.add_child(value);
+        const m = {actor, track, fill, value, window};
+        const draw = () => {
+            const w = m.window;
+            fill.visible = Boolean(w);
+            // (Sizes only on the stage; its width arriving draws it again.)
+            if (w) { fill.set_style_class_name(`notchy-agent-meter-fill ${meterClass(w.used)}`); if (track.get_stage()) fill.width = Math.max(4, Math.round(track.width * w.used / 100)); }
+            // Hovering a bar tells when it resets: "↻ 2 h 5 min".
+            value.text = !w ? '–' : actor.get_stage() && actor.hover && w.resetsAt ? `↻ ${duration(w.resetsAt * 1000 - Date.now())}` : formatPercent(Math.round(w.used));
+            actor.accessible_name = `${labelText}: ${value.text}`;
+        };
+        m.draw = draw;
+        track.connect('notify::width', draw); actor.connect('notify::hover', draw);
+        draw();
+        return m;
     };
+    const drawLimits = usage => {
+        limits.destroy_all_children(); meters = [];
+        for (const entry of usage) {
+            const row = box(false, {style_class: 'notchy-agent-limit-row'});
+            const tag = label(PROVIDERS[entry.provider]?.name.split(' ')[0] ?? entry.name, `notchy-agent-tag ${entry.provider}`, {y_align: Clutter.ActorAlign.CENTER});
+            const tagBin = new St.Bin({child: tag, style_class: 'notchy-agent-limit-name', x_align: Clutter.ActorAlign.START});
+            row.add_child(tagBin);
+            for (const [text, window] of [[_('5 h'), entry.fiveHour], [_('Week'), entry.week]]) { const m = meter(text, window); meters.push(m); row.add_child(m.actor); }
+            limits.add_child(row);
+        }
+        limits.visible = usage.length > 0;
+    };
+
     const update = () => {
         if (life.closed) return;
-        const g = group(), sessions = sessionsOf(g), all = agents.providers().filter(x => sessionsOf(x).length);
-        // Gone: the card closes; sessions or agents coming or going: it is built anew.
-        if (!sessions.length) { life.later(0, () => { if (island.peekKind === 'agent' && island.agentCardProvider === provider) island.close(); }); return; }
-        const key = `${sessions.map(s => `${s.id}:${s.generation}`).join('|')}#${all.map(x => x.provider).join('|')}`;
-        if (layout && key !== layout) { life.later(0, () => { if (island.peekKind === 'agent' && island.agentCardProvider === provider) island.showAgentCard(provider, {focus: false}); }); return; }
+        const sessions = sessionsNow(), usage = agents.usageRows();
+        // Gone: the list closes; sessions coming, going or reordering, or the limits appearing: it is built anew.
+        if (!sessions.length) { life.later(0, () => { if (island.peekKind === 'agent' && island.agentCard?.actor === root) island.close(); }); return; }
+        const key = `${sessions.map(s => `${keyOf(s)}:${s.generation}`).join('|')}#${usage.map(u => u.provider).join('|')}`;
+        if (layout && key !== layout) { life.later(0, () => { if (island.peekKind === 'agent' && island.agentCard?.actor === root) island.showAgentCard(provider, {focus: false}); }); return; }
+        const first = !layout;
         layout = key;
-        title.text = g.name; sub.text = summary(g);
-        sessions.forEach((session, index) => {
-            let ring = rings.get(session.id);
-            if (!ring) { ring = makeRing(); rings.set(session.id, ring); rowAt(index).add_child(ring.button); }
-            updateRing(ring, session);
+        sessions.forEach(session => {
+            let row = rows.get(keyOf(session));
+            if (!row) { row = makeRow(); rows.set(keyOf(session), row); list.add_child(row.button); }
+            updateRow(row, session);
         });
-        waitingSession = sessions.find(s => viewState(s) === 'waiting') ?? null;
-        ask.visible = Boolean(waitingSession);
-        if (waitingSession) { askText.text = askFor(waitingSession); go.visible = Boolean(agents.window(waitingSession)); }
-        if (!pill.get_n_children() && all.length > 1) {
-            for (const other of all) {
-                const icon = new St.Icon({gicon: agents.appIcon(other.provider) ?? gicon(PROVIDERS[other.provider]?.icon ?? 'notchy-agent-symbolic'), icon_size: 14});
-                const dot = new St.Widget({style_class: `notchy-agent-card-dot ${other.state}`, x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.START});
-                const content = new St.Widget({layout_manager: new Clutter.BinLayout(), width: 46, height: 28});
-                const center = new St.Bin({child: icon, x_expand: true, y_expand: true});
-                content.add_child(center); content.add_child(dot);
-                const b = new St.Button({style_class: `notchy-tab${other.provider === provider ? ' active' : ''}`, child: content, can_focus: true, accessible_name: `${other.name}: ${stateText(other.state)}`});
-                b.notchyDot = dot; b.notchyProvider = other.provider;
-                b.connect('clicked', () => { if (other.provider !== provider) island.showAgentCard(other.provider); });
-                pill.add_child(b);
-            }
-        }
-        for (const b of pill.get_children()) { const other = all.find(x => x.provider === b.notchyProvider); if (other) b.notchyDot.set_style_class_name(`notchy-agent-card-dot ${other.state}`); }
-        pill.visible = all.length > 1;
+        count.text = fmt(ngettext('%d session', '%d sessions', sessions.length), sessions.length);
+        more.text = sessions.length > VISIBLE_ROWS ? fmt(ngettext('%d more · scroll', '%d more · scroll', sessions.length - VISIBLE_ROWS), sessions.length - VISIBLE_ROWS) : '';
+        more.visible = sessions.length > VISIBLE_ROWS;
+        if (first) drawLimits(usage);
+        else for (const [i, entry] of usage.entries()) { if (meters[2 * i]) { meters[2 * i].window = entry.fiveHour; meters[2 * i + 1].window = entry.week; meters[2 * i].draw(); meters[2 * i + 1].draw(); } }
     };
     life.cleanups.push(agents.subscribe(update));
-    // Running times move on while the card is open.
-    life.every(1000, () => { for (const ring of rings.values()) if (ring.session) updateRing(ring, ring.session); });
-    root.connect('destroy', () => life.dispose());
+    // Running times move on while the list is open; the glyphs start moving once on screen.
+    life.every(1000, () => { for (const row of rows.values()) if (row.session) updateRow(row, row.session); for (const m of meters) m.draw(); });
+    life.connect(root, 'notify::mapped', () => { if (root.mapped) for (const row of rows.values()) { row.motion = null; updateRow(row, row.session); } });
+    root.connect('destroy', () => { for (const row of rows.values()) { row.glyph.remove_all_transitions(); row.state.remove_all_transitions(); } life.dispose(); });
     update();
-    // Arrows move between the rings, up and down by a row; Enter switches; Esc closes (the island).
+    // Up and Down move between the rows, Enter switches, Esc closes (the island).
     island.views.keyPress = event => {
-        const key = event.get_key_symbol(), buttons = [...ringButtons(), ...(ask.visible ? [later, go].filter(b => b.visible) : []), ...pill.get_children()];
+        const key = event.get_key_symbol(), buttons = list.get_children();
+        if (key !== Clutter.KEY_Down && key !== Clutter.KEY_Up) return Clutter.EVENT_PROPAGATE;
         const at = buttons.findIndex(b => b.has_key_focus());
-        if (key === Clutter.KEY_Right || key === Clutter.KEY_Left) {
-            const next = buttons[Math.max(0, Math.min(buttons.length - 1, (at < 0 ? -1 : at) + (key === Clutter.KEY_Right ? 1 : -1)))];
-            next?.grab_key_focus(); return Clutter.EVENT_STOP;
-        }
-        if (key === Clutter.KEY_Down || key === Clutter.KEY_Up) {
-            const count = ringButtons().length, target = (at < 0 ? 0 : at) + (key === Clutter.KEY_Down ? PER_ROW : -PER_ROW);
-            if (at < count && target >= 0) buttons[Math.min(target, count - 1)]?.grab_key_focus();
-            return Clutter.EVENT_STOP;
-        }
-        return Clutter.EVENT_PROPAGATE;
+        buttons[Math.max(0, Math.min(buttons.length - 1, (at < 0 ? -1 : at) + (key === Clutter.KEY_Down ? 1 : -1)))]?.grab_key_focus();
+        return Clutter.EVENT_STOP;
     };
-    return {actor: root, provider, rings, ask, go, pill,
-        // The most urgent session takes the keyboard (the rings are sorted by urgency).
-        focus: () => ringButtons()[0]?.grab_key_focus()};
+    return {actor: root, provider, rows, limits, scroller, more, meters: () => meters,
+        // Everything the list showed has been seen.
+        seen: () => { for (const row of rows.values()) if (row.session?.unseen) agents.markSeen(row.session.provider, row.session.id); },
+        // The clicked agent's most urgent session takes the keyboard.
+        focus: () => ([...rows.values()].find(row => row.session?.provider === provider) ?? [...rows.values()][0])?.button.grab_key_focus()};
 }

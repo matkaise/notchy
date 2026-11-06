@@ -4,10 +4,13 @@
 An agent runs this for its lifecycle hooks (session start, prompt, tool use,
 approval, stop, session end) with the hook's JSON on stdin. The adapter keeps
 only what a status needs — the event's name, the session or conversation id,
-a tool's name, the project folder's name — adds the agent's process id (so
-Notchy notices a crashed agent) and hands it to Notchy over the session bus
-(org.gnome.Shell.Extensions.Notchy.AgentHook). Prompts, tool inputs, answers,
-transcripts and file contents are never read further, kept or sent.
+a tool's name, the project folder's name, and what the tool works on as one
+short line (the command's first line, a file's name, a search pattern, a web
+address; at most 120 characters, recognisable secrets masked) — adds the
+agent's process id (so Notchy notices a crashed agent) and hands it to Notchy
+over the session bus (org.gnome.Shell.Extensions.Notchy.AgentHook). Prompts,
+answers, transcripts and file contents are never read further, kept or sent;
+Notchy drops the line too when „Befehle anzeigen“ is off.
 
 It never slows the agent down or changes what it does: it answers at once
 (Antigravity's hooks expect a JSON object, the others nothing) and talks to
@@ -19,6 +22,8 @@ NOTCHY_AGENT_HOOK_DRYRUN=1 prints the message instead of sending it (tests).
 """
 import json
 import os
+import re
+import shlex
 import sys
 import time
 
@@ -30,6 +35,70 @@ WRAPPERS = {'sh', 'bash', 'dash', 'zsh', 'fish', 'ksh', 'env', 'timeout', 'nice'
 MAX_INPUT = 1024 * 1024
 # The payload fields kept (everything else is dropped unread).
 NOTIFICATION_TYPES = {'permission_prompt', 'idle_prompt', 'elicitation_dialog', 'auth_success', 'elicitation_complete', 'elicitation_response'}
+# Events whose tool input gives the one line Notchy shows.
+DETAIL_EVENTS = {'PreToolUse', 'PermissionRequest'}
+DETAIL_MAX = 120
+MASK = '•••'
+# What looks like a secret in a command line: credentials in URLs, an
+# authorization header, a value after a key-, token- or password-like name,
+# well-known key prefixes and any long run of key-like characters.
+SECRETS = [
+    (re.compile(r'(://)[^/\s:@]+:[^/\s@]+@'), r'\1' + MASK + '@'),
+    (re.compile(r'(?i)(authorization:\s*(?:bearer|basic|token)?\s*)[^\s"\']+'), r'\1' + MASK),
+    (re.compile(r'(?i)(\b(?:bearer|basic)\s+)[A-Za-z0-9._~+/=-]{8,}'), r'\1' + MASK),
+    (re.compile(r'(?i)([\w.-]*(?:token|secret|passw(?:or)?d|pwd|api[_-]?key|apikey|access[_-]?key|private[_-]?key|credentials?)[\w.-]*)(\s*[=:]\s*|\s+)("[^"]*"|\'[^\']*\'|[^\s"\']+)'), r'\1\2' + MASK),
+    (re.compile(r'\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}|\b(?:ghp|gho|ghu|ghs|ghr|glpat|xox[abprs])[_-][A-Za-z0-9_-]{8,}|\bgithub_pat_[A-Za-z0-9_]{8,}|\bAKIA[A-Z0-9]{12,}'), MASK),
+    (re.compile(r'(?<![\w/.-])[A-Za-z0-9+/_-]{32,}={0,2}(?![\w/.-])'), MASK),
+]
+PATCH_FILE = re.compile(r'^\*\*\* (?:Add|Update|Delete) File: (.+)$', re.M)
+
+
+def mask(line):
+    for pattern, replacement in SECRETS:
+        line = pattern.sub(replacement, line)
+    return line
+
+
+def one_line(value):
+    """The first non-empty line, without control characters, shortened."""
+    for line in value.splitlines():
+        line = re.sub(r'[\x00-\x1f\x7f]+', ' ', line).strip()
+        if line:
+            return line
+    return ''
+
+
+def detail(tool, data):
+    """What a tool works on, as the one line Notchy shows — from the keys
+    Claude Code, Codex and MCP tools use, never the whole input."""
+    if not isinstance(data, dict):
+        return ''
+    command = data.get('command', data.get('cmd'))
+    if isinstance(command, list) and all(isinstance(part, str) for part in command):
+        # Codex runs ['bash', '-lc', 'the command']: the command itself.
+        command = command[-1] if len(command) >= 3 and command[-2] in ('-c', '-lc') else shlex.join(command)
+    if isinstance(command, str) and command.strip():
+        line = one_line(command)
+    elif isinstance(data.get('input'), str) and PATCH_FILE.search(data['input']):
+        names = [os.path.basename(name.strip()) for name in PATCH_FILE.findall(data['input'])]
+        line = ', '.join(dict.fromkeys(names))
+    else:
+        # A file first, then a search, an address or a subagent's short description;
+        # a folder last (Grep and Glob search in one). A prompt is never shown.
+        line = ''
+        for key in ('file_path', 'notebook_path', 'pattern', 'query', 'url', 'description', 'path'):
+            value = data.get(key)
+            if not isinstance(value, str) or not value.strip():
+                continue
+            if key in ('file_path', 'notebook_path', 'path'):
+                line = os.path.basename(value.rstrip('/')) or value
+            else:
+                line = one_line(value)
+            if key == 'url':
+                line = re.sub(r'^https?://', '', line).split('?')[0]
+            break
+    line = mask(line)
+    return line if len(line) <= DETAIL_MAX else line[:DETAIL_MAX - 1].rstrip() + '…'
 
 
 def text(value, limit):
@@ -54,6 +123,10 @@ def reduce(payload):
     out = {'hook_event_name': name, 'session_id': session, 'project': os.path.basename(folder.rstrip('/'))[:60]}
     if isinstance(tool, str):
         out['tool_name'] = tool[:40]
+        if name in DETAIL_EVENTS:
+            line = detail(tool, payload.get('tool_input'))
+            if line:
+                out['detail'] = line
     if payload.get('notification_type') in NOTIFICATION_TYPES:
         out['notification_type'] = payload['notification_type']
     if isinstance(payload.get('fullyIdle'), bool):

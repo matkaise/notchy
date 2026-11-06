@@ -15,6 +15,7 @@ import {AgentIndicators} from './agentBubble.js';
 import {ShelfBubble} from './shelfBubble.js';
 import {compactParts, entryTicks} from './activityViews.js';
 import {agentCard} from './agentCard.js';
+import {agentMoment} from './agentMoment.js';
 import {SideIndicators} from './sideIndicators.js';
 import {Waveform} from './waveform.js';
 import {box, label, icon, gicon, button} from './widgets.js';
@@ -35,7 +36,7 @@ export const TAB_WIDTH = 46, TAB_HEIGHT = 30, TAB_INSET = 3, TABBAR_HEIGHT = 50;
 const TOP_GAP = 8, RADIUS = 30, SLIDE = 24;
 // AirPods arriving: the pill before the card, the card, the pill after it; leaving.
 const AIRPODS_PILL = 900, AIRPODS_CARD = 4200, AIRPODS_AFTER = 1800, AIRPODS_GONE = 2400;
-const WIDTH = {search: 620, drop: 460, notification: 440, snap: 560, agent: 460};
+const WIDTH = {search: 620, drop: 460, notification: 440, snap: 560, agent: 460, 'agent-moment': 460};
 const LIQUID_INSET = 3, FADE = 70;
 // Settings that change what an opened tab shows (see the settings handler).
 const PAGE_KEYS = new Set(['style', 'glass-level', 'width', 'media-enabled', 'media-waveform', 'airplay-enabled', 'clipboard-enabled', 'airpods-battery-threshold']);
@@ -231,7 +232,10 @@ export class Island {
         // Indicators beside the capsule: connected AirPods and AI agents.
         this.sides = new SideIndicators(this);
         if (this.airpods) this.airpodsBubble = new AirPodsBubble(this);
-        if (this.agents) this.agentIndicators = new AgentIndicators(this);
+        if (this.agents) {
+            this.agentIndicators = new AgentIndicators(this);
+            this.life.cleanups.push(this.agents.onEvent(event => this.agentMoment(event)));
+        }
         this.shelfBubble = new ShelfBubble(this);
         this.applyStyle(); this.updateCompact(); this.position(); this.syncVisibility(); this.syncAirDrop();
     }
@@ -570,8 +574,8 @@ export class Island {
         this.syncTabs(); this.syncPin();
     }
     close(immediate = false) {
-        // A shown agent card: what its agent finished has been seen.
-        if (this.peekKind === 'agent') this.agents?.markSeen(this.agentCardProvider);
+        // The agent list shown: what it showed finished has been seen.
+        if (this.peekKind === 'agent') this.agentCard?.seen?.();
         // Folding an AirDrop question away is an answer: no.
         if (this.peekKind === 'airdrop-ask') {
             // Answering changes the services, which sync the island again: not while it folds.
@@ -629,17 +633,35 @@ export class Island {
         if (!this.expanded && focus?.type === 'agent' && focus.members[0]?.provider && this.showAgentCard(focus.members[0].provider)) return;
         this.toggle();
     }
-    // An agent's card (src/ui/agentCard.js), springing out of the notch like
-    // the AirPods card; a click on the agent's indicator opens it.
+    // The agent list (src/ui/agentCard.js), springing out of the notch like
+    // the AirPods card; a click on an agent's indicator opens it there.
     showAgentCard(provider, {focus = true} = {}) {
         if (!this.agents || this.life.closed) return false;
         if (this.expanded && !this.peeking) this.close(true);
-        // Moving on to another agent's card: the one shown has been seen.
-        if (this.peekKind === 'agent' && this.agentCardProvider !== provider) this.agents.markSeen(this.agentCardProvider);
         let card = null;
         if (!this.peek('agent', 0, () => (card = agentCard(this, provider)))) return false;
         this.agentCardProvider = provider; this.agentCard = card;
         if (focus) { this.actor.grab_key_focus(); card.focus(); }
+        return true;
+    }
+    // An agent that needs you, finished or failed opens the notch a moment
+    // (src/ui/agentMoment.js) — not while you look at its window, never over a
+    // transfer question, a share, a snap layout or the agent list; one that
+    // needs you comes over an open tab too.
+    agentMoment(event) {
+        const session = event.session, kind = event.type === 'appeared' ? session?.task : event.type;
+        if (!session || !['waiting', 'completed', 'error'].includes(kind) || this.life.closed || !this.settings.get_boolean('agents-moments')) return false;
+        // One notch tells it: the active one (with several monitors).
+        if (this.extension?.activeIsland && this.extension.activeIsland() !== this) return false;
+        if (!this.agents.providerEnabled(session.provider) || this.agents.focused(session)) return false;
+        if (['airdrop-ask', 'airdrop', 'receive', 'snap', 'agent'].includes(this.peekKind) || this.dropActive) return false;
+        if (this.expanded && !this.peeking) { if (kind !== 'waiting') return false; this.close(true); }
+        let view = null;
+        if (!this.peek('agent-moment', kind === 'waiting' ? 0 : kind === 'completed' ? 6000 : 8000, () => (view = agentMoment(this, kind, session)))) return false;
+        this.agentMomentView = view;
+        if (kind === 'waiting' && this.settings.get_boolean('agents-moment-sound')) {
+            try { global.display.get_sound_player().play_from_theme('message-new-instant', _('An agent needs you'), null); } catch { /* No sound theme. */ }
+        }
         return true;
     }
     // Shortcuts and clock clicks: hover never takes the keyboard from an app,
@@ -650,7 +672,7 @@ export class Island {
         if (this.expanded && !this.views.focusEntry?.has_key_focus?.() && !this.views.focusEntry?.clutter_text?.has_key_focus()) this.actor.grab_key_focus();
     }
     cancelCollapse() { this.life.cancel(this.collapseTimeout); this.collapseTimeout = 0; }
-    scheduleCollapse() { this.cancelCollapse(); if (this.pinned || !this.expanded || this.page === 'search' || ['snap', 'airdrop', 'airdrop-ask', 'receive'].includes(this.peekKind) || (this.nativeShelf && this.companion.shelfHeld) || this.views.menu?.isOpen) return;
+    scheduleCollapse() { this.cancelCollapse(); if (this.pinned || !this.expanded || this.page === 'search' || (['snap', 'airdrop', 'airdrop-ask', 'receive'].includes(this.peekKind) || (this.peekKind === 'agent-moment' && this.peekView?.waiting)) || (this.nativeShelf && this.companion.shelfHeld) || this.views.menu?.isOpen) return;
         this.collapseTimeout = this.life.later(this.settings.get_int('collapse-delay'), () => { this.collapseTimeout = 0; if (!this.hovered && !this.pinned && !(this.nativeShelf && this.companion.shelfHeld) && !this.views.menu?.isOpen) this.close(); }); }
 
     // Live activities in the capsule: cover and waveform frame the clock;

@@ -457,7 +457,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
     // agent's own configuration changes without a click and a confirmation.
     agentsPage(window, settings, page, group, toggle, number) {
         const agents = page(_('Agents'), 'system-run-symbolic');
-        const main = group(agents, _('Agents Beside the Notch'), _('Claude Code, Codex and Antigravity report their state to Notchy through their own hooks: working, waiting for you, done, error. A program that merely runs never counts as “working”. Prompts and contents are neither read nor stored.'));
+        const main = group(agents, _('Agents Beside the Notch'), _('Claude Code, Codex and Antigravity report their state to Notchy through their own hooks: working, waiting for you, done, error. A program that merely runs never counts as “working”. Prompts, answers and transcripts are neither read nor stored.'));
         toggle(main, 'agents-enabled', _('Show agent indicators'));
         toggle(main, 'agents-auto-layout', _('Distribute left and right automatically'), _('New indicators go to the side with more room; the notch stays in the middle.'));
         toggle(main, 'agents-show-idle', _('Show ready agents without a task'), _('As a calm, still symbol.'));
@@ -469,6 +469,11 @@ export default class NotchyPreferences extends ExtensionPreferences {
         position.connect('notify::selected', () => settings.set_string('agents-position', SIDES[position.selected] ?? 'auto'));
         main.add(position);
         number(main, 'indicators-max', _('Maximum visible indicators'), 0, 12, 1, _('Beside the notch, for agents, AirPods, activities and the Shelf; further ones join the “+N” group. 0 = as many as fit.'));
+        const shown = group(agents, _('In the Notch'), _('A click on an agent opens the list of all sessions. What a tool works on and the limits come only from the agents themselves; nothing leaves this computer.'));
+        toggle(shown, 'agents-show-commands', _('Show commands'), _('The first line of a command, a file’s name, a search or a web address — shortened, recognisable secrets (keys, tokens, passwords) masked.'));
+        toggle(shown, 'agents-show-limits', _('Show usage limits'), _('The 5-hour and weekly limits of Claude (Pro and Max, through a silent status line Notchy sets up with the hooks where none exists) and Codex (from its session files).'));
+        toggle(shown, 'agents-moments', _('Open the notch for agents'), _('When an agent needs you, finished or failed — not while you look at its window. Notchy approves nothing itself.'));
+        toggle(shown, 'agents-moment-sound', _('Sound when an agent needs you'));
         toggle(main, 'agents-done-until-seen', _('Keep “Done” until you have looked'), _('A finished task stays green until you open the agent’s card or its window. Off: it turns ready after the seconds above.'));
         const notes = group(agents, _('Notifications'), _('Only the agent, its project folder’s name and its state are shown — never a prompt or what the agent wrote. Not while the agent’s own window has the focus. While Smart Live Activities show it in the notch, it goes quietly into the message list.'));
         toggle(notes, 'agents-notify-waiting', _('When an agent needs you'), _('An approval or a question. Notchy approves nothing itself: a click switches to the agent.'));
@@ -508,14 +513,16 @@ export default class NotchyPreferences extends ExtensionPreferences {
                 if (!status || status.ok === false) { row.subtitle = fmt(_('State unknown: %s'), status?.error ?? ''); return; }
                 path = status.config;
                 row.subtitle = `${STATE[status.state] ?? status.state}${status.program ? '' : ` · ${_('program not found')}`}`;
-                config.subtitle = [status.config, status.error, status.note].filter(Boolean).join(' · ');
+                // Claude's limits need Notchy's silent status line; the user's own stays.
+                const line = status.statusLine === 'notchy' ? _('Limits through Notchy’s status line') : status.statusLine === 'own' ? _('Your own status line stays; no Claude limits') : '';
+                config.subtitle = [status.config, status.error, status.note, line].filter(Boolean).join(' · ');
                 install.sensitive = status.state !== 'installed' && status.state !== 'error';
                 remove.sensitive = ['installed', 'partial'].includes(status.state);
             };
             const confirm = action => {
                 const install = action === 'install';
                 const dialog = new Adw.AlertDialog({heading: fmt(install ? _('%s: Set Up Hooks?') : _('%s: Remove Hooks?'), name),
-                    body: install ? `${fmt(_('Notchy adds its hook adapter to %s. Existing hooks stay unchanged; a backup is made first.'), path)}${id === 'codex' ? ` ${_('Codex runs the new hooks only after you trusted them with /hooks.')}` : ''}`
+                    body: install ? `${fmt(_('Notchy adds its hook adapter to %s. Existing hooks stay unchanged; a backup is made first.'), path)}${id === 'codex' ? ` ${_('Codex runs the new hooks only after you trusted them with /hooks.')}` : ''}${id === 'claude' ? ` ${_('Where Claude Code has no status line yet, Notchy adds a silent one for the usage limits; Claude Code then hides a few keyboard hints in its footer.')}` : ''}`
                         : fmt(_('Notchy removes only its own entries from %s; a backup is made first.'), path)});
                 dialog.add_response('cancel', _('Cancel')); dialog.add_response('ok', install ? _('Set Up') : _('Remove'));
                 dialog.set_response_appearance('ok', install ? Adw.ResponseAppearance.SUGGESTED : Adw.ResponseAppearance.DESTRUCTIVE);

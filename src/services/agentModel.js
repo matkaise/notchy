@@ -68,8 +68,34 @@ export function statusText(session) {
     }
 }
 
+// What a tool does, from its name alone (Claude Code, Codex, Antigravity, MCP):
+// the symbol beside the agent and the verb in its list row.
+const TOOL_KINDS = [
+    ['terminal', /^(bash|shell|exec(_command)?|run_(terminal_)?command|run_command|local_shell|unified_exec|killshell|bashoutput|write_stdin)$/i],
+    ['edit', /^(edit|multiedit|write|notebookedit|apply_patch|str_replace(_editor|_based_edit_tool)?|create_file|write_to_file|replace_file_content|multi_replace_file_content)$/i],
+    ['search', /^(grep|glob|ls|search|find(_by_name)?|grep_search|codebase_search|list_dir|file_search)$/i],
+    ['web', /^(webfetch|websearch|web_search|web_fetch|read_url_content|search_web)$/i],
+    ['read', /^(read|view|view_file|read_file|view_image)$/i],
+    ['team', /^(task|agent|spawn_agent|subagent)$/i],
+    ['plan', /^(todowrite|update_plan|todo_write|plan)$/i],
+];
+export function toolKind(tool) {
+    const name = String(tool ?? '');
+    if (!name) return '';
+    if (/^mcp__|^mcp[_:]/i.test(name)) return 'mcp';
+    return TOOL_KINDS.find(([, pattern]) => pattern.test(name))?.[0] ?? 'tool';
+}
+// The row's verb while a tool runs ("Bearbeitet", "Führt aus"); thinking without a tool: "Denkt nach".
+const TOOL_VERBS = {terminal: N_('Executing'), edit: N_('Editing'), search: N_('Searching'), web: N_('On the web'), read: N_('Reading'), team: N_('Delegating'), plan: N_('Planning'), mcp: N_('Using a tool'), tool: N_('Using a tool')};
+export function activityText(session) {
+    const view = viewState(session);
+    if (view !== 'working') return stateText(view);
+    const kind = toolKind(session.tool);
+    return kind ? _(TOOL_VERBS[kind]) : _('Thinking');
+}
+
 // Limits: what Notchy accepts from the session bus.
-export const LIMITS = {sessions: 32, perProvider: 12, text: 140, project: 60, session: 128, ancestors: 16};
+export const LIMITS = {sessions: 32, perProvider: 12, text: 140, detail: 160, project: 60, session: 128, ancestors: 16};
 // A completed task shows as such this long, then the session is idle.
 export const COMPLETED_MS = 8000;
 // A session nothing can vouch for (no process to check, no heartbeat) is
@@ -117,6 +143,7 @@ export function parseEvent(input, now = Date.now()) {
     return {event: {provider, session, kind, state: state ?? EVENTS[kind], status: raw.status === undefined ? undefined : clean(raw.status, LIMITS.text),
         project: raw.project === undefined ? undefined : clean(raw.project, LIMITS.project), progress, time, pid, pidStart: raw.pidStart === undefined ? null : clean(raw.pidStart, 24),
         ancestors, heartbeat, source: ['hook', 'cli', 'mcp'].includes(raw.source) ? raw.source : 'cli', tool: raw.tool === undefined ? undefined : clean(raw.tool, 40),
+        detail: raw.detail === undefined ? undefined : clean(raw.detail, LIMITS.detail),
         note: raw.note === '' ? '' : NOTES.includes(raw.note) ? raw.note : undefined}};
 }
 
@@ -193,11 +220,16 @@ export class AgentRegistry {
                 if (event.state === 'working' || event.state === 'waiting') session.lastActivity = event.time;
                 // New work: whatever finished before has been dealt with.
                 if (event.state === 'working' || event.state === 'waiting' || event.state === 'error') session.unseen = false;
-                // A new task starts without the old one's progress and text.
-                if (event.kind === 'prompt') { session.progress = null; session.status = ''; session.note = ''; }
-                if (event.state !== 'working') session.tool = '';
+                // A new task starts without the old one's progress and text, and its own clock and count.
+                if (event.kind === 'prompt') { session.progress = null; session.status = ''; session.note = ''; session.turnStarted = event.time; session.toolCount = 0; session.lastTurnMs = 0; }
+                if (event.state === 'completed' || event.state === 'error') session.lastTurnMs = session.turnStarted ? Math.max(0, event.time - session.turnStarted) : 0;
+                if (event.state !== 'working') { session.tool = ''; session.detail = ''; }
             }
-            if (event.tool !== undefined) session.tool = event.tool;
+            // A tool starting counts; a tool's end (no name) clears what it worked on.
+            // (The same hook arriving twice counts once.)
+            if (event.kind === 'tool' && event.tool && session.lastToolAt !== event.time) { session.toolCount = (session.toolCount ?? 0) + 1; session.lastToolAt = event.time; }
+            if (event.tool !== undefined) { session.tool = event.tool; session.detail = event.detail ?? ''; }
+            else if (event.detail !== undefined) session.detail = event.detail;
             if (event.status !== undefined) session.status = event.status;
             if (event.note !== undefined) session.note = event.note;
             if (event.progress !== undefined) session.progress = event.progress;
@@ -209,7 +241,7 @@ export class AgentRegistry {
     fresh(event, now) {
         return {id: event.session, provider: event.provider, project: '', status: '', note: '', progress: null, task: 'idle', connected: true,
             started: event.time, lastEvent: 0, lastRank: undefined, lastActivity: event.time, seen: now, completedAt: 0, endedAt: 0, endEvent: 0, pid: null, pidStart: null,
-            ancestors: [], heartbeat: null, source: event.source, tool: '', unseen: false, generation: ++this.generations};
+            ancestors: [], heartbeat: null, source: event.source, tool: '', detail: '', toolCount: 0, lastToolAt: 0, turnStarted: 0, lastTurnMs: 0, unseen: false, generation: ++this.generations};
     }
     // Time passing: completed → idle, quiet and orphaned sessions, the fade of
     // ended ones. `alive(session)` tells whether its process still runs
@@ -300,9 +332,10 @@ export function pickWindow(windows, project = '') {
 }
 
 // Claude Code, Codex and Antigravity hook payloads → Notchy events. Only what
-// a status needs is taken: the session id, the event, a tool's name, the
-// project folder's name. Prompts, tool inputs, answers and transcripts are
-// never read or forwarded. Returns null for events that change nothing.
+// a status needs is taken: the session id, the event, a tool's name and the
+// one masked line of what it works on (helper/agent_hook.py), the project
+// folder's name. Prompts, answers and transcripts are never read or
+// forwarded. Returns null for events that change nothing.
 export function hookEvent(provider, payload) {
     if (!payload || typeof payload !== 'object') return null;
     const name = payload.hook_event_name ?? payload.hookEventName ?? payload.event;
@@ -312,20 +345,21 @@ export function hookEvent(provider, payload) {
     const project = payload.project ?? String(folder).split('/').filter(Boolean).pop() ?? '';
     const base = {provider, session: String(session), project, source: 'hook'};
     const tool = payload.tool_name ?? payload.toolCall?.name;
+    const detail = typeof payload.detail === 'string' ? payload.detail : '';
     switch (`${provider}:${name}`) {
     case 'claude:SessionStart': case 'codex:SessionStart': case 'antigravity:SessionStart':
         return {...base, event: 'start'};
     case 'claude:UserPromptSubmit': case 'codex:UserPromptSubmit': case 'antigravity:PreInvocation':
         return {...base, event: 'prompt'};
     case 'claude:PreToolUse': case 'codex:PreToolUse':
-        return {...base, event: 'tool', tool: String(tool ?? ''), note: tool ? 'tool' : undefined};
+        return {...base, event: 'tool', tool: String(tool ?? ''), detail, note: tool ? 'tool' : undefined};
     case 'claude:PostToolUse': case 'claude:PostToolUseFailure': case 'claude:PostToolBatch': case 'codex:PostToolUse': case 'antigravity:PostToolUse':
     case 'claude:PermissionDenied':
         return {...base, event: 'tool', tool: '', note: ''};
     case 'antigravity:PostInvocation':
         return {...base, event: 'resume'};
     case 'claude:PermissionRequest': case 'codex:PermissionRequest':
-        return {...base, event: 'waiting', tool: tool ? String(tool) : '', note: 'permission'};
+        return {...base, event: 'waiting', tool: tool ? String(tool) : '', detail, note: 'permission'};
     case 'claude:Notification': {
         const type = payload.notification_type;
         if (type === 'permission_prompt') return {...base, event: 'waiting', note: 'permission'};
@@ -352,4 +386,53 @@ export function hookEvent(provider, payload) {
     default:
         return null;
     }
+}
+
+// Usage limits (Claude Code's status line via helper/agent_status.py, Codex's
+// session files): per agent a 5-hour and a weekly window, each the share used
+// (0–100) and when it resets (epoch seconds). A window whose reset time has
+// passed counts as empty again.
+export function usageWindow(window, now = Date.now()) {
+    if (!window || typeof window !== 'object') return null;
+    const used = Number(window.used);
+    if (!Number.isFinite(used)) return null;
+    const resetsAt = Number.isFinite(window.resetsAt) && window.resetsAt > 0 ? window.resetsAt : null;
+    if (resetsAt && resetsAt * 1000 <= now) return {used: 0, resetsAt: null};
+    return {used: Math.max(0, Math.min(100, used)), resetsAt};
+}
+// The cache file helper/agent_status.py writes: {time, fiveHour, week}.
+export function claudeUsage(text, now = Date.now()) {
+    let data;
+    try { data = typeof text === 'string' ? JSON.parse(text) : text; } catch { return null; }
+    if (!data || typeof data !== 'object') return null;
+    const usage = {fiveHour: usageWindow(data.fiveHour, now), week: usageWindow(data.week, now), time: Number(data.time) || 0};
+    return usage.fiveHour || usage.week ? usage : null;
+}
+// The newest rate_limits in (the end of) a Codex session file:
+// {"rate_limits": {"primary": {"used_percent", "window_minutes", "resets_at"}, "secondary": {…}}}.
+export function codexUsage(text, now = Date.now()) {
+    const lines = String(text ?? '').split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+        if (!lines[i].includes('"rate_limits"')) continue;
+        let data;
+        try { data = JSON.parse(lines[i]); } catch { continue; }
+        const limits = findKey(data, 'rate_limits');
+        if (!limits || typeof limits !== 'object') continue;
+        const usage = {fiveHour: null, week: null, time: Date.parse(data.timestamp ?? '') / 1000 || 0};
+        for (const key of ['primary', 'secondary']) {
+            const window = limits[key];
+            if (!window || !Number.isFinite(Number(window.used_percent))) continue;
+            const minutes = Number(window.window_minutes) || (key === 'primary' ? 300 : 10080);
+            const resets = Number(window.resets_at) || (Number.isFinite(Number(window.resets_in_seconds)) && usage.time ? usage.time + Number(window.resets_in_seconds) : null);
+            usage[minutes <= 24 * 60 ? 'fiveHour' : 'week'] = usageWindow({used: Number(window.used_percent), resetsAt: resets}, now);
+        }
+        if (usage.fiveHour || usage.week) return usage;
+    }
+    return null;
+}
+function findKey(value, key, depth = 0) {
+    if (!value || typeof value !== 'object' || depth > 6) return null;
+    if (key in value) return value[key];
+    for (const inner of Object.values(value)) { const found = findKey(inner, key, depth + 1); if (found) return found; }
+    return null;
 }

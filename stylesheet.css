@@ -458,12 +458,28 @@
 .notchy-agent-bubble.notchy-dynamic { background-color: #000000; }
 .notchy-agent-bubble.notchy-liquid { background-color: rgba(26,22,30,0.86); }
 #panel .notchy-side-button:hover .notchy-agent-bubble, #panel .notchy-side-button:checked .notchy-agent-bubble { background-color: #1c1c1e; }
-.notchy-agent-bubble .notchy-agent-icon { color: rgba(255,255,255,0.92); }
-.notchy-agent-bubble.notchy-agent-idle .notchy-agent-icon { color: rgba(255,255,255,0.55); }
+.notchy-agent-bubble.notchy-agent-waiting { border: 1px solid rgba(245,165,36,0.55); box-shadow: 0 0 9px 1px rgba(245,165,36,0.45); }
+.notchy-agent-pill { spacing: 6px; }
+/* The agent's colour (as Nosy Notch): Claude orange, Codex blue, Antigravity violet; the states win. */
+.notchy-agent-glyph { color: rgba(255,255,255,0.92); }
+.notchy-agent-glyph.claude { color: #d97757; }
+.notchy-agent-glyph.codex { color: #80aaff; }
+.notchy-agent-glyph.antigravity { color: #b9a4ff; }
+.notchy-agent-glyph.idle, .notchy-agent-glyph.disconnected { color: rgba(255,255,255,0.55); }
+.notchy-agent-glyph.waiting { color: #f5a524; }
+.notchy-agent-glyph.completed { color: #4ade80; }
+.notchy-agent-glyph.error { color: #f87171; }
+.notchy-agent-wing { spacing: 4px; }
+.notchy-agent-tool { color: rgba(255,255,255,0.45); }
+.notchy-agent-tool.hand { color: #f5a524; }
+.notchy-agent-time { font-family: monospace; font-size: 10.5px; font-weight: bold; color: rgba(255,255,255,0.45); }
+.notchy-agent-dots { spacing: 2px; }
+.notchy-agent-dot { width: 4px; height: 4px; border-radius: 2px; background-color: rgba(255,255,255,0.5); }
+.notchy-agent-unseen { width: 8px; height: 8px; border-radius: 4px; background-color: #4ade80; box-shadow: 0 0 6px rgba(74,222,128,0.8); }
 .notchy-agent-badge { font-size: 9px; font-weight: bold; color: #000000; background-color: #ffffff; border-radius: 7px; min-width: 14px; height: 14px; text-align: center; }
-.notchy-agent-badge.waiting { background-color: #ff9f0a; }
-.notchy-agent-badge.error { background-color: #ff453a; color: #ffffff; }
-.notchy-agent-badge.completed { background-color: #34c759; color: #ffffff; }
+.notchy-agent-badge.waiting { background-color: #f5a524; }
+.notchy-agent-badge.error { background-color: #f87171; color: #ffffff; }
+.notchy-agent-badge.completed { background-color: #4ade80; color: #ffffff; }
 .notchy-agent-menu { min-width: 320px; }
 .notchy-agent-row { spacing: 10px; }
 .notchy-agent-row-title { font-size: 12.5px; font-weight: bold; color: #ffffff; }
@@ -488,39 +504,76 @@
 .notchy-act-rec { width: 9px; height: 9px; border-radius: 5px; background-color: #ff453a; margin: 0 3px; }
 
 
-/* An agent's card out of the notch (src/ui/agentCard.js), like the AirPods card. */
-.notchy-agent-card { spacing: 0; padding: 6px 22px 16px 22px; }
-.notchy-agent-card-title { font-size: 18px; font-weight: bold; color: #ffffff; }
-.notchy-agent-card-sub { font-size: 12px; color: rgba(255,255,255,0.55); padding-bottom: 12px; }
-.notchy-agent-card-body { spacing: 20px; }
-.notchy-agent-card-hero { color: rgba(255,255,255,0.92); }
-.notchy-agent-card-scroll { max-height: 400px; }
-.notchy-agent-card-grid { spacing: 10px; }
-.notchy-agent-card-rings { spacing: 14px; }
-.notchy-agent-card-session { width: 88px; padding: 4px 0 4px 0; border-radius: 16px; }
-.notchy-agent-card-session:hover, .notchy-agent-card-session:focus { background-color: rgba(255,255,255,0.06); }
-.notchy-agent-card-project { font-size: 13px; font-weight: bold; color: #ffffff; padding-top: 7px; max-width: 84px; }
-.notchy-agent-card-state { font-size: 11px; color: rgba(255,255,255,0.45); max-width: 86px; }
-.notchy-agent-card-session.waiting .notchy-agent-card-state { color: #ffc46e; }
-.notchy-agent-card-session.completed .notchy-agent-card-state { color: #78dc96; }
-.notchy-agent-card-session.error .notchy-agent-card-state { color: #ff8a80; }
-.notchy-agent-card-mark { font-size: 20px; font-weight: bold; color: #ffffff; }
-.notchy-agent-card-mark.value { font-size: 14px; font-feature-settings: "tnum"; }
-.notchy-agent-card-mark.waiting { color: #ff9f0a; }
-.notchy-agent-card-mark.completed { color: #34c759; }
-.notchy-agent-card-mark.error { color: #ff453a; }
-.notchy-agent-card-ask { spacing: 8px; padding-top: 14px; }
-.notchy-agent-card-ask-text { font-size: 12.5px; color: rgba(255,255,255,0.7); }
-.notchy-button.notchy-pill-button.notchy-agent-card-go { background-color: #ff9f0a; color: #000000; font-weight: bold; }
-.notchy-button.notchy-pill-button.notchy-agent-card-go:hover, .notchy-button.notchy-pill-button.notchy-agent-card-go:focus { background-color: #ffb340; }
-.notchy-agent-card-switch { margin-top: 14px; padding: 3px; spacing: 0; border-radius: 18px; background-color: #1c1c1e; }
-.notchy-agent-card-switch .notchy-tab { border-radius: 15px; }
-.notchy-agent-card-switch .notchy-tab.active { background-color: #2c2c30; }
-.notchy-agent-card-dot { width: 6px; height: 6px; border-radius: 3px; margin: 5px 9px 0 0; background-color: rgba(255,255,255,0.3); }
-.notchy-agent-card-dot.working { background-color: #6cb4ff; }
-.notchy-agent-card-dot.waiting { background-color: #ff9f0a; }
-.notchy-agent-card-dot.completed { background-color: #34c759; }
-.notchy-agent-card-dot.error { background-color: #ff453a; }
+/* The agent list out of the notch (src/ui/agentCard.js), as Nosy Notch's. */
+.notchy-agent-list { spacing: 0; padding: 4px 14px 12px 14px; }
+.notchy-agent-list-head { padding: 0 10px 6px 10px; }
+.notchy-agent-list-title { font-size: 15px; font-weight: bold; color: #ffffff; }
+.notchy-agent-list-count { font-size: 11px; font-weight: bold; color: rgba(255,255,255,0.7); background-color: rgba(255,255,255,0.12); border-radius: 99px; padding: 1px 7px; }
+.notchy-agent-list-scroll { max-height: 200px; }
+.notchy-agent-row { height: 50px; padding: 0 10px; border-radius: 12px; }
+.notchy-agent-row:hover, .notchy-agent-row:focus { background-color: rgba(255,255,255,0.08); }
+.notchy-agent-row-box { spacing: 12px; }
+.notchy-agent-row-text { spacing: 2px; }
+.notchy-agent-row-top { spacing: 6px; }
+.notchy-agent-row-project { font-size: 13px; font-weight: bold; color: #ffffff; }
+.notchy-agent-row-state { font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.55); }
+.notchy-agent-row-state.working.claude { color: #d97757; }
+.notchy-agent-row-state.working.codex { color: #80aaff; }
+.notchy-agent-row-state.working.antigravity { color: #b9a4ff; }
+.notchy-agent-row-state.working { color: #ffffff; }
+.notchy-agent-row-state.waiting { color: #f5a524; }
+.notchy-agent-row-state.completed { color: #4ade80; }
+.notchy-agent-row-state.error { color: #f87171; }
+.notchy-agent-row-detail { spacing: 5px; }
+.notchy-agent-row-tool { color: rgba(255,255,255,0.5); }
+.notchy-agent-row-command { font-family: monospace; font-size: 11px; color: rgba(255,255,255,0.5); }
+.notchy-agent-row-time { font-family: monospace; font-size: 11px; color: rgba(255,255,255,0.55); }
+.notchy-agent-row-close { width: 18px; height: 18px; border-radius: 9px; background-color: rgba(255,255,255,0.14); color: #ffffff; }
+.notchy-agent-row-close:hover { background-color: rgba(255,255,255,0.24); }
+.notchy-agent-unseen.small { width: 7px; height: 7px; border-radius: 4px; }
+.notchy-agent-tag { font-size: 9px; font-weight: bold; padding: 1px 5px; border-radius: 99px; color: #ffffff; background-color: rgba(255,255,255,0.14); }
+.notchy-agent-tag.claude { color: #d97757; background-color: rgba(217,119,87,0.16); }
+.notchy-agent-tag.codex { color: #80aaff; background-color: rgba(128,170,255,0.16); }
+.notchy-agent-tag.antigravity { color: #b9a4ff; background-color: rgba(185,164,255,0.16); }
+.notchy-agent-list-more { font-size: 11.5px; color: rgba(255,255,255,0.38); padding-top: 4px; }
+.notchy-agent-limits { spacing: 0; padding: 8px 10px 0 10px; }
+.notchy-agent-limit-row { spacing: 12px; height: 24px; }
+.notchy-agent-limit-name { width: 56px; }
+.notchy-agent-meter { spacing: 6px; width: 164px; }
+.notchy-agent-meter-label { font-size: 10px; font-weight: bold; color: rgba(255,255,255,0.5); min-width: 34px; }
+.notchy-agent-meter-track { height: 5px; border-radius: 3px; background-color: rgba(255,255,255,0.1); }
+.notchy-agent-meter-fill { height: 5px; border-radius: 3px; background-color: #4ade80; }
+.notchy-agent-meter-fill.mid { background-color: #f5a524; }
+.notchy-agent-meter-fill.high { background-color: #f87171; }
+.notchy-agent-meter-value { font-family: monospace; font-size: 10px; font-weight: bold; color: rgba(255,255,255,0.75); min-width: 40px; text-align: right; }
+/* An agent's moment out of the notch (src/ui/agentMoment.js): needs you, done, a snag. The glow is a warm light rising inside the card. */
+.notchy-agent-moment { padding: 12px 18px 14px 18px; background-gradient-direction: vertical; background-color: rgba(0,0,0,0); }
+.notchy-agent-moment.waiting { background-gradient-end: rgba(245,165,36,0.16); }
+.notchy-agent-moment.completed { background-gradient-end: rgba(74,222,128,0.13); }
+.notchy-agent-moment.error { background-gradient-end: rgba(248,113,113,0.15); }
+.notchy-agent-moment-column { spacing: 12px; }
+.notchy-agent-moment-main { spacing: 14px; padding-right: 26px; }
+.notchy-agent-moment-text { spacing: 2px; }
+.notchy-agent-moment-top { spacing: 6px; }
+.notchy-agent-moment-title { font-size: 15px; font-weight: bold; color: #ffffff; }
+.notchy-agent-moment-project { font-size: 12px; font-weight: bold; }
+.notchy-agent-moment-project.waiting { color: #f5a524; }
+.notchy-agent-moment-project.completed { color: #4ade80; }
+.notchy-agent-moment-project.error { color: #f87171; }
+.notchy-agent-moment-took { font-family: monospace; font-size: 12px; color: rgba(255,255,255,0.5); }
+.notchy-agent-moment-message { font-size: 12px; color: rgba(255,255,255,0.72); }
+.notchy-agent-moment-command { font-family: monospace; font-size: 11.5px; color: #ffffff; background-color: rgba(255,255,255,0.1); border-radius: 5px; padding: 1px 6px; margin-top: 3px; }
+.notchy-agent-moment-actions { spacing: 8px; padding: 0 2px; }
+.notchy-agent-moment-hint { font-size: 11px; color: rgba(255,255,255,0.38); }
+.notchy-button.notchy-pill-button.notchy-agent-moment-go { background-color: #f5a524; color: #000000; font-weight: bold; }
+.notchy-button.notchy-pill-button.notchy-agent-moment-go:hover, .notchy-button.notchy-pill-button.notchy-agent-moment-go:focus { background-color: #ffb84a; }
+.notchy-agent-moment-close { width: 22px; height: 22px; border-radius: 11px; background-color: rgba(255,255,255,0.1); color: #ffffff; }
+.notchy-agent-moment-close:hover, .notchy-agent-moment-close:focus { background-color: rgba(255,255,255,0.2); }
+.notchy-agent-orb { border-radius: 22px; }
+.notchy-agent-orb.waiting { background-color: rgba(245,165,36,0.18); }
+.notchy-agent-orb.error { background-color: rgba(248,113,113,0.18); }
+.notchy-agent-orb-icon.waiting { color: #f5a524; }
+.notchy-agent-orb-icon.error { color: #f87171; }
 
 /* Sharing by QR code inside AirDrop's banner (Views.shareBanner). */
 .notchy-qr { background-color: #ffffff; border-radius: 14px; }

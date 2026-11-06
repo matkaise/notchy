@@ -1705,6 +1705,10 @@ async function agentRegressions(ext, path, screenshot) {
         return actors.every(a => a.x >= lb.x + left.get_preferred_width(-1)[1] && a.x + a.w <= rb.x + rb.w - right.get_preferred_width(-1)[1]);
     };
     ext.settings.set_boolean('hover-open', false);
+    // Moments open the notch on their own: tested on their own below, off meanwhile.
+    ext.settings.set_boolean('agents-moments', false);
+    // Codex's limits come from this run's own session files, never the real ones.
+    GLib.setenv('CODEX_HOME', `${path}/codex`, true);
     let daemon = null, sleeper = null;
     // The Regal's indicator beside the notch would take a side of its own: this
     // checks how AirPods and agents share them, so the Regal is empty meanwhile.
@@ -1720,15 +1724,20 @@ async function agentRegressions(ext, path, screenshot) {
         await adapter('claude', {hook_event_name: 'UserPromptSubmit', session_id: 'claude-a', prompt: 'geheimer Prompt'});
         await waitFor(() => ext.agents.sessions[0]?.task === 'working' && shown('agent:claude')); await Scripting.sleep(600);
         const claude = island.agentIndicators.bubbles.get('claude');
-        assert(drawn('agent:claude') && claude.spinner.visible && claude.spinner.get_transition('rotation-angle-z') && !JSON.stringify(ext.agents.toJSON()).includes('geheim'),
-            'a submitted prompt shows Claude as working with a turning ring; the prompt is not kept');
+        assert(drawn('agent:claude') && claude.winged && claude.dots.visible && claude.glyph.get_transition('scale-x') && claude.glyph.has_style_class_name('claude') && !JSON.stringify(ext.agents.toJSON()).includes('geheim'),
+            'a submitted prompt: Claude thinks — its spark breathes in its colour, three dots bounce in the wing; the prompt is not kept');
+        // A tool runs: its symbol and the task's time in the wing, the spark turns; the command arrives masked.
+        await adapter('claude', {hook_event_name: 'PreToolUse', session_id: 'claude-a', tool_name: 'Bash', tool_input: {command: 'npm test -- --token=abcdefghijklmnopqrstuvwxyz123456\nsecond line'}});
+        await waitFor(() => claude.tool.visible && claude.time.visible); await Scripting.sleep(300);
+        assert(claude.tool.visible && !claude.dots.visible && /^\d+:\d\d$/.test(claude.time.text) && claude.glyph.get_transition('rotation-angle-z') && ext.agents.registry.get('claude', 'claude-a').detail === 'npm test -- --token=•••',
+            `a running tool: its symbol and the task's time beside the turning spark; one line of the command, its token masked (${ext.agents.registry.get('claude', 'claude-a').detail})`);
         assert(island.sides.sideOf('agent:claude') === 'left' && centred() && noOverlap(), 'the first agent goes beside the notch where there is room, the notch stays centred');
         await screenshot('agents-one');
         // A second session of the same agent, waiting for approval.
         await adapter('claude', {hook_event_name: 'PermissionRequest', session_id: 'claude-b', tool_name: 'Bash', tool_input: {command: 'rm -rf x'}});
-        await waitFor(() => claude.group?.count === 2 && claude.group.state === 'waiting');
-        assert(claude.group.count === 2 && claude.group.state === 'waiting' && claude.badge.visible && claude.ring.get_transition('opacity') && !claude.spinner.visible,
-            `two parallel Claude Code sessions: one indicator, the waiting one decides (${claude.group.state}, ${claude.badge.text})`);
+        await waitFor(() => claude.group?.count === 2 && claude.group.state === 'waiting'); await Scripting.sleep(300);
+        assert(claude.group.count === 2 && claude.group.state === 'waiting' && claude.badge.text === '2' && claude.tool.has_style_class_name('hand') && !claude.time.visible && claude.content.has_style_class_name('notchy-agent-waiting'),
+            `two parallel Claude Code sessions: one indicator, the waiting one decides — amber with a waving hand (${claude.group.state}, ${claude.badge.text})`);
         // A real click on the indicator springs the notch open into Claude Code's card (no popup menu any more).
         const cardPointer = seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
         try {
@@ -1738,23 +1747,22 @@ async function agentRegressions(ext, path, screenshot) {
             cardPointer.notify_button(GLib.get_monotonic_time(), 1, Clutter.ButtonState.RELEASED);
             await waitFor(() => island.peeking && island.peekKind === 'agent' && !island.morphing, 3000);
         } finally { cardPointer.run_dispose(); }
-        const card = island.agentCard, ringOf = id => card?.rings.get(id);
-        assert(card && island.agentCardProvider === 'claude' && styled(island.body, 'notchy-agent-card-title')[0]?.text === 'Claude Code' && Math.abs(island.surface.width - 460) < 1,
-            `a real click on an agent's indicator opens its card out of the notch (${island.peekKind}, ${island.surface.width})`);
-        const order = [...styled(island.body, 'notchy-agent-card-rings')[0].get_children()];
-        assert(card.rings.size === 2 && order[0] === ringOf('claude-b').button && ringOf('claude-b').mark.text === '?' && ringOf('claude-b').state.text.startsWith('Wartet ·')
-            && ringOf('claude-a').spinner.visible && ringOf('claude-a').project.text === 'Notchy' && /\d+ s|Min/.test(ringOf('claude-a').state.text),
-            `the card shows each session as a ring, the waiting one first, with project, state and time (${[...card.rings.values()].map(r => `${r.project.text}: ${r.mark.text} ${r.state.text}`).join(' / ')})`);
-        assert(card.ask.visible && styled(card.ask, 'notchy-agent-card-ask-text')[0].text.includes('Bash') && !JSON.stringify(styled(island.body, 'notchy-agent-card-ask-text')[0].text).includes('rm -rf'),
-            'a waiting session adds what it waits for — the tool, never its input');
-        assert(ringOf('claude-b').button.has_key_focus() && !island.sides.left.visible && !island.sides.right.visible, 'the waiting ring has the keyboard; the indicators hide while the card is open');
-        await screenshot('agent-card');
-        const waitingRing = ringOf('claude-b');
+        const card = island.agentCard, rowOf = id => card?.rows.get(`claude\u0000${id}`);
+        assert(card && island.agentCardProvider === 'claude' && styled(island.body, 'notchy-agent-list-title')[0]?.text === 'Agenten' && Math.abs(island.surface.width - 460) < 1,
+            `a real click on an agent's indicator opens the agent list out of the notch (${island.peekKind}, ${island.surface.width})`);
+        const order = styled(island.body, 'notchy-agent-list-rows')[0].get_children(), rowText = row => `${row.project.text} ${row.tag.text} ${row.state.text} | ${row.detail.text} | ${row.time.text}`;
+        assert(card.rows.size === 2 && order[0] === rowOf('claude-b').button && rowOf('claude-b').state.text === 'Wartet auf dich' && rowOf('claude-b').detail.text === 'rm -rf x'
+            && rowOf('claude-a').state.text === 'Führt aus' && rowOf('claude-a').detail.text === 'npm test -- --token=•••' && rowOf('claude-a').tool.visible && rowOf('claude-a').project.text === 'Notchy'
+            && rowOf('claude-a').tag.text === 'Claude' && /^\d+:\d\d$/.test(rowOf('claude-a').time.text),
+            `a row per session, the waiting one first: project, agent, what it does and the command it runs or waits to run, its time (${[...card.rows.values()].map(rowText).join(' / ')})`);
+        assert(rowOf('claude-b').button.has_key_focus() && !island.sides.left.visible && !island.sides.right.visible, 'the waiting row has the keyboard; the indicators hide while the list is open');
+        await screenshot('agent-list');
+        const waitingRow = rowOf('claude-b');
         await adapter('claude', {hook_event_name: 'PostToolUse', session_id: 'claude-b', tool_name: 'Bash'});
         await waitFor(() => claude.group.state === 'working');
         await Scripting.sleep(200);
-        assert(island.agentCard === card && ringOf('claude-b') === waitingRing && waitingRing.state.text.startsWith('Arbeitet') && !card.ask.visible && waitingRing.button.has_key_focus(),
-            'a state change updates the open card in place (same ring, new state, the keyboard stays)');
+        assert(island.agentCard === card && rowOf('claude-b') === waitingRow && waitingRow.state.text === 'Denkt nach' && !waitingRow.bottom.visible && waitingRow.button.has_key_focus(),
+            `a state change updates the open list in place (same row, new state, the keyboard stays) (${rowText(waitingRow)})`);
         const keys = seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
         keys.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Escape, Clutter.KeyState.PRESSED); keys.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Escape, Clutter.KeyState.RELEASED);
         await Scripting.sleep(500);
@@ -1783,7 +1791,7 @@ async function agentRegressions(ext, path, screenshot) {
         await waitFor(() => island.agentIndicators.bubbles.get('antigravity')?.group?.state === 'completed');
         assert(['agent:claude', 'agent:codex', 'agent:antigravity', 'airpods'].map(id => island.sides.sideOf(id)).join() === before, 'status changes never move an indicator to the other side');
         const gravity = island.agentIndicators.bubbles.get('antigravity');
-        assert(gravity.group.state === 'completed' && gravity.badge.text === '✓' && !gravity.spinner.visible, 'Antigravity finished: a check, no spinner');
+        assert(gravity.group.state === 'completed' && !gravity.winged && gravity.unseen.visible && gravity.glyph.has_style_class_name('completed'), 'Antigravity finished: round and green again, a dot until seen');
         // The opened island covers the indicators; closing brings them back.
         island.open('media'); await Scripting.sleep(400);
         assert(!island.sides.left.visible && !island.sides.right.visible, 'while the island is open the indicators are hidden, no overlap');
@@ -1844,6 +1852,59 @@ async function agentRegressions(ext, path, screenshot) {
             for (const id of ['bg-idle', 'bg-busy']) ext.agents.end('cli', id);
             await Scripting.sleep(300);
         }
+        // Limits at the list's foot: Claude's through the silent status line (the real helper), Codex's from its session file.
+        const soon = Math.round(Date.now() / 1000) + 2 * 3600 + 5 * 60;
+        await new Promise(resolve => {
+            const line = Gio.Subprocess.new(['/usr/bin/python3', `${ext.path}/helper/agent_status.py`], Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE);
+            line.communicate_utf8_async(JSON.stringify({session_id: 'claude-a', workspace: {current_dir: '/home/test/Notchy'}, rate_limits: {five_hour: {used_percentage: 23.5, resets_at: soon}, seven_day: {used_percentage: 91, resets_at: soon + 3 * 86400}}}), null, (proc, result) => { proc.communicate_utf8_finish(result); resolve(); });
+        });
+        const day = Gio.File.new_for_path(`${path}/codex/sessions/2026/10/18`); try { day.make_directory_with_parents(null); } catch { /* There. */ }
+        day.get_child('rollout-test.jsonl').replace_contents(`${JSON.stringify({timestamp: new Date().toISOString(), type: 'event_msg', payload: {type: 'token_count', rate_limits: {primary: {used_percent: 64, window_minutes: 300, resets_at: soon}, secondary: {used_percent: 4, window_minutes: 10080, resets_at: soon + 86400}}}})}\n`, null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+        ext.agents.codexRead = 0; await send({provider: 'codex', session: 'codex-1', event: 'heartbeat'}); ext.agents.readCodexUsage();
+        assert(await waitFor(() => ext.agents.usageRows().length === 2, 4000), `Claude's and Codex's limits arrive (${JSON.stringify(ext.agents.usageRows())})`);
+        island.close(true); await Scripting.sleep(300);
+        island.showAgentCard('claude', {focus: false}); await waitFor(() => island.peekKind === 'agent' && !island.morphing); await Scripting.sleep(400);
+        const meters = island.agentCard.meters(), values = meters.map(m => m.value.text);
+        assert(island.agentCard.limits.visible && meters.length === 4 && values.join(' | ') === '24 % | 91 % | 64 % | 4 %' && meters[1].fill.has_style_class_name('high') && meters[2].fill.has_style_class_name('mid') && meters[3].fill.has_style_class_name('low')
+            && meters[0].fill.width > 0 && meters[0].fill.width < meters[0].track.width / 3,
+            `the list's foot: Claude's and Codex's 5-hour and weekly limits as bars, green, amber, red (${values.join(' | ')})`);
+        meters[0].actor.hover = true; meters[0].draw();
+        assert(/^↻ 2 Std\. \d+ Min\.$/.test(meters[0].value.text), `hovering a bar tells when it resets (${meters[0].value.text})`);
+        meters[0].actor.hover = false; meters[0].draw();
+        await screenshot('agent-list-limits');
+        island.close(true); await Scripting.sleep(300);
+        // Commands off: nothing of a tool's input is kept, the row names the tool.
+        ext.settings.set_boolean('agents-show-commands', false);
+        await adapter('claude', {hook_event_name: 'PreToolUse', session_id: 'claude-a', tool_name: 'Edit', tool_input: {file_path: '/home/test/Notchy/geheim.js'}});
+        await waitFor(() => ext.agents.registry.get('claude', 'claude-a')?.tool === 'Edit');
+        assert(ext.agents.registry.get('claude', 'claude-a').detail === '' && !JSON.stringify(ext.agents.toJSON()).includes('geheim'), 'with „Befehle anzeigen“ off, no command or file name is kept');
+        ext.settings.reset('agents-show-commands');
+        // Moments: needs you opens the notch with a waving hand and the command; answered elsewhere it goes; done draws its check; a failure says why.
+        ext.settings.set_boolean('agents-moments', true); ext.settings.set_boolean('agents-moment-sound', false);
+        await adapter('claude', {hook_event_name: 'PermissionRequest', session_id: 'claude-a', tool_name: 'Bash', tool_input: {command: 'git push origin main'}});
+        await waitFor(() => island.peekKind === 'agent-moment' && !island.morphing, 3000); await Scripting.sleep(700);
+        const momentText = cls => styled(island.body, cls)[0]?.text;
+        assert(island.peekView?.kind === 'waiting' && momentText('notchy-agent-moment-title') === 'Claude Code braucht dich' && momentText('notchy-agent-moment-project') === 'Notchy'
+            && momentText('notchy-agent-moment-message') === 'möchte Bash ausführen.' && momentText('notchy-agent-moment-command') === 'git push origin main',
+            `an agent that needs you opens the notch: who, where, what it wants to run (${['title', 'message', 'command'].map(k => momentText(`notchy-agent-moment-${k}`)).join(' | ')})`);
+        await screenshot('agent-moment-waiting');
+        await Scripting.sleep(1500);
+        assert(island.peekKind === 'agent-moment', 'it stays while the agent waits');
+        await adapter('claude', {hook_event_name: 'PostToolUse', session_id: 'claude-a', tool_name: 'Bash'});
+        assert(await waitFor(() => !island.peeking, 3000), 'answered in the terminal: the card goes by itself');
+        await adapter('claude', {hook_event_name: 'Stop', session_id: 'claude-a'});
+        await waitFor(() => island.peekKind === 'agent-moment' && !island.morphing, 3000); await Scripting.sleep(1600);
+        assert(island.peekView?.kind === 'completed' && momentText('notchy-agent-moment-title') === 'Fertig' && /^\d+ Werkzeugaufrufe? – Claude Code wartet auf deine nächste Nachricht\.$/.test(momentText('notchy-agent-moment-message')),
+            `done: a check, the task's tools and that it waits for you (${momentText('notchy-agent-moment-message')})`);
+        await screenshot('agent-moment-done');
+        island.close(true); await Scripting.sleep(400);
+        await adapter('claude', {hook_event_name: 'StopFailure', session_id: 'claude-b', error: 'rate_limit'});
+        await waitFor(() => island.peekKind === 'agent-moment' && island.peekView?.kind === 'error', 3000); await Scripting.sleep(500);
+        assert(momentText('notchy-agent-moment-title') === 'Claude Code hat ein Problem' && momentText('notchy-agent-moment-message') === 'Antwort fehlgeschlagen – Details in seinem Fenster.',
+            `a failed task: who and why (${momentText('notchy-agent-moment-message')})`);
+        await screenshot('agent-moment-error');
+        island.close(true); await Scripting.sleep(400);
+        ext.settings.set_boolean('agents-moments', false); ext.settings.reset('agents-moment-sound');
         // Session end through the adapter.
         await adapter('claude', {hook_event_name: 'SessionEnd', session_id: 'claude-b', reason: 'prompt_input_exit'});
         await waitFor(() => claude.group?.count === 1, 4000);
@@ -1871,6 +1932,7 @@ async function agentRegressions(ext, path, screenshot) {
         try { sleeper?.force_exit(); } catch { /* Gone. */ }
         try { daemon?.force_exit(); } catch { /* Gone. */ }
         ext.settings?.set_boolean('airpods-animation', true); ext.settings?.set_boolean('hover-open', true);
+        for (const key of ['agents-moments', 'agents-moment-sound', 'agents-show-commands']) ext.settings?.reset(key);
         ext.shelf.items = shelfItems; ext.shelf.save();
     }
 }
@@ -1936,6 +1998,8 @@ async function activityRegressions(ext, path, screenshot) {
     const subscriptions = ['LiveActivitiesChanged', 'ActivityAction'].map(name => Gio.DBus.session.signal_subscribe(BUS, BUS, name, PATH, null, Gio.DBusSignalFlags.NONE,
         (_c, _s, _p, _i, signal, parameters) => signals.push([signal, parameters.deep_unpack()])));
     const saved = {completed: ext.settings.get_int('activities-completed-seconds'), hover: ext.settings.get_boolean('hover-open'), style: ext.settings.get_string('style')};
+    // Agents' own moments would take the notch from the activities tested here.
+    ext.settings.set_boolean('agents-moments', false);
     const stopScreencast = Main.screenshotUI.stopScreencast;
     try {
         ext.settings.set_boolean('hover-open', false);
@@ -2029,13 +2093,13 @@ async function activityRegressions(ext, path, screenshot) {
         assert((await call('InvokeActivity', '(ss)', ['build', 'open']))[0] === '', 'InvokeActivity runs a declared action');
         await Scripting.sleep(300);
         assert(signals.some(([s, args]) => s === 'ActivityAction' && args[0] === 'build' && args[1] === 'open'), 'a declared action reaches its app as ActivityAction');
-        // A click on the capsule while it names a waiting agent opens that agent's card.
+        // A click on the capsule while it names a waiting agent opens the agent list.
         await agent({provider: 'claude', session: 'act-1', event: 'update', state: 'waiting', source: 'cli'});
         await waitFor(() => ext.activities.focus?.cls === 'attention' && !island.peeking, 4000);
         island.capsuleClicked(); await waitFor(() => island.peekKind === 'agent', 2000);
-        assert(island.peekKind === 'agent' && island.agentCardProvider === 'claude', 'a click on the capsule naming a waiting agent opens its card');
+        assert(island.peekKind === 'agent' && island.agentCardProvider === 'claude', 'a click on the capsule naming a waiting agent opens the agent list');
         island.close(true); await Scripting.sleep(400);
-        // Done stays until seen: the indicator stays green after its seconds as „done“, the card counts as having looked.
+        // Done stays until seen: the indicator stays green after its seconds as „done“, the list counts as having looked.
         ext.settings.set_int('agents-completed-seconds', 2);
         await agent({provider: 'claude', session: 'act-1', event: 'update', state: 'working', source: 'cli'});
         await agent({provider: 'claude', session: 'act-1', event: 'stop', source: 'cli'});
@@ -2043,31 +2107,33 @@ async function activityRegressions(ext, path, screenshot) {
         const act = ext.agents.registry.get('claude', 'act-1'), bubble = island.agentIndicators.bubbles.get('claude');
         // (Other Claude sessions of earlier phases may still work: the most urgent one decides the indicator.)
         const alone = bubble.group.sessions.filter(x => x.connected).length === 1;
-        assert(act.task === 'idle' && act.unseen && bubble.group.unseen >= 1 && (!alone || (bubble.group.state === 'completed' && bubble.badge.text === '✓')),
-            `a finished task stays done until seen (${act.task}, ${bubble.group.state}, ${bubble.badge.text}, ${bubble.group.unseen} done)`);
+        assert(act.task === 'idle' && act.unseen && bubble.group.unseen >= 1 && (!alone || (bubble.group.state === 'completed' && bubble.unseen.visible)),
+            `a finished task stays done until seen (${act.task}, ${bubble.group.state}, ${bubble.unseen.visible}, ${bubble.group.unseen} done)`);
         island.showAgentCard('claude', {focus: false}); await Scripting.sleep(400);
-        assert(island.agentCard?.rings.get('act-1')?.state.text.includes('neu'), 'the card marks it as new');
+        const doneRow = island.agentCard?.rows.get('claude\u0000act-1');
+        assert(doneRow?.state.text === 'Fertig' && doneRow.unseen.visible, 'the list marks it as new: a green dot on its symbol');
         island.close(true); await Scripting.sleep(400);
         assert(!act.unseen && (!alone || island.agentIndicators.bubbles.get('claude').group.state === 'idle'), 'once its card was shown it is ready again');
         ext.settings.reset('agents-completed-seconds');
         await agent({provider: 'claude', session: 'act-1', event: 'end', source: 'cli'});
-        // Many sessions wrap into rows inside the card; past about three rows they scroll, the keyboard along.
+        // Many sessions: four rows visible, the rest scrolls, the keyboard along; Claude and Codex in one list.
         const many = Array.from({length: 11}, (_x, i) => `many-${i}`);
-        for (const [i, session] of many.entries()) await agent({provider: 'claude', session, event: 'update', state: 'working', source: 'cli', project: `Projekt ${i + 1}`});
+        for (const [i, session] of many.entries()) await agent({provider: i % 3 ? 'claude' : 'codex', session, event: 'update', state: 'working', source: 'cli', project: `Projekt ${i + 1}`});
         await waitFor(() => !island.peeking, 3000);
         island.showAgentCard('claude'); await waitFor(() => island.peekKind === 'agent' && !island.morphing, 3000); await Scripting.sleep(500);
-        const crowded = island.agentCard, grid = styled(island.body, 'notchy-agent-card-grid')[0], [surfaceX] = island.surface.get_transformed_position();
-        const inside = [...crowded.rings.values()].every(({button}) => { const [x] = button.get_transformed_position(); return x >= surfaceX && x + button.width <= surfaceX + island.surface.width; });
-        assert(crowded.rings.size >= many.length && inside && grid.get_children().every(row => row.get_n_children() <= 3), `many sessions stay inside the card, in rows (${crowded.rings.size} rings, ${grid.get_n_children()} rows)`);
-        const scroller = styled(island.body, 'notchy-agent-card-scroll')[0], [, surfaceY] = island.surface.get_transformed_position();
-        assert(scroller.vadjustment.upper > scroller.vadjustment.page_size && scroller.height <= 400 && surfaceY + island.surface.height <= island.monitor.y + island.monitor.height, `past about three rows they scroll, and the card fits the screen (${scroller.vadjustment.upper} in ${scroller.vadjustment.page_size})`);
-        await screenshot('agent-card-many');
-        const down = {get_key_symbol: () => Clutter.KEY_Down}, buttons = grid.get_children().flatMap(row => row.get_children());
-        for (let i = 0; i < 4; i++) island.views.keyPress(down);
-        const lastRow = grid.get_last_child();
-        assert(buttons.indexOf(global.stage.get_key_focus()) >= (grid.get_n_children() - 1) * 3 && scroller.vadjustment.value + scroller.vadjustment.page_size >= lastRow.y + lastRow.height - 1, 'the arrow keys reach the last row, which scrolls into view');
+        const crowded = island.agentCard, list = styled(island.body, 'notchy-agent-list-rows')[0], [surfaceX, surfaceY] = island.surface.get_transformed_position();
+        const inside = [...crowded.rows.values()].every(({button}) => { const [x] = button.get_transformed_position(); return x >= surfaceX && x + button.width <= surfaceX + island.surface.width; });
+        assert(crowded.rows.size >= many.length && inside && [...crowded.rows.values()].some(row => row.tag.text === 'Codex'), `every session of every agent in one list, inside the card (${crowded.rows.size} rows)`);
+        const scroller = crowded.scroller;
+        assert(scroller.vadjustment.upper > scroller.vadjustment.page_size && scroller.height <= 210 && crowded.more.visible && crowded.more.text.endsWith('weitere · scrollen') && surfaceY + island.surface.height <= island.monitor.y + island.monitor.height,
+            `past four rows the list scrolls, and the card fits the screen (${scroller.vadjustment.upper} in ${scroller.vadjustment.page_size}, ${crowded.more.text})`);
+        await screenshot('agent-list-many');
+        const down = {get_key_symbol: () => Clutter.KEY_Down}, buttons = list.get_children();
+        for (let i = 0; i < buttons.length + 2; i++) island.views.keyPress(down);
+        const last = list.get_last_child();
+        assert(global.stage.get_key_focus() === last && scroller.vadjustment.value + scroller.vadjustment.page_size >= last.y + last.height - 1, 'the arrow keys reach the last row, which scrolls into view');
         island.close(true); await Scripting.sleep(300);
-        for (const session of many) await agent({provider: 'claude', session, event: 'end', source: 'cli'});
+        for (const [i, session] of many.entries()) await agent({provider: i % 3 ? 'claude' : 'codex', session, event: 'end', source: 'cli'});
         // Opening and closing the notch keeps its width and place.
         await waitFor(() => !island.peeking, 3000);
         const width = island.compactWidth;
@@ -2101,7 +2167,7 @@ async function activityRegressions(ext, path, screenshot) {
         try { Main.screenshotUI._setScreencastInProgress(false); } catch { /* Gone. */ }
         for (const t of ext.timers?.list() ?? []) ext.timers.cancel(t.id);
         for (const id of ['iso', 'build']) await call('EndActivity', '(s)', [id]).catch(() => null);
-        ext.settings?.set_int('activities-completed-seconds', saved.completed); ext.settings?.set_boolean('hover-open', saved.hover); ext.settings?.set_string('style', saved.style);
+        ext.settings?.set_int('activities-completed-seconds', saved.completed); ext.settings?.set_boolean('hover-open', saved.hover); ext.settings?.set_string('style', saved.style); ext.settings?.reset('agents-moments');
         ext.settings?.reset('activities-enabled');
     }
 }

@@ -8,7 +8,9 @@ by the adapter's file name and added beside the others; uninstalling removes
 exactly those. Before a file is changed, a dated copy is kept next to it. A
 file that is not valid JSON is left alone.
 
-  Claude Code   ~/.claude/settings.json ("hooks", per event a matcher group)
+  Claude Code   ~/.claude/settings.json ("hooks", per event a matcher group;
+                and, only where no status line exists yet, Notchy's silent
+                status line agent_status.py for the usage limits)
   Codex         ~/.codex/hooks.json (same layout; Codex runs new hooks only
                 after they are reviewed and trusted with /hooks)
   Antigravity   ~/.gemini/config/hooks.json (a named hook "notchy")
@@ -24,7 +26,9 @@ import time
 from i18n import _
 
 ADAPTER = Path(__file__).resolve().parent / 'agent_hook.py'
+STATUS = Path(__file__).resolve().parent / 'agent_status.py'
 MARKER = 'agent_hook.py'
+STATUS_MARKER = 'agent_status.py'
 NAME = 'notchy'
 EVENTS = {
     'claude': ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest', 'Notification', 'Stop', 'StopFailure', 'SessionEnd'],
@@ -61,6 +65,18 @@ def ours(entry):
     return isinstance(entry, dict) and MARKER in str(entry.get('command', ''))
 
 
+def our_status_line(data):
+    line = data.get('statusLine') if isinstance(data, dict) else None
+    return isinstance(line, dict) and STATUS_MARKER in str(line.get('command', ''))
+
+
+def status_line(data):
+    """Claude Code's status line: 'notchy' (ours), 'own' (the user's, left alone) or 'none'."""
+    if our_status_line(data):
+        return 'notchy'
+    return 'own' if isinstance(data, dict) and data.get('statusLine') else 'none'
+
+
 def load(path):
     """(data, error): {} for a missing file, an error for one that is not a JSON object."""
     try:
@@ -86,6 +102,8 @@ def strip(provider, data):
     if provider == 'antigravity':
         data.pop(NAME, None)
         return data
+    if provider == 'claude' and our_status_line(data):
+        del data['statusLine']
     hooks = data.get('hooks')
     if not isinstance(hooks, dict):
         return data
@@ -127,6 +145,10 @@ def add(provider, data, adapter=ADAPTER):
         if not isinstance(groups, list):
             raise ValueError(_('"hooks.%s" is not a list; Notchy leaves the file unchanged') % event)
         groups.append({'hooks': [handler(provider, event, adapter)]})
+    # The usage limits come only through a status line: a silent one, where none exists.
+    if provider == 'claude' and not data.get('statusLine'):
+        status = STATUS if adapter == ADAPTER else Path(adapter).with_name(STATUS_MARKER)
+        data['statusLine'] = {'type': 'command', 'command': f'/usr/bin/python3 {shlex.quote(str(status))}', 'padding': 0}
     return data
 
 
@@ -164,8 +186,11 @@ def status(provider, home=None):
     wanted = set(EVENTS[provider])
     state = 'error' if error else 'installed' if wanted <= events else 'partial' if events else 'missing'
     note = _('Codex runs new hooks only after you have reviewed and trusted them in Codex with /hooks.') if provider == 'codex' else ''
-    return {'provider': provider, 'name': LABELS[provider], 'state': state, 'config': str(path), 'program': program(provider),
-            'events': sorted(events), 'missing': sorted(wanted - events), 'error': error, 'note': note, 'lastFailure': last_failure(provider)}
+    result = {'provider': provider, 'name': LABELS[provider], 'state': state, 'config': str(path), 'program': program(provider),
+              'events': sorted(events), 'missing': sorted(wanted - events), 'error': error, 'note': note, 'lastFailure': last_failure(provider)}
+    if provider == 'claude':
+        result['statusLine'] = status_line(data) if data is not None else 'none'
+    return result
 
 
 def last_failure(provider, cache=None):
