@@ -516,7 +516,8 @@ export default class NotchyPreferences extends ExtensionPreferences {
                 // Claude's limits need Notchy's silent status line; the user's own stays.
                 const line = status.statusLine === 'notchy' ? _('Limits through Notchy’s status line') : status.statusLine === 'own' ? _('Your own status line stays; no Claude limits') : '';
                 config.subtitle = [status.config, status.error, status.note, line].filter(Boolean).join(' · ');
-                install.sensitive = status.state !== 'installed' && status.state !== 'error';
+                // Set up before the limits existed: „Einrichten“ adds the silent status line.
+                install.sensitive = (status.state !== 'installed' || status.statusLine === 'none') && status.state !== 'error';
                 remove.sensitive = ['installed', 'partial'].includes(status.state);
             };
             const confirm = action => {
