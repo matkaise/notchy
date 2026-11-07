@@ -366,6 +366,10 @@ test('what a tool works on: one line from the adapter, cleared after the tool; a
     assert.equal(agents.get('claude', s).toolCount, 0, 'a new turn counts anew');
     assert.equal(parseEvent({provider: 'x', session: 'y', event: 'tool', tool: 'Bash', detail: 'z'.repeat(400)}).event.detail.length, 160);
 });
+test('a Codex desktop chat\u2019s scratch folder is no project', () => {
+    assert.equal(hookEvent('codex', {hook_event_name: 'SessionStart', session_id: 's', cwd: '/home/m/Documents/Codex/2026-10-25/iuc'}).project, '');
+    assert.equal(hookEvent('codex', {hook_event_name: 'SessionStart', session_id: 's', cwd: '/home/m/Schreibtisch/Notchy/'}).project, 'Notchy');
+});
 test('tools by kind: the symbol beside the agent', () => {
     for (const [tool, kind] of [['Bash', 'terminal'], ['exec_command', 'terminal'], ['run_command', 'terminal'], ['Edit', 'edit'], ['apply_patch', 'edit'], ['Write', 'edit'],
         ['Grep', 'search'], ['Glob', 'search'], ['WebFetch', 'web'], ['web_search', 'web'], ['Read', 'read'], ['Task', 'team'], ['TodoWrite', 'plan'], ['update_plan', 'plan'],

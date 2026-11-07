@@ -40,6 +40,9 @@ class AdapterTest(unittest.TestCase):
             self.assertNotIn(secret, text)
         # After a tool, nothing of its input.
         self.assertNotIn('detail', hook.reduce({**payload, 'hook_event_name': 'PostToolUse'}))
+        # A Codex desktop chat's scratch folder is no project.
+        self.assertEqual(hook.reduce({**payload, 'cwd': '/home/m/Documents/Codex/2026-10-25/iuc'})['project'], '')
+        self.assertEqual(hook.reduce({**payload, 'cwd': '/home/m/Codex/api/'})['project'], 'api')
 
     def test_one_line_of_what_a_tool_works_on_with_secrets_masked(self):
         cases = [

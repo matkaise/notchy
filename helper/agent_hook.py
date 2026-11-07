@@ -51,6 +51,14 @@ SECRETS = [
     (re.compile(r'(?<![\w/.-])[A-Za-z0-9+/_-]{32,}={0,2}(?![\w/.-])'), MASK),
 ]
 PATCH_FILE = re.compile(r'^\*\*\* (?:Add|Update|Delete) File: (.+)$', re.M)
+# Codex's desktop app gives each chat a scratch folder …/Codex/YYYY-MM-DD/<random>: no project.
+SCRATCH = re.compile(r'/Codex/\d{4}-\d{2}-\d{2}/[^/]+$')
+
+
+def project(folder):
+    """The project folder's name, or '' for a chat's scratch folder."""
+    folder = folder.rstrip('/')
+    return '' if SCRATCH.search(folder) else os.path.basename(folder)[:60]
 
 
 def mask(line):
@@ -120,7 +128,7 @@ def reduce(payload):
     tool = payload.get('tool_name')
     if not isinstance(tool, str) and isinstance(payload.get('toolCall'), dict):
         tool = payload['toolCall'].get('name')
-    out = {'hook_event_name': name, 'session_id': session, 'project': os.path.basename(folder.rstrip('/'))[:60]}
+    out = {'hook_event_name': name, 'session_id': session, 'project': project(folder)}
     if isinstance(tool, str):
         out['tool_name'] = tool[:40]
         if name in DETAIL_EVENTS:

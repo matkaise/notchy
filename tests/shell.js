@@ -206,6 +206,17 @@ export async function run() {
     assert(!island.glass.actor.visible && island.shadeBlack.visible && Math.abs(island.shadeBlack.height - island.surface.height) < 1 && !island.shadeFade.visible && island.shelfShade.black >= 100000,
         '100 % black hides the glass and shades the entire surface');
     await screenshot('opaque-calendar'); ext.settings.set_int('glass-level', level); island.syncShade();
+    // The glass switched off: no layer, no clones of what lies behind; the notch is
+    // entirely black and the capsule a solid surface, the native panes likewise.
+    ext.settings.set_boolean('glass-enabled', false); await Scripting.sleep(200);
+    assert(!island.glass.active && !island.glass.actor.visible && island.glass.clones.length === 0 && island.shadeBlack.visible && Math.abs(island.shadeBlack.height - island.surface.height) < 1 && island.shelfShade.solid,
+        'glass off: the notch draws no glass and clones nothing behind it');
+    ext.settings.set_string('style', 'liquid'); await Scripting.sleep(400);
+    assert(!island.glass.actor.visible && !island.shadeBlack.visible && island.surface.has_style_class_name('notchy-opaque') && island.surface.get_theme_node().get_background_color().alpha === 255,
+        'glass off: the capsule is a solid surface');
+    await screenshot('solid-capsule-calendar');
+    ext.settings.set_string('style', 'dynamic'); ext.settings.reset('glass-enabled'); await Scripting.sleep(400);
+    assert(island.glass.active && island.glass.actor.visible && island.glass.clones.length > 0 && !island.shelfShade.solid, 'glass on again: the layer clones what lies behind the island');
     island.close(); await Scripting.sleep(400);
     island.toggle('media'); await Scripting.sleep(500);
     await key(Clutter.KEY_3); await Scripting.sleep(400);
@@ -1767,6 +1778,13 @@ async function agentRegressions(ext, path, screenshot) {
         keys.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Escape, Clutter.KeyState.PRESSED); keys.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Escape, Clutter.KeyState.RELEASED);
         await Scripting.sleep(500);
         assert(!island.expanded, 'Esc closes the card');
+        // Two sessions, the newest thinking: the badge and all three dots fit, nothing clipped.
+        await Scripting.sleep(600);
+        const wished = claude.content.get_preferred_width(-1)[1];
+        const dotsEnd = claude.dots.get_transformed_position()[0] + claude.dots.width, badgeX = claude.badge.get_transformed_position()[0];
+        assert(claude.dots.visible && claude.badge.text === '2' && badgeX >= dotsEnd - 0.5 && claude.content.width >= wished - 1 && drawn('agent:claude') && noOverlap(),
+            `two sessions with a wing: the count after the dots, covering none, and the indicator gets the width it needs (${claude.content.width} of ${wished}, count at ${badgeX}, dots end ${dotsEnd})`);
+        Main.panel.set_style('background-color: transparent;'); await screenshot('agents-two'); Main.panel.set_style(null);
         // Claude, Codex and Antigravity at once, with AirPods.
         daemon = Gio.Subprocess.new(['/usr/bin/python3', here('mock_airpodsd.py'), GLib.getenv('NOTCHY_AIRPODS_NAME'), `${path}/airpods-agents.log`], Gio.SubprocessFlags.NONE);
         await waitFor(() => ext.airpods.backend === 'airpods-helper');

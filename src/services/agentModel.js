@@ -331,6 +331,10 @@ export function pickWindow(windows, project = '') {
     return named.length === 1 ? named[0] : null;
 }
 
+// The project folder's name; '' for the scratch folder Codex's desktop app gives
+// each chat (…/Codex/2026-10-25/iuc), whose name means nothing.
+export const projectName = folder => (/\/Codex\/\d{4}-\d{2}-\d{2}\/[^/]+\/?$/.test(String(folder ?? '')) ? '' : String(folder ?? '').split('/').filter(Boolean).pop() ?? '');
+
 // Claude Code, Codex and Antigravity hook payloads → Notchy events. Only what
 // a status needs is taken: the session id, the event, a tool's name and the
 // one masked line of what it works on (helper/agent_hook.py), the project
@@ -342,7 +346,7 @@ export function hookEvent(provider, payload) {
     const session = payload.session_id ?? payload.conversationId ?? payload.sessionId;
     if (!name || !session) return null;
     const folder = payload.cwd ?? payload.workspacePaths?.[0] ?? '';
-    const project = payload.project ?? String(folder).split('/').filter(Boolean).pop() ?? '';
+    const project = payload.project ?? projectName(folder);
     const base = {provider, session: String(session), project, source: 'hook'};
     const tool = payload.tool_name ?? payload.toolCall?.name;
     const detail = typeof payload.detail === 'string' ? payload.detail : '';

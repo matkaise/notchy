@@ -77,11 +77,13 @@ export class AgentBubble {
         this.dots = box(false, {style_class: 'notchy-agent-dots', y_align: Clutter.ActorAlign.CENTER, visible: false});
         for (let i = 0; i < 3; i++) this.dots.add_child(new St.Widget({style_class: 'notchy-agent-dot', y_align: Clutter.ActorAlign.CENTER}));
         for (const child of [this.tool, this.time, this.dots]) this.wing.add_child(child);
-        this.pill.add_child(this.glyph); this.pill.add_child(this.wing);
-        this.badge = label('', 'notchy-agent-badge', {x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.START, visible: false});
+        // How many sessions (or ! for a failure) sits in the pill, at its end: laid over
+        // a wide pill it covered the dots.
+        this.badge = label('', 'notchy-agent-badge', {y_align: Clutter.ActorAlign.CENTER, visible: false});
+        this.pill.add_child(this.glyph); this.pill.add_child(this.wing); this.pill.add_child(this.badge);
         // Done but not seen yet: a green dot that breathes.
         this.unseen = new St.Widget({style_class: 'notchy-agent-unseen', x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.START, visible: false});
-        for (const child of [this.pill, this.badge, this.unseen]) this.content.add_child(child);
+        for (const child of [this.pill, this.unseen]) this.content.add_child(child);
         this.button.add_child(this.content);
         const open = () => { this.island.showAgentCard(this.provider); return Clutter.EVENT_STOP; };
         this.life.connect(this.button, 'button-press-event', (_a, event) => (event.get_button() === Clutter.BUTTON_PRIMARY ? open() : Clutter.EVENT_PROPAGATE));
@@ -89,8 +91,11 @@ export class AgentBubble {
         this.unplace = island.sides.add({id: `agent:${provider}`, actor: this.button.container, priority: () => this.group?.priority ?? 1,
             preferred: () => this.preferredSide, wanted: () => !this.leaving && Boolean(this.group), summary: () => this.summary()});
         this.life.connect(this.settings, 'changed', (_s, key) => { if (key === 'style' || key.startsWith('agents-')) this.style(); });
-        // The wing grows and shrinks (dots, a tool and its time, a longer time): the sides plan again.
-        this.life.connect(this.content, 'notify::width', () => this.island.sides.queue());
+        // The wing grows and shrinks (dots, a tool and its time, a longer time): the sides plan
+        // again. Its own wish counts, not its allocation — a side too narrow would just clip it.
+        this.wished = 0;
+        this.life.connect(this.content, 'notify::mapped', () => this.remeasure());
+        this.life.connect(this.content, 'notify::width', () => { this.island.sides.queue(); this.remeasure(); });
         // Clutter skips animations of actors not on screen: the motion starts once mapped.
         this.life.connect(this.content, 'notify::mapped', () => { if (this.content.mapped) this.animate(true); });
         // Appearing: a short scale and fade once it is on screen in its place.
@@ -138,8 +143,8 @@ export class AgentBubble {
     }
     // The primary session: the most urgent live one (the registry sorts them).
     get primary() { return this.group?.sessions.find(s => s.connected) ?? null; }
-    // Working or waiting: the pill with its wing; else the round symbol.
-    get winged() { return ['working', 'waiting'].includes(this.group?.state); }
+    // Working or waiting (its wing), or a count or ! beside the symbol: a pill; else the round symbol.
+    get winged() { return ['working', 'waiting'].includes(this.group?.state) || Boolean(this.badge?.visible); }
     update(group) {
         const previous = this.group?.state, wasWinged = this.winged;
         this.group = group;
@@ -147,7 +152,7 @@ export class AgentBubble {
         this.button.accessible_name = count > 1 ? fmt(ngettext('%1$s: %2$s, %3$d session', '%1$s: %2$s, %3$d sessions', count), name, stateText(state), count) : `${name}: ${stateText(state)}`;
         // The wing: a tool's symbol and the task's time, a real progress, three dots while thinking, a hand while waiting.
         const tool = state === 'working' && session?.tool ? session.tool : '';
-        this.wing.visible = this.winged;
+        this.wing.visible = ['working', 'waiting'].includes(state);
         this.dots.visible = state === 'working' && !tool && (progress === null || progress === undefined);
         this.tool.visible = state === 'waiting' || Boolean(tool);
         if (state === 'waiting') { this.tool.gicon = gicon('notchy-hand-symbolic'); this.tool.set_style_class_name('notchy-agent-tool hand'); }
@@ -162,6 +167,13 @@ export class AgentBubble {
         this.style();
         this.animate(previous !== state);
         if (previous !== state || wasWinged !== this.winged) this.island.sides.queue();
+        this.remeasure();
+    }
+    remeasure() {
+        if (this.life.closed || !this.content.get_stage()) return;
+        const wished = this.content.get_preferred_width(-1)[1];
+        if (Math.abs(wished - this.wished) < 0.5) return;
+        this.wished = wished; this.island.sides.queue();
     }
     // The running time (or a real progress) beside the tool, every second while it works.
     tick() {
@@ -169,6 +181,7 @@ export class AgentBubble {
         const progress = this.group?.progress;
         if (working && progress !== null && progress !== undefined) this.time.text = formatPercent(Math.round(progress * 100));
         else if (working && session) this.time.text = clock(Date.now() - (session.turnStarted || session.lastActivity || session.started));
+        if (this.ticking) this.remeasure();
         const wanted = working && this.time.visible;
         if (wanted && !this.ticking) this.ticking = this.life.every(1000, () => this.tick());
         else if (!wanted && this.ticking) { this.life.cancel(this.ticking); this.ticking = 0; }

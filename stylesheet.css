@@ -476,7 +476,7 @@
 .notchy-agent-dots { spacing: 2px; }
 .notchy-agent-dot { width: 4px; height: 4px; border-radius: 2px; background-color: rgba(255,255,255,0.5); }
 .notchy-agent-unseen { width: 8px; height: 8px; border-radius: 4px; background-color: #4ade80; box-shadow: 0 0 6px rgba(74,222,128,0.8); }
-.notchy-agent-badge { font-size: 9px; font-weight: bold; color: #000000; background-color: #ffffff; border-radius: 7px; min-width: 14px; height: 14px; text-align: center; }
+.notchy-agent-badge { font-size: 9px; font-weight: bold; color: #000000; background-color: rgba(255,255,255,0.85); border-radius: 7px; min-width: 14px; height: 14px; text-align: center; }
 .notchy-agent-badge.waiting { background-color: #f5a524; }
 .notchy-agent-badge.error { background-color: #f87171; color: #ffffff; }
 .notchy-agent-badge.completed { background-color: #4ade80; color: #ffffff; }
@@ -549,7 +549,8 @@
 .notchy-agent-meter-fill.high { background-color: #f87171; }
 .notchy-agent-meter-value { font-family: monospace; font-size: 10px; font-weight: bold; color: rgba(255,255,255,0.75); min-width: 40px; text-align: right; }
 /* An agent's moment out of the notch (src/ui/agentMoment.js): needs you, done, a snag. The glow is a warm light rising inside the card. */
-.notchy-agent-moment { padding: 12px 18px 14px 18px; background-gradient-direction: vertical; background-color: rgba(0,0,0,0); }
+/* (Rounded like the open notch's lower edge, RADIUS in src/ui/island.js, so the glow never paints past its corners.) */
+.notchy-agent-moment { padding: 12px 18px 14px 18px; border-radius: 0 0 30px 30px; background-gradient-direction: vertical; background-color: rgba(0,0,0,0); }
 .notchy-agent-moment.waiting { background-gradient-end: rgba(245,165,36,0.16); }
 .notchy-agent-moment.completed { background-gradient-end: rgba(74,222,128,0.13); }
 .notchy-agent-moment.error { background-gradient-end: rgba(248,113,113,0.15); }
