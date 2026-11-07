@@ -44,71 +44,53 @@ export default class NotchyPreferences extends ExtensionPreferences {
         };
         const number = (g, key, title, min, max, step = 1, subtitle = '') => {
             const row = new Adw.SpinRow({title, subtitle, adjustment: new Gtk.Adjustment({lower: min, upper: max, step_increment: step, page_increment: step * 10})});
-            settings.bind(key, row, 'value', Gio.SettingsBindFlags.DEFAULT); g.add(row);
+            settings.bind(key, row, 'value', Gio.SettingsBindFlags.DEFAULT); g.add(row); return row;
         };
         const general = page(_('Appearance'), 'preferences-desktop-appearance-symbolic');
-        const look = group(general, _('Your Island'), _('The GNOME clock in the top bar becomes the island; it grows around the clock.'));
+        const look = group(general, _('Island'));
         const styles = ['dynamic', 'liquid'];
-        const style = new Adw.ComboRow({title: _('Style'), subtitle: _('Dynamic Glass: a black notch that fades into glass. Liquid Glass: a floating glass capsule.'),
-            model: Gtk.StringList.new(['Dynamic Glass', 'Liquid Glass']), selected: Math.max(0, styles.indexOf(settings.get_string('style')))});
+        const style = new Adw.ComboRow({title: _('Style'), subtitle: _('Notch hangs from the top edge, Capsule floats below it.'),
+            model: Gtk.StringList.new([_('Notch'), _('Capsule')]), selected: Math.max(0, styles.indexOf(settings.get_string('style')))});
         style.connect('notify::selected', () => settings.set_string('style', styles[style.selected])); look.add(style);
-        number(look, 'glass-level', _('Black share in percent (Dynamic Glass)'), 0, 100, 5, _('How much of the opened surface is black before it fades into glass. 100 % is entirely black, without glass.'));
-        number(look, 'width', _('Width when opened'), 600, 900, 10);
-        number(look, 'animation-duration', _('Animation in milliseconds'), 0, 800, 20);
+        toggle(look, 'glass-enabled', _('Glass effect'), _('Blurs what lies behind the open island. Off: a solid surface.'));
+        // The black share only matters for the notch with glass.
+        const share = number(look, 'glass-level', _('Black share in percent'), 0, 100, 5, _('How much of the open notch stays black before the glass begins.'));
+        const syncShare = () => { share.sensitive = settings.get_boolean('glass-enabled') && settings.get_string('style') === 'dynamic'; };
+        const shareIds = ['changed::glass-enabled', 'changed::style'].map(signal => settings.connect(signal, syncShare));
+        share.connect('destroy', () => shareIds.forEach(id => settings.disconnect(id)));
+        syncShare();
+        number(look, 'width', _('Width when open'), 600, 900, 10);
+        number(look, 'animation-duration', _('Animation duration (ms)'), 0, 800, 20);
         toggle(look, 'hide-fullscreen', _('Hide over fullscreen apps'));
-        // The language: the system's, or one chosen here for Notchy alone.
-        const lang = group(general, _('Language'), _('Notchy follows the system language. A language chosen here applies to Notchy only; the system and other apps keep theirs. Your quicklinks, snippets and settings stay as they are.'));
+        const lang = group(general, _('Language'), _('Applies to Notchy only.'));
         const language = new Adw.ComboRow({title: _('Language'), model: Gtk.StringList.new([_('Automatic (system language)'), 'Deutsch', 'English']),
             selected: Math.max(0, LANGUAGES.indexOf(settings.get_string('language')))});
         language.connect('notify::selected', () => { const value = LANGUAGES[language.selected] ?? 'auto'; if (settings.get_string('language') !== value) settings.set_string('language', value); });
         lang.add(language);
         const behavior = group(general, _('Behavior'));
-        toggle(behavior, 'hover-open', _('Open when the pointer touches it'));
-        number(behavior, 'hover-delay', _('Opening delay in milliseconds'), 0, 2000, 50);
-        number(behavior, 'collapse-delay', _('Closing delay in milliseconds'), 100, 5000, 100);
-        toggle(behavior, 'clock-opens-notchy', _('The clock opens the Calendar tab'), _('A click on date and time shows notifications and the calendar in Notchy instead of GNOME’s popup.'));
-        toggle(behavior, 'scroll-volume', _('Scrolling over the island changes the volume'));
-        toggle(behavior, 'drag-summon', _('Drop files right onto the island'), _('While dragging, a drop area for the Shelf appears below the clock.'));
-        toggle(behavior, 'snap-enabled', _('Arrange windows in the notch'), _('Drag a window to the clock and the notch offers layouts (halves, thirds, quarters…).'));
-        toggle(behavior, 'jiggle-enabled', _('Shake while dragging to open the basket'));
-        const live = group(general, _('Live Activities'));
-        toggle(live, 'media-enabled', _('Show media in the island'));
-        toggle(live, 'media-waveform', _('Show a live waveform'), _('Analyzes only the audio output monitor during playback. No audio is stored.'));
-        toggle(live, 'airplay-enabled', _('Find AirPlay devices on the network'), _('Speakers and TVs with AirPlay appear as outputs in the Media tab. Runs as a small PipeWire service only while Notchy is active.'));
-        toggle(live, 'hud-enabled', _('Show volume and brightness in the island'), _('Replaces GNOME’s on-screen display while the island is closed.'));
-        toggle(live, 'notifications-enabled', _('Show notifications in Notchy'), _('New notifications appear as a banner from the island instead of GNOME’s banner. Do Not Disturb is respected.'));
-        const preferred = new Adw.EntryRow({title: _('Preferred MPRIS bus name (empty = automatic)'), text: settings.get_string('preferred-player')});
-        preferred.connect('changed', () => settings.set_string('preferred-player', preferred.text)); live.add(preferred);
-        // Any phone, by QR code: in the same banners as AirDrop.
-        const phones = group(general, _('Phones by QR Code'), _('Send files to any phone in the same Wi-Fi and receive from it: the phone scans a QR code and uses its browser. No app, no account, no internet. The link carries a random key, only the local network is served, nothing is taken without your “Accept”, and it ends with its banner. With AirDrop installed, its banner switches between both.'));
-        toggle(phones, 'share-qr-enabled', _('Send and receive by QR code'));
-        // AirDrop: Notchy is the front end of airdrop-mt7921, which the user installs.
-        const airdrop = group(general, _('AirDrop (experimental)'), _('Sending to and receiving from iPhones through the airdrop-mt7921 project. Works with MediaTek Wi-Fi (MT7921/MT7922). While AirDrop is active, Wi-Fi is paused; it reconnects by itself afterwards. Only “Everyone for 10 Minutes” on the iPhone.'));
-        toggle(airdrop, 'airdrop-enabled', _('Offer AirDrop in Notchy'), _('A button in the island’s header, an AirDrop area while dragging, “Send with AirDrop” in the Shelf.'));
-        const home = GLib.get_home_dir();
-        const found = () => {
-            const configured = settings.get_string('airdrop-daemon');
-            const candidates = configured ? [configured] : ['airdrop-mt7921', 'src/airdrop-mt7921', 'Projekte/airdrop-mt7921', 'Schreibtisch/airdrop-mt7921', 'Desktop/airdrop-mt7921', 'git/airdrop-mt7921'].map(dir => `${home}/${dir}/daemon/airdropd`);
-            try { const target = GLib.file_read_link('/usr/local/bin/airdrop-send'); candidates.unshift(`${GLib.path_get_dirname(target)}/airdropd`); } catch { /* Not linked. */ }
-            return candidates.find(path => GLib.file_test(path, GLib.FileTest.IS_EXECUTABLE)) ?? '';
-        };
-        const status = new Adw.ActionRow({title: _('Backend')});
-        const sync = () => { const path = found(); status.subtitle = path ? fmt(_('Found: %s'), path) : _('Not found. Install airdrop-mt7921 (guide on the right) or enter the path below.'); };
-        const guide = new Gtk.LinkButton({uri: 'https://github.com/jedbillyb/airdrop-mt7921#install', label: _('Guide'), valign: Gtk.Align.CENTER});
-        status.add_suffix(guide); airdrop.add(status);
-        const daemon = new Adw.EntryRow({title: _('Path to airdropd (empty = search automatically)'), text: settings.get_string('airdrop-daemon')});
-        daemon.connect('changed', () => { settings.set_string('airdrop-daemon', daemon.text.trim()); sync(); }); airdrop.add(daemon);
-        const folder = new Adw.EntryRow({title: _('Folder for received files (empty = Downloads/AirDrop)'), text: settings.get_string('airdrop-folder')});
-        folder.connect('changed', () => settings.set_string('airdrop-folder', folder.text.trim())); airdrop.add(folder);
-        sync();
+        toggle(behavior, 'hover-open', _('Open on hover'));
+        number(behavior, 'hover-delay', _('Opening delay (ms)'), 0, 2000, 50);
+        number(behavior, 'collapse-delay', _('Closing delay (ms)'), 100, 5000, 100);
+        toggle(behavior, 'clock-opens-notchy', _('Clock opens the calendar'), _('Instead of GNOME’s date menu.'));
+        toggle(behavior, 'scroll-volume', _('Scroll to change the volume'));
+        toggle(behavior, 'snap-enabled', _('Window layouts'), _('Drag a window to the clock to snap it to halves, thirds or quarters.'));
+        const shown = group(general, _('In the Island'));
+        toggle(shown, 'media-enabled', _('Media'));
+        toggle(shown, 'media-waveform', _('Waveform'), _('Reads the audio output while something plays. Nothing is recorded.'));
+        toggle(shown, 'airplay-enabled', _('AirPlay devices'), _('AirPlay speakers and TVs on the network appear as outputs.'));
+        toggle(shown, 'hud-enabled', _('Volume and brightness'), _('Replaces GNOME’s on-screen display.'));
+        toggle(shown, 'notifications-enabled', _('Notifications'), _('Banners from the island instead of GNOME’s. Do Not Disturb applies.'));
+        const preferred = new Adw.EntryRow({title: _('Preferred player (MPRIS name, empty = automatic)'), text: settings.get_string('preferred-player')});
+        preferred.connect('changed', () => settings.set_string('preferred-player', preferred.text)); shown.add(preferred);
+        this.sharingPage(settings, page, group, toggle);
         this.thunderstormPage(window, settings, page, group, toggle, number);
         this.airpodsPage(settings, page, group, toggle, number);
         this.activitiesPage(settings, page, group, toggle, number);
         this.agentsPage(window, settings, page, group, toggle, number);
         const privacy = page(_('Clipboard'), 'edit-paste-symbolic');
-        const history = group(privacy, _('History'), _('Stored locally. Recording and keeping it across sessions are off at first.'));
+        const history = group(privacy, _('History'), _('Stored on this computer only. Off by default.'));
         toggle(history, 'clipboard-enabled', _('Record the clipboard'));
-        toggle(history, 'clipboard-persist', _('Keep the history between sessions'), _('The file lies locally in your home folder and is not encrypted.'));
+        toggle(history, 'clipboard-persist', _('Keep the history between sessions'), _('Saved unencrypted in your home folder.'));
         number(history, 'clipboard-limit', _('Maximum entries besides favorites'), 10, 1000, 10);
         number(history, 'clipboard-retention-days', _('Keep for days'), 1, 365);
         const excluded = new Adw.EntryRow({title: _('Excluded apps (.desktop ids, separated by commas)'), text: settings.get_strv('exclude-apps').join(', ')});
@@ -123,18 +105,47 @@ export default class NotchyPreferences extends ExtensionPreferences {
             }); keys.add(row);
         }
         const about = page(_('About'), 'help-about-symbolic');
-        const info = group(about, _('Notchy · Droppy for GNOME'), _('An independent GNOME implementation inspired by Droppy. Not an official Droppy port.'));
-        info.add(new Adw.ActionRow({title: _('GNOME Shell 50 · Wayland · top bar'), subtitle: _('Notchy integrates into the clock of the top bar on the primary monitor.')}));
-        info.add(new Adw.ActionRow({title: _('File processing'), subtitle: _('ZIP built in. Picture conversion: ImageMagick. Text recognition: Tesseract. Video: FFmpeg. Office: LibreOffice.')}));
-        info.add(new Adw.ActionRow({title: _('Droplets'), subtitle: _('The small tools are removed for now and will return later under a new name.')}));
+        const info = group(about, 'Notchy');
+        info.add(new Adw.ActionRow({title: _('Version'), subtitle: String(this.metadata['version-name'] ?? this.metadata.version ?? '–')}));
+        info.add(new Adw.ActionRow({title: _('Requirements'), subtitle: fmt(_('GNOME Shell %s on Wayland'), (this.metadata['shell-version'] ?? []).join(', '))}));
+        info.add(new Adw.ActionRow({title: _('Optional tools'), subtitle: _('ImageMagick for images, Tesseract for text recognition, FFmpeg for video, LibreOffice for documents.')}));
         return added;
+    }
+
+    // Files in and out: dropping onto the island, phones by QR code, AirDrop.
+    sharingPage(settings, page, group, toggle) {
+        const sharing = page(_('AirDrop & File Drop'), 'notchy-airdrop-symbolic');
+        const drop = group(sharing, _('File Drop'));
+        toggle(drop, 'drag-summon', _('Drop zone while dragging'), _('Dragging a file shows a drop area below the clock.'));
+        toggle(drop, 'jiggle-enabled', _('Shake to open the basket'), _('Shake the pointer while dragging a file.'));
+        const phones = group(sharing, _('Phones by QR Code'), _('Any phone on the same Wi-Fi scans a code and sends or receives files in its browser. No app or account. Nothing is received until you accept.'));
+        toggle(phones, 'share-qr-enabled', _('Send and receive by QR code'));
+        // AirDrop: Notchy is the front end of airdrop-mt7921, which the user installs.
+        const airdrop = group(sharing, _('AirDrop (experimental)'), _('Exchange files with iPhones through airdrop-mt7921. Needs a MediaTek MT7921 or MT7922 Wi-Fi card. Wi-Fi pauses while AirDrop is active. On the iPhone, choose “Everyone for 10 Minutes”.'));
+        toggle(airdrop, 'airdrop-enabled', _('AirDrop'), _('Adds AirDrop to the island’s header, the drop zone and the shelf.'));
+        const home = GLib.get_home_dir();
+        const found = () => {
+            const configured = settings.get_string('airdrop-daemon');
+            const candidates = configured ? [configured] : ['airdrop-mt7921', 'src/airdrop-mt7921', 'Projekte/airdrop-mt7921', 'Schreibtisch/airdrop-mt7921', 'Desktop/airdrop-mt7921', 'git/airdrop-mt7921'].map(dir => `${home}/${dir}/daemon/airdropd`);
+            try { const target = GLib.file_read_link('/usr/local/bin/airdrop-send'); candidates.unshift(`${GLib.path_get_dirname(target)}/airdropd`); } catch { /* Not linked. */ }
+            return candidates.find(path => GLib.file_test(path, GLib.FileTest.IS_EXECUTABLE)) ?? '';
+        };
+        const status = new Adw.ActionRow({title: _('Backend')});
+        const sync = () => { const path = found(); status.subtitle = path ? fmt(_('Found: %s'), path) : _('Not found. Install airdrop-mt7921 or enter its path below.'); };
+        const guide = new Gtk.LinkButton({uri: 'https://github.com/jedbillyb/airdrop-mt7921#install', label: _('Guide'), valign: Gtk.Align.CENTER});
+        status.add_suffix(guide); airdrop.add(status);
+        const daemon = new Adw.EntryRow({title: _('Path to airdropd (empty = search automatically)'), text: settings.get_string('airdrop-daemon')});
+        daemon.connect('changed', () => { settings.set_string('airdrop-daemon', daemon.text.trim()); sync(); }); airdrop.add(daemon);
+        const folder = new Adw.EntryRow({title: _('Folder for received files (empty = Downloads/AirDrop)'), text: settings.get_string('airdrop-folder')});
+        folder.connect('changed', () => settings.set_string('airdrop-folder', folder.text.trim())); airdrop.add(folder);
+        sync();
     }
 
     // Thunderstorm: file search through GNOME LocalSearch, system commands, quicklinks, snippets.
     thunderstormPage(window, settings, page, group, toggle, number) {
         const storm = page('Thunderstorm', 'weather-storm-symbolic');
-        const search = group(storm, _('Search'), _('Super + Space opens Thunderstorm: apps, files, commands, calculations and units, quicklinks, clipboard, snippets and emoji. Everything runs locally, without an account and without a cloud.'));
-        toggle(search, 'launcher-file-search', _('Search files and folders'), _('Through the file index of GNOME LocalSearch. Without it: a bounded search in the personal folders.'));
+        const search = group(storm, _('Search'), _('Super + Space opens Thunderstorm. It finds apps, files, commands, quicklinks, snippets and emoji, and calculates. Everything runs locally.'));
+        toggle(search, 'launcher-file-search', _('Search files and folders'), _('Uses the GNOME LocalSearch index, otherwise a basic search of your personal folders.'));
         number(search, 'launcher-max-results', _('Visible results'), 5, 12);
         const web = new Adw.EntryRow({title: _('Web search ({query} stands for the search term)'), text: settings.get_string('launcher-web-search')});
         web.connect('changed', () => {
@@ -159,10 +170,10 @@ export default class NotchyPreferences extends ExtensionPreferences {
         commands.add(open); summary();
 
         // Which folders LocalSearch indexes; changes go to LocalSearch's own user settings.
-        const index = group(storm, _('File Index (GNOME LocalSearch)'), _('Notchy only searches what LocalSearch has already indexed. Adding folders here changes LocalSearch’s settings for your user, not the system.'));
+        const index = group(storm, _('File Index (GNOME LocalSearch)'), _('Folders added here change LocalSearch’s settings for your user.'));
         const status = new Adw.ActionRow({title: 'LocalSearch', subtitle: _('Checking…')}); index.add(status);
         Promise.all([hasOwner(LOCALSEARCH), hasOwner('org.freedesktop.Tracker3.Miner.Files')]).then(([a, b]) => {
-            status.subtitle = a || b ? _('Running · file search through the index') : _('Not running · Thunderstorm searches the personal folders in a basic way. Install or turn on the “localsearch” package for the full search.');
+            status.subtitle = a || b ? _('Running · file search through the index') : _('Not running. Install the “localsearch” package for the full file search.');
         });
         const source = Gio.SettingsSchemaSource.get_default(), miner = source?.lookup(MINER, true) ? new Gio.Settings({schema_id: MINER}) : null;
         const home = GLib.get_home_dir(), folderRows = [];
@@ -197,7 +208,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
         this.listEditor(links, settings, 'launcher-quicklinks', ['keyword', 'name', 'url'], [['name', _('Name')], ['keyword', _('Keyword')], ['url', _('Target')]],
             item => item.name || item.keyword || _('New Quicklink'), item => quicklinkTarget(item, 'test') !== null && /^\S+$/.test(item.keyword), {keyword: '', name: '', url: 'https://'}, () => defaultQuicklinks());
         // Snippets: name, keyword, text.
-        const snippets = group(storm, _('Snippets'), _('Text blocks: type the name or keyword, Enter copies it. {date}, {time} and {datetime} are replaced. Pasting into other apps automatically is not reliably and safely possible under Wayland and is therefore not offered.'));
+        const snippets = group(storm, _('Snippets'), _('Type a snippet’s name or keyword; Enter copies its text. {date}, {time} and {datetime} are filled in.'));
         this.listEditor(snippets, settings, 'launcher-snippets', ['name', 'text'], [['name', _('Name')], ['keyword', _('Keyword (optional)')], ['text', _('Text')]],
             item => item.name || _('New Snippet'), item => Boolean(item.name && item.text), {name: '', keyword: '', text: ''}, () => defaultSnippets());
     }
@@ -258,7 +269,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
         const update = (id, patch) => settings.set_string(KEY, updateCommandConfig(settings.get_string(KEY), id, patch));
         const quicklinkKeywords = () => savedOrDefault(settings.get_string('launcher-quicklinks'), ['keyword', 'name', 'url'], () => defaultQuicklinks()).map(l => l.keyword);
         const content = new Adw.PreferencesPage();
-        const top = new Adw.PreferencesGroup({description: _('Thunderstorm finds these commands by their name and by German and English search terms, whatever language Notchy speaks. Context-dependent commands (AirPods, windows, workspaces) appear only when they can work.')});
+        const top = new Adw.PreferencesGroup({description: _('Found by name and by German and English search terms. Commands for AirPods, windows and workspaces only appear when they can run.')});
         const search = new Gtk.SearchEntry({placeholder_text: _('Search commands'), hexpand: true, margin_bottom: 6});
         top.add(search);
         const resetAll = new Gtk.Button({label: _('Reset All'), valign: Gtk.Align.CENTER, css_classes: ['flat']});
@@ -357,15 +368,15 @@ export default class NotchyPreferences extends ExtensionPreferences {
     // AirPods: through the optional airpods-helper daemon (or BlueZ for basics).
     airpodsPage(settings, page, group, toggle, number) {
         const pods = page('AirPods', 'audio-headphones-symbolic');
-        const main = group(pods, 'AirPods', _('Battery levels, noise control and a connection animation in the island. For more, Notchy uses the optional airpods-helper service; it installs or changes nothing on the system itself.'));
+        const main = group(pods, 'AirPods', _('Battery levels, noise control and a connection animation in the island.'));
         toggle(main, 'airpods-enabled', _('AirPods integration'));
         toggle(main, 'airpods-animation', _('Connection animation'), _('When they connect, the island grows briefly and shows the battery levels.'));
         toggle(main, 'airpods-bubble', _('Symbol beside the notch'), _('Connected AirPods as a small symbol with a battery ring beside the clock; a click opens their controls.'));
         toggle(main, 'airpods-battery-warning', _('Warn when the battery is low'));
         number(main, 'airpods-battery-threshold', _('Warn below (percent)'), 5, 50, 5);
-        toggle(main, 'airpods-builtin', _('Without airpods-helper: read the AirPods directly'), _('Notchy reads connected AirPods itself over Apple’s accessory protocol (AAP): battery levels of buds and case, ear detection, noise control. Without root, without extra software.'));
-        toggle(main, 'airpods-ear-pause', _('Pause media when an AirPod is taken out'), _('Applies to reading them directly; with airpods-helper its own setting (below) controls the pause.'));
-        toggle(main, 'airpods-bluez-fallback', _('Basic data from BlueZ'), _('The connection (and a battery level, if the system reports one) while nothing else is available.'));
+        toggle(main, 'airpods-builtin', _('Read AirPods directly'), _('Battery, ear detection and noise control over Bluetooth, without airpods-helper.'));
+        toggle(main, 'airpods-ear-pause', _('Pause media when an AirPod is taken out'), _('With airpods-helper, its own setting below applies.'));
+        toggle(main, 'airpods-bluez-fallback', _('Basic data from BlueZ'), _('Connection state and battery level, if nothing else is available.'));
         const backend = group(pods, _('Service'), '');
         const status = new Adw.ActionRow({title: 'airpods-helper', subtitle: _('Checking…')}); backend.add(status);
         const guide = new Gtk.LinkButton({uri: 'https://github.com/superninjv/airpods-helper#readme', label: _('Guide'), valign: Gtk.Align.CENTER}); status.add_suffix(guide);
@@ -377,7 +388,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
             const running = await hasOwner(AIRPODS);
             const installed = running || await bus('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'ListActivatableNames').then(([names]) => names.includes(AIRPODS)).catch(() => false);
             start.visible = installed && !running; pause.sensitive = running;
-            if (!running) { status.subtitle = installed ? _('Installed, but not running. Notchy reads the AirPods itself meanwhile.') : _('Not installed – not needed: Notchy reads connected AirPods itself. airpods-helper adds an equalizer and more.'); return; }
+            if (!running) { status.subtitle = installed ? _('Installed, not running.') : _('Not installed. Optional: adds an equalizer and more.'); return; }
             try {
                 const [props] = await bus(AIRPODS, '/org/costa/AirPods', 'org.freedesktop.DBus.Properties', 'GetAll', new GLib.Variant('(s)', ['org.costa.AirPods']));
                 const value = name => props[name]?.deep_unpack?.() ?? props[name];
@@ -399,8 +410,8 @@ export default class NotchyPreferences extends ExtensionPreferences {
     // Smart Live Activities: what the notch shows, in which order, how long.
     activitiesPage(settings, page, group, toggle, number) {
         const live = page(_('Live Activities'), 'view-list-bullet-symbolic');
-        const main = group(live, _('Smart Live Activities'), _('The closed notch shows the most important running activity: an agent that needs you, a failure, something that just finished, a transfer, a timer or recording, the music. The agents keep their own indicators beside the notch; a click on one opens its card. Progress is only shown where it is really measured.'));
-        toggle(main, 'activities-enabled', _('Smart Live Activities'), _('Off: the notch shows music and simple activities as before.'));
+        const main = group(live, _('Smart Live Activities'), _('The closed notch shows the most important running activity, such as a transfer, a timer or the music.'));
+        toggle(main, 'activities-enabled', _('Smart Live Activities'), _('Off: only music and simple activities.'));
         toggle(main, 'activities-group', _('Summarise similar activities'), _('Two downloads become “2 transfers”.'));
         toggle(main, 'activities-animations', _('Animations'), _('A check when something finishes, a short shake when it fails, growing progress.'));
         number(main, 'activities-completed-seconds', _('Show finished activities for (seconds)'), 1, 60, 1, _('Failed ones stay at least 20 seconds.'));
@@ -419,7 +430,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
             types.add(row);
         }
         // The order of the classes, most important first; arrows move a class.
-        const order = group(live, _('Priorities'), _('What the notch shows when several activities run, most important first. Activities that need you and failures always show at once; others wait until the shown one had its moment.'));
+        const order = group(live, _('Priorities'), _('When several activities run, the notch shows the highest first. Anything that needs you or failed shows at once.'));
         const rows = [];
         const draw = () => {
             const current = sanitizeOrder(settings.get_strv('activities-priority'));
@@ -450,17 +461,17 @@ export default class NotchyPreferences extends ExtensionPreferences {
         const timers = group(live, _('Pomodoro'), _('Start timers in Thunderstorm (“timer 10 min tea”, “pomodoro”), or with notchyctl timer.'));
         number(timers, 'pomodoro-work-minutes', _('Focus (minutes)'), 5, 120, 5);
         number(timers, 'pomodoro-break-minutes', _('Break (minutes)'), 1, 60, 1);
-        const other = group(live, _('For Your Own Apps'), _('Other apps and scripts report activities over D-Bus (ReportActivity), with notchyctl live or the MCP tools live_activity and live_activity_end. Details in docs/ACTIVITIES.md.'));
+        const other = group(live, _('For Your Own Apps'), _('Apps and scripts report activities with notchyctl, over D-Bus or through MCP. See docs/ACTIVITIES.md.'));
         other.add(new Adw.ActionRow({title: "notchyctl live report --id build --name 'Build' --progress 0.4", subtitle_selectable: true, subtitle: _('Ends with notchyctl live end build, or after its lifetime.')}));
     }
     // AI agents beside the notch, and the optional hook adapters. Nothing in an
     // agent's own configuration changes without a click and a confirmation.
     agentsPage(window, settings, page, group, toggle, number) {
         const agents = page(_('Agents'), 'system-run-symbolic');
-        const main = group(agents, _('Agents Beside the Notch'), _('Claude Code, Codex and Antigravity report their state to Notchy through their own hooks: working, waiting for you, done, error. A program that merely runs never counts as “working”. Prompts, answers and transcripts are neither read nor stored.'));
+        const main = group(agents, _('Agents Beside the Notch'), _('Claude Code, Codex and Antigravity report their state through hooks: working, waiting, done or failed. Prompts and answers are never read.'));
         toggle(main, 'agents-enabled', _('Show agent indicators'));
-        toggle(main, 'agents-auto-layout', _('Distribute left and right automatically'), _('New indicators go to the side with more room; the notch stays in the middle.'));
-        toggle(main, 'agents-show-idle', _('Show ready agents without a task'), _('As a calm, still symbol.'));
+        toggle(main, 'agents-auto-layout', _('Distribute left and right automatically'), _('New indicators go to the side with more room.'));
+        toggle(main, 'agents-show-idle', _('Show ready agents without a task'), _('As a still symbol.'));
         toggle(main, 'agents-completion-animation', _('Short animation when a task is done'));
         number(main, 'agents-completed-seconds', _('Show “Done” for (seconds)'), 2, 120, 1, _('After that, the agent counts as ready.'));
         const SIDES = ['auto', 'left', 'right'];
@@ -468,20 +479,20 @@ export default class NotchyPreferences extends ExtensionPreferences {
             selected: Math.max(0, SIDES.indexOf(settings.get_string('agents-position')))});
         position.connect('notify::selected', () => settings.set_string('agents-position', SIDES[position.selected] ?? 'auto'));
         main.add(position);
-        number(main, 'indicators-max', _('Maximum visible indicators'), 0, 12, 1, _('Beside the notch, for agents, AirPods, activities and the Shelf; further ones join the “+N” group. 0 = as many as fit.'));
-        const shown = group(agents, _('In the Notch'), _('A click on an agent opens the list of all sessions. What a tool works on and the limits come only from the agents themselves; nothing leaves this computer.'));
-        toggle(shown, 'agents-show-commands', _('Show commands'), _('The first line of a command, a file’s name, a search or a web address — shortened, recognisable secrets (keys, tokens, passwords) masked.'));
-        toggle(shown, 'agents-show-limits', _('Show usage limits'), _('The 5-hour and weekly limits of Claude (Pro and Max, through a silent status line Notchy sets up with the hooks where none exists) and Codex (from its session files).'));
-        toggle(shown, 'agents-moments', _('Open the notch for agents'), _('When an agent needs you, finished or failed — not while you look at its window. Notchy approves nothing itself.'));
+        number(main, 'indicators-max', _('Maximum visible indicators'), 0, 12, 1, _('Agents, AirPods, activities and the shelf. More are grouped as “+N”. 0 = as many as fit.'));
+        const shown = group(agents, _('In the Notch'), _('Clicking an agent lists its sessions. Nothing leaves this computer.'));
+        toggle(shown, 'agents-show-commands', _('Show commands'), _('Shortened, with keys, tokens and passwords masked.'));
+        toggle(shown, 'agents-show-limits', _('Show usage limits'), _('The 5-hour and weekly limits of Claude Pro/Max and Codex.'));
+        toggle(shown, 'agents-moments', _('Open the notch for agents'), _('When an agent needs you, finishes or fails, unless its window is in front.'));
         toggle(shown, 'agents-moment-sound', _('Sound when an agent needs you'));
-        toggle(main, 'agents-done-until-seen', _('Keep “Done” until you have looked'), _('A finished task stays green until you open the agent’s card or its window. Off: it turns ready after the seconds above.'));
-        const notes = group(agents, _('Notifications'), _('Only the agent, its project folder’s name and its state are shown — never a prompt or what the agent wrote. Not while the agent’s own window has the focus. While Smart Live Activities show it in the notch, it goes quietly into the message list.'));
-        toggle(notes, 'agents-notify-waiting', _('When an agent needs you'), _('An approval or a question. Notchy approves nothing itself: a click switches to the agent.'));
+        toggle(main, 'agents-done-until-seen', _('Keep “Done” until you have looked'), _('Off: it turns ready after the time above.'));
+        const notes = group(agents, _('Notifications'), _('Shows the agent, its project folder and its state, never a prompt. Not while its window has focus.'));
+        toggle(notes, 'agents-notify-waiting', _('When an agent needs you'), _('An approval or a question. A click switches to the agent.'));
         toggle(notes, 'agents-notify-completed', _('When an agent finished its task'));
         toggle(notes, 'agents-notify-error', _('When an agent’s task failed'));
         toggle(notes, 'agents-notify-sound', _('With a sound'));
         const readSides = () => { try { return JSON.parse(settings.get_string('agents-side')) ?? {}; } catch { return {}; } };
-        const hooks = group(agents, _('Integrations'), _('Set Up adds Notchy’s hook adapter to the agent’s configuration beside your existing hooks and makes a backup first. Remove takes out exactly these entries again.'));
+        const hooks = group(agents, _('Integrations'), _('Set Up adds Notchy’s hooks next to your own and makes a backup first. Remove takes out only Notchy’s entries.'));
         const ctl = `${this.path}/scripts/notchyctl`;
         const run = args => new Promise(resolve => {
             try {
@@ -539,7 +550,7 @@ export default class NotchyPreferences extends ExtensionPreferences {
             remove.connect('clicked', () => confirm('uninstall'));
             refresh();
         }
-        const other = group(agents, _('Other Agents and ChatGPT'), _('ChatGPT in the browser and in the desktop app offer no status interface; Notchy reads nothing there. Your own scripts and other agents report with notchyctl or through the MCP server (tools agent_status, agent_end).'));
+        const other = group(agents, _('Other Agents and ChatGPT'), _('ChatGPT has no status interface. Other agents and scripts report with notchyctl or through MCP (agent_status, agent_end).'));
         other.add(new Adw.ActionRow({title: 'notchyctl agent update --session ID --state working', subtitle: _('More commands: start, heartbeat, stop, list; details in the README.'), subtitle_selectable: true}));
     }
 }

@@ -28,6 +28,8 @@ KINDS = {'pdf': 'pdf', 'md': 'text', 'txt': 'text', 'json': 'text', 'csv': 'text
 # The Shell shows this pane on top of the island's glass (Island.syncPane); the
 # pane itself stays clear there and only paints Dynamic Glass's black shade.
 CLEAR = 'rgba(0,0,0,0)'
+# Liquid Glass without glass: the island's solid capsule colour (stylesheet.css).
+SOLID = '#1a161e'
 # The Korb's window (Companion.open places it) and its fanned stack.
 BASKET = (280, 262)
 FAN = (190, 100)
@@ -518,7 +520,7 @@ class Tray(Gtk.Application):
         shade = config.get('shade') or {}
         black, fade = int(shade.get('black', 0)), int(shade.get('fade', 70))
         css = (f'.tray.shelf.dynamic {{ background: linear-gradient(to bottom, #000 0px, #000 {black}px, {CLEAR} {black + fade}px, {CLEAR} 100%); }}'
-               if style == 'dynamic' else '')
+               if style == 'dynamic' else f'.tray.shelf.liquid {{ background: {SOLID}; }}' if shade.get('solid') else '')
         self.shade_provider.load_from_data(css.encode())
         self.set_airdrop(config.get('airdrop'))
         # Six tiles a row; five on a narrow island.

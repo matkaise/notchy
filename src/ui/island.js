@@ -39,7 +39,7 @@ const AIRPODS_PILL = 900, AIRPODS_CARD = 4200, AIRPODS_AFTER = 1800, AIRPODS_GON
 const WIDTH = {search: 620, drop: 460, notification: 440, snap: 560, agent: 460, 'agent-moment': 460};
 const LIQUID_INSET = 3, FADE = 70;
 // Settings that change what an opened tab shows (see the settings handler).
-const PAGE_KEYS = new Set(['style', 'glass-level', 'width', 'media-enabled', 'media-waveform', 'airplay-enabled', 'clipboard-enabled', 'airpods-battery-threshold']);
+const PAGE_KEYS = new Set(['style', 'glass-enabled', 'glass-level', 'width', 'media-enabled', 'media-waveform', 'airplay-enabled', 'clipboard-enabled', 'airpods-battery-threshold']);
 
 // An icon from a name, a Gio.Icon or a Gio.File, set only when it changed
 // (a new FileIcon for the same cover would make St load it again).
@@ -286,10 +286,11 @@ export class Island {
     get liquid() { return this.style === 'liquid'; }
     get topInset() { return this.liquid ? LIQUID_INSET : 0; }
     get headerHeight() { return Main.panel.height - 2 * this.topInset; }
-    // Dynamic Glass: black down to this depth (from the screen top), then a fade.
-    // Dynamic Glass: the black share of the opened surface; at 100 % it is
-    // entirely black and no glass is drawn. The clock row is always black.
-    get opaque() { return this.style === 'dynamic' && this.settings.get_int('glass-level') >= 100; }
+    // No glass at all: switched off, or Dynamic Glass at 100 % black. Dynamic
+    // Glass is then entirely black, Liquid Glass a solid capsule.
+    get opaque() { return !this.settings.get_boolean('glass-enabled') || (this.style === 'dynamic' && this.settings.get_int('glass-level') >= 100); }
+    // Dynamic Glass: the black share of the opened surface, then a fade. The
+    // clock row is always black.
     blackFor(height) { return this.opaque ? height : Math.max(this.headerHeight, Math.round(height * this.settings.get_int('glass-level') / 100)); }
     get expandedWidth() { return Math.min(this.settings.get_int('width'), this.monitor.width - 32); }
     get currentWidth() {
@@ -351,7 +352,7 @@ export class Island {
         this.glass.style(this.style, this.glassRadii);
         this.glass.place(0, 0, width, height, [this.actor.x, this.actor.y]);
         this.syncPane(joined);
-        this.glass.actor.visible = !this.opaque;
+        this.glass.active = !this.opaque;
         this.opaque ? this.surface.add_style_class_name('notchy-opaque') : this.surface.remove_style_class_name('notchy-opaque');
         const show = this.style === 'dynamic' && !joined && height > 0;
         open ? this.shadeBlack.remove_style_class_name('compact') : this.shadeBlack.add_style_class_name('compact');
@@ -394,12 +395,12 @@ export class Island {
     // Gradient offsets for the native shelf below the header (Dynamic Glass).
     get shelfShade() {
         const total = this.headerHeight + TOP_GAP + CONTENT_HEIGHT.shelf + TABBAR_HEIGHT;
-        return {black: this.opaque ? 100000 : Math.max(0, this.blackFor(total) - this.headerHeight), fade: FADE};
+        return {black: this.opaque ? 100000 : Math.max(0, this.blackFor(total) - this.headerHeight), fade: FADE, solid: this.opaque};
     }
     // The same for the native drop zone below the clock.
     get dropShade() {
         const total = this.headerHeight + DROP_HEIGHT;
-        return {black: this.opaque ? 100000 : Math.max(0, this.blackFor(total) - this.headerHeight), fade: FADE};
+        return {black: this.opaque ? 100000 : Math.max(0, this.blackFor(total) - this.headerHeight), fade: FADE, solid: this.opaque};
     }
     position() {
         const width = this.expanded || this.dropActive ? this.currentWidth : this.panelAttached ? (this.foldWidth ?? this.compactWidth) : this.panelSurface.width;

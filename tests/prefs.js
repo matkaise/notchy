@@ -22,7 +22,7 @@ app.connect('activate', () => {
     GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
         try {
             const widgets = all(window), titles = widgets.filter(w => w instanceof Adw.PreferencesPage).map(w => w.title);
-            const missing = ['Darstellung', 'Thunderstorm', 'AirPods', 'Agenten', 'Ablage', 'Tastenkürzel', 'Info'].filter(t => !titles.includes(t));
+            const missing = ['Darstellung', 'AirDrop & File Drop', 'Thunderstorm', 'AirPods', 'Agenten', 'Ablage', 'Tastenkürzel', 'Info'].filter(t => !titles.includes(t));
             const expanders = widgets.filter(w => w instanceof Adw.ExpanderRow).map(w => w.title);
             const rows = widgets.filter(w => w instanceof Adw.PreferencesRow).map(w => w.title);
             if (missing.length) return fail(`missing pages ${missing.join(', ')}`);
@@ -32,6 +32,28 @@ app.connect('activate', () => {
             const language = widgets.find(w => w instanceof Adw.ComboRow && w.title === 'Sprache');
             if (!language || language.model.get_n_items() !== 3 || language.model.get_string(1) !== 'Deutsch' || language.model.get_string(2) !== 'English') return fail('the language row');
             print('PASS: Appearance offers the language: automatic, Deutsch, English');
+            // The glass switches off entirely; the black share then has nothing to set.
+            const settings0 = prefs.getSettings(), glass = widgets.find(w => w instanceof Adw.SwitchRow && w.title === 'Glaseffekt');
+            const share = widgets.find(w => w instanceof Adw.SpinRow && w.title === 'Schwarzanteil in Prozent');
+            if (!glass || !share || !glass.active || !share.sensitive) return fail('the glass switch and the black share');
+            glass.active = false;
+            if (settings0.get_boolean('glass-enabled') || share.sensitive) return fail('switching the glass off');
+            settings0.reset('glass-enabled');
+            if (!share.sensitive) return fail('switching the glass on again');
+            settings0.set_string('style', 'liquid');
+            if (share.sensitive) return fail('the black share for the capsule');
+            settings0.reset('style');
+            const style = widgets.find(w => w instanceof Adw.ComboRow && w.title === 'Stil');
+            if (style?.model.get_string(0) !== 'Notch' || style?.model.get_string(1) !== 'Kapsel') return fail('the style names');
+            print('PASS: Appearance switches the glass off; the black share follows glass and style');
+            // AirDrop, phones by QR code and dropping files on a page of their own.
+            const sharing = widgets.find(w => w instanceof Adw.PreferencesPage && w.title === 'AirDrop & File Drop');
+            const sharingGroups = all(sharing).filter(w => w instanceof Adw.PreferencesGroup).map(g => g.title);
+            if (!['File Drop', 'Handys per QR-Code', 'AirDrop (experimentell)'].every(t => sharingGroups.includes(t))) return fail(`sharing groups (${sharingGroups.join(', ')})`);
+            const appearance = widgets.find(w => w instanceof Adw.PreferencesPage && w.title === 'Darstellung');
+            if (all(appearance).some(w => w instanceof Adw.PreferencesGroup && /AirDrop|QR/.test(w.title))) return fail('AirDrop still on the Appearance page');
+            if (widgets.some(w => /Droppy/.test(`${w.title ?? ''} ${w.description ?? ''} ${w.subtitle ?? ''}`))) return fail('Droppy is still named');
+            print('PASS: AirDrop & File Drop is its own page; no page names Droppy');
             // Thunderstorm → System Commands: a subpage with every command by category.
             const open = widgets.find(w => w instanceof Adw.ActionRow && w.title === 'Systembefehle einrichten');
             if (!open) return fail(`the System Commands row (${rows.filter(Boolean).slice(0, 40).join(', ')})`);
@@ -74,7 +96,7 @@ app.connect('activate', () => {
             prefs.fill(english, prefs.getSettings());
             const englishTitles = all(english).filter(w => w instanceof Adw.PreferencesPage).map(w => w.title);
             const englishCommands = all(prefs.commandsPage(prefs.getSettings())).filter(w => w instanceof Adw.ExpanderRow).map(r => r.title);
-            if (!['Appearance', 'Thunderstorm', 'Live Activities', 'AirPods', 'Agents', 'Clipboard', 'Shortcuts', 'About'].every(t => englishTitles.includes(t))) return fail(`English pages (${englishTitles.join(', ')})`);
+            if (!['Appearance', 'AirDrop & File Drop', 'Thunderstorm', 'Live Activities', 'AirPods', 'Agents', 'Clipboard', 'Shortcuts', 'About'].every(t => englishTitles.includes(t))) return fail(`English pages (${englishTitles.join(', ')})`);
             if (!['Shut Down', 'Lock Screen', 'Do Not Disturb'].every(t => englishCommands.includes(t))) return fail(`English commands (${englishCommands.slice(0, 8).join(', ')})`);
             const englishExpanders = all(english).filter(w => w instanceof Adw.ExpanderRow).map(w => w.title);
             if (!englishExpanders.includes('Kind regards') || !englishExpanders.includes('Wikipedia')) return fail(`English defaults (${englishExpanders.join(', ')})`);

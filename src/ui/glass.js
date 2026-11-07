@@ -62,7 +62,7 @@ export const GLASS = {
 
 export class GlassLayer {
     constructor(pad = 18) {
-        this.pad = pad; this.stage = [0, 0]; this.life = new Lifetime(); this.clones = [];
+        this.pad = pad; this.stage = [0, 0]; this.life = new Lifetime(); this.clones = []; this.on = true;
         // Clipped: the clones extend far beyond the layer, and the effects must
         // render exactly the layer's own area for the shader's geometry.
         this.actor = new Clutter.Actor({name: 'notchy-glass', reactive: false, clip_to_allocation: true});
@@ -91,11 +91,19 @@ export class GlassLayer {
         this.glass.setUniform('saturation', [glass.saturation]); this.glass.setUniform('radii', radii); this.glass.setUniform('pad', [this.pad]);
         this.blur.radius = glass.blur;
     }
+    // Switched off, the layer is hidden and keeps no clones: nothing behind
+    // the island is painted, blurred or followed.
+    set active(on) {
+        if (on === this.on) return;
+        this.on = on; this.actor.visible = on; this.rebuild();
+    }
+    get active() { return this.on; }
     rebuild() {
         if (this.life.closed) return;
         this.cloneLife?.dispose(); this.cloneLife = new Lifetime();
         for (const [clone] of this.clones) clone.destroy();
         this.clones = [];
+        if (!this.on) return;
         for (const child of global.window_group.get_children()) {
             // Notchy's own native panes (Regal, drop zone, Korb) sit in or next to
             // the island; blurred into the glass they would appear twice.

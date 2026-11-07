@@ -88,6 +88,13 @@
 /* 100 % black: no glass anywhere, also under the tab bar beside a native pane. */
 .notchy-opaque.notchy-native-joined .notchy-tabbar-area { background-color: #000000; border-radius: 0 0 30px 30px; }
 .notchy-native-joined.notchy-liquid .notchy-header-row { background-color: transparent; }
+/* Glass switched off: Liquid Glass becomes a solid capsule; beside a native
+   pane only the header and the tab bar are filled, the pane paints itself. */
+.notchy-surface.notchy-liquid.notchy-opaque { background-color: #1a161e; border-radius: 13px; }
+.notchy-surface.notchy-liquid.notchy-opaque.notchy-expanded { border-radius: 30px; }
+.notchy-surface.notchy-liquid.notchy-opaque.notchy-native-joined { background-color: transparent; }
+.notchy-opaque.notchy-native-joined.notchy-liquid .notchy-header-row { background-color: #1a161e; border-radius: 30px 30px 0 0; }
+.notchy-opaque.notchy-native-joined.notchy-liquid .notchy-tabbar-area { background-color: #1a161e; }
 
 
 /* ── Shared widgets ─────────────────────────────────────────────────── */

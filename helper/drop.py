@@ -141,11 +141,12 @@ class DropReceiver(Gtk.Application):
         if config.get('visible') and config.get('backend') == BACKEND:
             self.root.add_css_class('liquid') if config.get('style') == 'liquid' else self.root.remove_css_class('liquid')
             # The Shell shows this window on top of the island's glass (Island.syncPane);
-            # Dynamic Glass continues its black-to-glass shade here, Liquid Glass stays clear.
+            # Dynamic Glass continues its black-to-glass shade here, Liquid Glass stays
+            # clear (solid, in the island's capsule colour, without glass).
             shade = config.get('shade') or {}
             black, fade = int(shade.get('black', 0)), int(shade.get('fade', 70))
             css = (f'frame.notchy-drop {{ background: linear-gradient(to bottom, #000 0px, #000 {black}px, rgba(0,0,0,0) {black + fade}px, rgba(0,0,0,0) 100%); }}'
-                   if config.get('style') != 'liquid' else '')
+                   if config.get('style') != 'liquid' else 'frame.notchy-drop { background: #1a161e; }' if shade.get('solid') else '')
             self.shade_provider.load_from_data(css.encode())
             self.airdrop_zone.set_visible(bool(config.get('airdrop')))
             backend = bool(config.get('airdropBackend', config.get('airdrop')))
