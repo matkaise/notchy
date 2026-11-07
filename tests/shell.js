@@ -1858,6 +1858,11 @@ async function agentRegressions(ext, path, screenshot) {
             const line = Gio.Subprocess.new(['/usr/bin/python3', `${ext.path}/helper/agent_status.py`], Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE);
             line.communicate_utf8_async(JSON.stringify({session_id: 'claude-a', workspace: {current_dir: '/home/test/Notchy'}, rate_limits: {five_hour: {used_percentage: 23.5, resets_at: soon}, seven_day: {used_percentage: 91, resets_at: soon + 3 * 86400}}}), null, (proc, result) => { proc.communicate_utf8_finish(result); resolve(); });
         });
+        // A newer day's finished session with stale numbers; the running one (resumed) still writes to its first day's file.
+        const tokenCount = (used, week) => `${JSON.stringify({timestamp: new Date().toISOString(), type: 'event_msg', payload: {type: 'token_count', rate_limits: {primary: {used_percent: used, window_minutes: 300, resets_at: soon}, secondary: {used_percent: week, window_minutes: 10080, resets_at: soon + 86400}}}})}\n`;
+        const later = Gio.File.new_for_path(`${path}/codex/sessions/2026/11/03`); try { later.make_directory_with_parents(null); } catch { /* There. */ }
+        later.get_child('rollout-finished.jsonl').replace_contents(tokenCount(99, 99), null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+        await Scripting.sleep(1100);
         const day = Gio.File.new_for_path(`${path}/codex/sessions/2026/10/18`); try { day.make_directory_with_parents(null); } catch { /* There. */ }
         day.get_child('rollout-test.jsonl').replace_contents(`${JSON.stringify({timestamp: new Date().toISOString(), type: 'event_msg', payload: {type: 'token_count', rate_limits: {primary: {used_percent: 64, window_minutes: 300, resets_at: soon}, secondary: {used_percent: 4, window_minutes: 10080, resets_at: soon + 86400}}}})}\n`, null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
         ext.agents.codexRead = 0; await send({provider: 'codex', session: 'codex-1', event: 'heartbeat'}); ext.agents.readCodexUsage();

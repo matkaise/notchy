@@ -254,26 +254,29 @@ export class Agents extends Emitter {
     }
 }
 
-// Codex's newest session file: the newest dated folders, then the newest file in them.
+// Codex's session file written last (sessions/YYYY/MM/DD/rollout-….jsonl). Not the
+// newest dated folder: a resumed conversation keeps writing to the file of the
+// day it began. Compressed (.zst) files are finished ones and skipped.
+const CODEX_FILES_MAX = 4000;
 function codexSession(home) {
-    const children = (folder, type) => {
-        const out = [];
+    let newest = null, newestTime = -1, seen = 0;
+    const walk = (folder, depth) => {
+        let items;
+        try { items = folder.enumerate_children('standard::name,standard::type,time::modified', Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null); } catch { return; }
         try {
-            const items = folder.enumerate_children('standard::name,standard::type,time::modified', Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
-            for (let info = items.next_file(null); info; info = items.next_file(null)) if (info.get_file_type() === type && !info.get_name().startsWith('.')) out.push(info);
-            items.close(null);
-        } catch { /* Missing: none. */ }
-        return out;
+            for (let info = items.next_file(null); info && seen < CODEX_FILES_MAX; info = items.next_file(null), seen++) {
+                const name = info.get_name();
+                if (name.startsWith('.')) continue;
+                if (info.get_file_type() === Gio.FileType.DIRECTORY && depth < 3) walk(folder.get_child(name), depth + 1);
+                else if (depth === 3 && info.get_file_type() === Gio.FileType.REGULAR && name.endsWith('.jsonl')) {
+                    const time = info.get_modification_date_time()?.to_unix() ?? 0;
+                    if (time > newestTime) { newestTime = time; newest = folder.get_child(name); }
+                }
+            }
+        } finally { items.close(null); }
     };
-    let folder = Gio.File.new_for_path(GLib.build_filenamev([home, 'sessions']));
-    for (let depth = 0; depth < 3; depth++) {
-        const names = children(folder, Gio.FileType.DIRECTORY).map(info => info.get_name()).sort();
-        if (!names.length) return null;
-        folder = folder.get_child(names.at(-1));
-    }
-    const files = children(folder, Gio.FileType.REGULAR).filter(info => info.get_name().endsWith('.jsonl'));
-    files.sort((a, b) => a.get_modification_date_time().to_unix() - b.get_modification_date_time().to_unix());
-    return files.length ? folder.get_child(files.at(-1).get_name()) : null;
+    walk(Gio.File.new_for_path(GLib.build_filenamev([home, 'sessions'])), 0);
+    return newest;
 }
 
 // /proc/<pid>/stat field 22 is the process start time in clock ticks.
