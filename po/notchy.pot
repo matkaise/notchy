@@ -788,7 +788,7 @@ msgstr ""
 msgid "New Snippet"
 msgstr ""
 
-#: prefs.js:229 prefs.js:506 prefs.js:527
+#: prefs.js:229 prefs.js:506 prefs.js:528
 msgid "Remove"
 msgstr ""
 
@@ -1373,7 +1373,7 @@ msgstr ""
 msgid "Hook adapter"
 msgstr ""
 
-#: prefs.js:506 prefs.js:527
+#: prefs.js:506 prefs.js:528
 msgid "Set Up"
 msgstr ""
 
@@ -1402,52 +1402,52 @@ msgstr ""
 msgid "Style"
 msgstr ""
 
-#: prefs.js:524
+#: prefs.js:525
 #, javascript-format
 msgid "%s: Remove Hooks?"
 msgstr ""
 
-#: prefs.js:524
+#: prefs.js:525
 #, javascript-format
 msgid "%s: Set Up Hooks?"
 msgstr ""
 
-#: prefs.js:525
+#: prefs.js:526
 msgid "Codex runs the new hooks only after you trusted them with /hooks."
-msgstr ""
-
-#: prefs.js:525
-#, javascript-format
-msgid "Notchy adds its hook adapter to %s. Existing hooks stay unchanged; a backup is made first."
-msgstr ""
-
-#: prefs.js:525
-msgid "Where Claude Code has no status line yet, Notchy adds a silent one for the usage limits; Claude Code then hides a few keyboard hints in its footer."
 msgstr ""
 
 #: prefs.js:526
 #, javascript-format
+msgid "Notchy adds its hook adapter to %s. Existing hooks stay unchanged; a backup is made first."
+msgstr ""
+
+#: prefs.js:526
+msgid "Where Claude Code has no status line yet, Notchy adds a silent one for the usage limits; Claude Code then hides a few keyboard hints in its footer."
+msgstr ""
+
+#: prefs.js:527
+#, javascript-format
 msgid "Notchy removes only its own entries from %s; a backup is made first."
 msgstr ""
 
-#: prefs.js:527 src/services/activities.js:176 src/services/activities.js:208 src/services/activities.js:209
+#: prefs.js:528 src/services/activities.js:176 src/services/activities.js:208 src/services/activities.js:209
 msgid "Cancel"
 msgstr ""
 
-#: prefs.js:532
+#: prefs.js:533
 #, javascript-format
 msgid "Not changed: %s"
 msgstr ""
 
-#: prefs.js:541
+#: prefs.js:542
 msgid "ChatGPT in the browser and in the desktop app offer no status interface; Notchy reads nothing there. Your own scripts and other agents report with notchyctl or through the MCP server (tools agent_status, agent_end)."
 msgstr ""
 
-#: prefs.js:541
+#: prefs.js:542
 msgid "Other Agents and ChatGPT"
 msgstr ""
 
-#: prefs.js:542
+#: prefs.js:543
 msgid "More commands: start, heartbeat, stop, list; details in the README."
 msgstr ""
 
@@ -2457,7 +2457,7 @@ msgstr ""
 msgid "Picture"
 msgstr ""
 
-#: src/services/activities.js:110 src/services/agents.js:68 src/services/agents.js:77 src/services/timers.js:26
+#: src/services/activities.js:110 src/services/agents.js:69 src/services/agents.js:78 src/services/timers.js:26
 msgid "Notchy is shutting down"
 msgstr ""
 
@@ -2715,7 +2715,7 @@ msgstr ""
 msgid "Timers and recordings"
 msgstr ""
 
-#: src/services/activityModel.js:96 src/services/agentModel.js:121 src/services/agents.js:79 src/services/companion.js:121
+#: src/services/activityModel.js:96 src/services/agentModel.js:121 src/services/agents.js:80 src/services/companion.js:121
 #: src/services/companion.js:122
 msgid "Not valid JSON"
 msgstr ""
@@ -2831,26 +2831,26 @@ msgstr ""
 msgid "Thinking"
 msgstr ""
 
-#: src/services/agents.js:164
+#: src/services/agents.js:167
 #, javascript-format
 msgid "%s finished its task"
 msgstr ""
 
-#: src/services/agents.js:164 src/ui/agentMoment.js:63
+#: src/services/agents.js:167 src/ui/agentMoment.js:63
 #, javascript-format
 msgid "%s needs you"
 msgstr ""
 
-#: src/services/agents.js:164
+#: src/services/agents.js:167
 #, javascript-format
 msgid "%s: task failed"
 msgstr ""
 
-#: src/services/agents.js:165
+#: src/services/agents.js:168
 msgid "Answer in the agent’s window"
 msgstr ""
 
-#: src/services/agents.js:165
+#: src/services/agents.js:168
 msgid "Click to switch to the agent"
 msgstr ""
 
@@ -3097,7 +3097,7 @@ msgstr ""
 msgid "%s is waiting"
 msgstr ""
 
-#: src/ui/agentBubble.js:145
+#: src/ui/agentBubble.js:147
 #, javascript-format
 msgid "%1$s: %2$s, %3$d session"
 msgid_plural "%1$s: %2$s, %3$d sessions"
@@ -3111,22 +3111,31 @@ msgid_plural "%d tool calls"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ui/agentCard.js:179
+#: src/ui/agentCard.js:167
+#, javascript-format
+msgid "%1$s: %2$s left"
+msgstr ""
+
+#: src/ui/agentCard.js:176
+msgid "Usage left"
+msgstr ""
+
+#: src/ui/agentCard.js:182
 msgid "5 h"
 msgstr ""
 
-#: src/ui/agentCard.js:179
+#: src/ui/agentCard.js:182
 msgid "Week"
 msgstr ""
 
-#: src/ui/agentCard.js:199
+#: src/ui/agentCard.js:202
 #, javascript-format
 msgid "%d session"
 msgid_plural "%d sessions"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ui/agentCard.js:200
+#: src/ui/agentCard.js:203
 #, javascript-format
 msgid "%d more · scroll"
 msgid_plural "%d more · scroll"
@@ -3137,16 +3146,16 @@ msgstr[1] ""
 msgid "Hide Session"
 msgstr ""
 
-#: src/ui/agentMoment.js:142
+#: src/ui/agentMoment.js:141
 #, javascript-format
 msgid "%s hit a snag"
 msgstr ""
 
-#: src/ui/agentMoment.js:143
+#: src/ui/agentMoment.js:142
 msgid "The task failed"
 msgstr ""
 
-#: src/ui/agentMoment.js:143
+#: src/ui/agentMoment.js:142
 msgid "details in its window."
 msgstr ""
 

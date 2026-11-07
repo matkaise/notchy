@@ -537,6 +537,7 @@
 .notchy-agent-tag.antigravity { color: #b9a4ff; background-color: rgba(185,164,255,0.16); }
 .notchy-agent-list-more { font-size: 11.5px; color: rgba(255,255,255,0.38); padding-top: 4px; }
 .notchy-agent-limits { spacing: 0; padding: 8px 10px 0 10px; }
+.notchy-agent-limits-title { font-size: 10px; font-weight: bold; color: rgba(255,255,255,0.38); padding-bottom: 2px; }
 .notchy-agent-limit-row { spacing: 12px; height: 24px; }
 .notchy-agent-limit-name { width: 56px; }
 .notchy-agent-meter { spacing: 6px; width: 164px; }
@@ -544,6 +545,7 @@
 .notchy-agent-meter-track { height: 5px; border-radius: 3px; background-color: rgba(255,255,255,0.1); }
 .notchy-agent-meter-fill { height: 5px; border-radius: 3px; background-color: #4ade80; }
 .notchy-agent-meter-fill.mid { background-color: #f5a524; }
+/* (The fill is what is left: green while plenty, amber, then red.) */
 .notchy-agent-meter-fill.high { background-color: #f87171; }
 .notchy-agent-meter-value { font-family: monospace; font-size: 10px; font-weight: bold; color: rgba(255,255,255,0.75); min-width: 40px; text-align: right; }
 /* An agent's moment out of the notch (src/ui/agentMoment.js): needs you, done, a snag. The glow is a warm light rising inside the card. */

@@ -10,7 +10,7 @@ import {_, fmt, ngettext, duration, relativeTime, formatPercent} from '../i18n/c
 
 // Rows visible before the list scrolls.
 const VISIBLE_ROWS = 4;
-// A limit's bar: green, amber from 60 %, red from 85 % (as Nosy Notch).
+// A limit's bar shows what is left, as Codex does: green, amber below 40 %, red below 15 %.
 const meterClass = used => (used >= 85 ? 'high' : used >= 60 ? 'mid' : 'low');
 const SPINS = new Set(['claude']);
 
@@ -45,7 +45,7 @@ export function agentCard(island, provider) {
     root.add_child(more);
     const limits = box(true, {style_class: 'notchy-agent-limits', visible: false});
     root.add_child(limits);
-    let layout = '', meters = [];
+    let layout = '', meters = [], usageKey = '';
 
     const switchTo = session => {
         const window = session ? agents.window(session) : null;
@@ -150,8 +150,9 @@ export function agentCard(island, provider) {
     const meter = (labelText, window) => {
         const actor = box(false, {style_class: 'notchy-agent-meter', x_expand: true, reactive: true, track_hover: true});
         const name = label(labelText, 'notchy-agent-meter-label', {y_align: Clutter.ActorAlign.CENTER});
-        const track = new St.Widget({style_class: 'notchy-agent-meter-track', x_expand: true, y_align: Clutter.ActorAlign.CENTER, layout_manager: new Clutter.BinLayout()});
-        const fill = new St.Widget({style_class: 'notchy-agent-meter-fill', x_align: Clutter.ActorAlign.START, x_expand: false});
+        // (A row, so the fill always starts at the left; a bin centres it.)
+        const track = box(false, {style_class: 'notchy-agent-meter-track', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const fill = new St.Widget({style_class: 'notchy-agent-meter-fill', x_expand: false});
         track.add_child(fill);
         const value = label('', 'notchy-agent-meter-value', {y_align: Clutter.ActorAlign.CENTER});
         actor.add_child(name); actor.add_child(track); actor.add_child(value);
@@ -160,10 +161,11 @@ export function agentCard(island, provider) {
             const w = m.window;
             fill.visible = Boolean(w);
             // (Sizes only on the stage; its width arriving draws it again.)
-            if (w) { fill.set_style_class_name(`notchy-agent-meter-fill ${meterClass(w.used)}`); if (track.get_stage()) fill.width = Math.max(4, Math.round(track.width * w.used / 100)); }
+            const left = w ? Math.max(0, 100 - w.used) : 0;
+            if (w) { fill.set_style_class_name(`notchy-agent-meter-fill ${meterClass(w.used)}`); if (track.get_stage()) fill.width = Math.max(left > 0 ? 4 : 0, Math.round(track.width * left / 100)); }
             // Hovering a bar tells when it resets: "↻ 2 h 5 min".
-            value.text = !w ? '–' : actor.get_stage() && actor.hover && w.resetsAt ? `↻ ${duration(w.resetsAt * 1000 - Date.now())}` : formatPercent(Math.round(w.used));
-            actor.accessible_name = `${labelText}: ${value.text}`;
+            value.text = !w ? '–' : actor.get_stage() && actor.hover && w.resetsAt ? `↻ ${duration(w.resetsAt * 1000 - Date.now())}` : formatPercent(Math.round(left));
+            actor.accessible_name = w ? fmt(_('%1$s: %2$s left'), labelText, formatPercent(Math.round(left))) : `${labelText}: –`;
         };
         m.draw = draw;
         track.connect('notify::width', draw); actor.connect('notify::hover', draw);
@@ -172,6 +174,7 @@ export function agentCard(island, provider) {
     };
     const drawLimits = usage => {
         limits.destroy_all_children(); meters = [];
+        if (usage.length) limits.add_child(label(_('Usage left'), 'notchy-agent-limits-title'));
         for (const entry of usage) {
             const row = box(false, {style_class: 'notchy-agent-limit-row'});
             const tag = label(PROVIDERS[entry.provider]?.name.split(' ')[0] ?? entry.name, `notchy-agent-tag ${entry.provider}`, {y_align: Clutter.ActorAlign.CENTER});
@@ -186,9 +189,9 @@ export function agentCard(island, provider) {
     const update = () => {
         if (life.closed) return;
         const sessions = sessionsNow(), usage = agents.usageRows();
-        // Gone: the list closes; sessions coming, going or reordering, or the limits appearing: it is built anew.
+        // Gone: the list closes; sessions coming, going or reordering: it is built anew.
         if (!sessions.length) { life.later(0, () => { if (island.peekKind === 'agent' && island.agentCard?.actor === root) island.close(); }); return; }
-        const key = `${sessions.map(s => `${keyOf(s)}:${s.generation}`).join('|')}#${usage.map(u => u.provider).join('|')}`;
+        const key = sessions.map(s => `${keyOf(s)}:${s.generation}`).join('|');
         if (layout && key !== layout) { life.later(0, () => { if (island.peekKind === 'agent' && island.agentCard?.actor === root) island.showAgentCard(provider, {focus: false}); }); return; }
         const first = !layout;
         layout = key;
@@ -200,10 +203,14 @@ export function agentCard(island, provider) {
         count.text = fmt(ngettext('%d session', '%d sessions', sessions.length), sessions.length);
         more.text = sessions.length > VISIBLE_ROWS ? fmt(ngettext('%d more · scroll', '%d more · scroll', sessions.length - VISIBLE_ROWS), sessions.length - VISIBLE_ROWS) : '';
         more.visible = sessions.length > VISIBLE_ROWS;
-        if (first) drawLimits(usage);
+        // The limits arriving or going: only their block, and the notch follows its height (the keyboard stays).
+        const usageNow = usage.map(u => u.provider).join('|');
+        if (first || usageNow !== usageKey) { usageKey = usageNow; drawLimits(usage); if (!first) life.later(0, () => { if (island.agentCard?.actor === root) island.resizePeek(); }); }
         else for (const [i, entry] of usage.entries()) { if (meters[2 * i]) { meters[2 * i].window = entry.fiveHour; meters[2 * i + 1].window = entry.week; meters[2 * i].draw(); meters[2 * i + 1].draw(); } }
     };
     life.cleanups.push(agents.subscribe(update));
+    // The limits as fresh as Codex's file while the list is open (read at most every 10 s).
+    agents.readCodexUsage(); life.every(15000, () => agents.readCodexUsage());
     // Running times move on while the list is open; the glyphs start moving once on screen.
     life.every(1000, () => { for (const row of rows.values()) if (row.session) updateRow(row, row.session); for (const m of meters) m.draw(); });
     life.connect(root, 'notify::mapped', () => { if (root.mapped) for (const row of rows.values()) { row.motion = null; updateRow(row, row.session); } });

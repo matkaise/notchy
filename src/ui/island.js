@@ -926,6 +926,11 @@ export class Island {
         if (duration) this.peekTimeout = this.life.later(duration, () => { this.peekTimeout = 0; if (!this.hovered) this.close(); });
         return true;
     }
+    // A shown banner's content grew or shrank (the agent list's limits arriving): the notch follows.
+    resizePeek() {
+        if (!this.peeking || !this.peekView || this.life.closed) return;
+        this.animateSize(this.peekView.actor.get_preferred_height(this.currentWidth)[1]);
+    }
     endPeek() {
         if (!this.peeking) return;
         this.peeking = false; this.peekKind = null; this.peekView = null; this.sizeTarget = null; this.agentCard = null; this.views.keyPress = null;

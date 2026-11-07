@@ -1870,9 +1870,9 @@ async function agentRegressions(ext, path, screenshot) {
         island.close(true); await Scripting.sleep(300);
         island.showAgentCard('claude', {focus: false}); await waitFor(() => island.peekKind === 'agent' && !island.morphing); await Scripting.sleep(400);
         const meters = island.agentCard.meters(), values = meters.map(m => m.value.text);
-        assert(island.agentCard.limits.visible && meters.length === 4 && values.join(' | ') === '24 % | 91 % | 64 % | 4 %' && meters[1].fill.has_style_class_name('high') && meters[2].fill.has_style_class_name('mid') && meters[3].fill.has_style_class_name('low')
-            && meters[0].fill.width > 0 && meters[0].fill.width < meters[0].track.width / 3,
-            `the list's foot: Claude's and Codex's 5-hour and weekly limits as bars, green, amber, red (${values.join(' | ')})`);
+        assert(island.agentCard.limits.visible && meters.length === 4 && values.join(' | ') === '77 % | 9 % | 36 % | 96 %' && meters[1].fill.has_style_class_name('high') && meters[2].fill.has_style_class_name('mid') && meters[3].fill.has_style_class_name('low')
+            && meters[0].fill.width > meters[0].track.width * 0.6 && meters[1].fill.width < meters[1].track.width * 0.2 && meters.every(m => Math.abs(m.fill.get_transformed_position()[0] - m.track.get_transformed_position()[0]) < 1) && styled(island.body, 'notchy-agent-limits-title')[0]?.text === 'Übrig',
+            `the list's foot: what is left of Claude's and Codex's 5-hour and weekly limits, as Codex shows it — green, amber, red (${values.join(' | ')})`);
         meters[0].actor.hover = true; meters[0].draw();
         assert(/^↻ 2 Std\. \d+ Min\.$/.test(meters[0].value.text), `hovering a bar tells when it resets (${meters[0].value.text})`);
         meters[0].actor.hover = false; meters[0].draw();

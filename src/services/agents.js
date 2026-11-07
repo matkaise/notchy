@@ -17,8 +17,9 @@ const AWAY_GRACE_MS = 3000;
 const SHELL_PID = new Gio.Credentials().get_unix_pid();
 // Sessions saved at disable come back within this time.
 const RESTORE_MS = 15 * 60 * 1000;
-// Codex's limits are read from the end of its newest session file, at most this often.
-const CODEX_USAGE_MS = 10000, CODEX_TAIL = 512 * 1024;
+// Codex's limits are read from the end of its newest session file, at most this often —
+// and every minute anyway: Codex's desktop app runs no hooks that would say it worked.
+const CODEX_USAGE_MS = 10000, CODEX_POLL_MS = 60000, CODEX_TAIL = 512 * 1024;
 
 // The agent service: sessions from hook adapters (helper/agent_hook.py),
 // notchyctl and the MCP bridge arrive as events over Notchy's D-Bus interface
@@ -108,7 +109,9 @@ export class Agents extends Emitter {
     // (helper/agent_status.py); Codex's are in its own session files.
     watchUsage() {
         this.usageMonitor?.cancel(); this.usageMonitor = null;
+        this.life.cancel(this.codexPoll); this.codexPoll = 0;
         if (!this.settings.get_boolean('agents-show-limits')) { this.usage = {}; return; }
+        this.codexPoll = this.life.every(CODEX_POLL_MS, () => this.readCodexUsage());
         const folder = Gio.File.new_for_path(GLib.build_filenamev([GLib.get_user_cache_dir(), 'notchy']));
         try { folder.make_directory_with_parents(null); } catch { /* Exists. */ }
         const file = folder.get_child('agent-usage-claude.json');
