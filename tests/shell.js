@@ -926,8 +926,12 @@ async function interactionRegressions(ext, path, screenshot) {
             destination.force_exit();
             for (let i = 0; i < 60 && global.get_window_actors().some(a => a.meta_window.get_title() === 'Notchy Drop Destination'); i++) await Scripting.sleep(50);
             await click(tile);
-            const escapeFrame = currentPane().get_frame_rect();
-            await move(escapeFrame.x + escapeFrame.width / 2, escapeFrame.y + 16);
+            // A click on the header's title — no button, no empty space — gives the Regal the keyboard and keeps the selection.
+            // (The middle of the window's top edge lies under the island's clock, which opens the calendar when the click reaches it.)
+            for (let i = 0; i < 40 && !header().clear; i++) await Scripting.sleep(50);
+            const clearButton = header().clear, paneBuffer = currentPane().get_buffer_rect();
+            assert(clearButton, `the Regal reports its header with a selection (${JSON.stringify(header())})`);
+            await move(paneBuffer.x + clearButton.x + clearButton.width + 50, paneBuffer.y + clearButton.y + clearButton.height / 2);
             await press(Clutter.ButtonState.PRESSED); await press(Clutter.ButtonState.RELEASED);
             // Slower machines (GitHub's runners) need a moment before the Regal has the keyboard and has reported the selection.
             const regalReady = () => global.display.focus_window === currentPane() && ext.companion.shelfSelected > 0;
