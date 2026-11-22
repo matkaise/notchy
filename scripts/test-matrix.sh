@@ -37,6 +37,8 @@ run_one() {
     docker run -i --rm --shm-size=1g -e "SUITE=$suite" "${passthrough[@]}" \
         -v "$PWD:/src:ro" -v "$PWD/$out:/out" "$image" bash -s <<'EOF'
 set -u
+# The host's user (GitHub's runner) reads and removes the results afterwards.
+trap 'chmod -R a+rwX /out 2>/dev/null || true' EXIT
 mkdir -p -m 700 "$XDG_RUNTIME_DIR"
 # The Shell connects to the system bus at startup (GNOME 51's time limits
 # fail without one). A container has none; a private bus stands in for it,
