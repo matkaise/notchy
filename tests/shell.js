@@ -932,6 +932,12 @@ async function interactionRegressions(ext, path, screenshot) {
             // Slower machines (GitHub's runners) need a moment before the Regal has the keyboard and has reported the selection.
             const regalReady = () => global.display.focus_window === currentPane() && ext.companion.shelfSelected > 0;
             for (let i = 0; i < 60 && !regalReady(); i++) await Scripting.sleep(50);
+            // This checks the Escape, not focusing by click: on GitHub's GNOME 50/51 runners the click leaves no window focused.
+            if (!regalReady()) {
+                console.log(`NOTCHY_TEST_NOTE: the click left the focus on ${global.display.focus_window?.get_title() ?? 'no window'}; the Regal is activated directly`);
+                currentPane().activate(global.get_current_time());
+                for (let i = 0; i < 60 && !regalReady(); i++) await Scripting.sleep(50);
+            }
             const escapeBefore = `focus: ${global.display.focus_window?.get_title()}, selected: ${ext.companion.shelfSelected}`;
             // Files selected earlier stay selected: the first Esc clears them, the next closes.
             await escape();
