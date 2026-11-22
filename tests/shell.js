@@ -926,9 +926,13 @@ async function interactionRegressions(ext, path, screenshot) {
             const escapeFrame = currentPane().get_frame_rect();
             await move(escapeFrame.x + escapeFrame.width / 2, escapeFrame.y + 16);
             await press(Clutter.ButtonState.PRESSED); await press(Clutter.ButtonState.RELEASED);
+            // Slower machines (GitHub's runners) need a moment before the Regal has the keyboard and has reported the selection.
+            const regalReady = () => global.display.focus_window === currentPane() && ext.companion.shelfSelected > 0;
+            for (let i = 0; i < 60 && !regalReady(); i++) await Scripting.sleep(50);
+            const escapeBefore = `focus: ${global.display.focus_window?.get_title()}, selected: ${ext.companion.shelfSelected}`;
             // Files selected earlier stay selected: the first Esc clears them, the next closes.
             await escape();
-            assert(island.expanded && ext.companion.shelfIsland, 'the first Escape only clears the Regal\'s selection');
+            assert(island.expanded && ext.companion.shelfIsland, `the first Escape only clears the Regal's selection (before: ${escapeBefore}; after: open ${island.expanded}, Regal ${Boolean(ext.companion.shelfIsland)}, selected ${ext.companion.shelfSelected})`);
             await escape();
             assert(!island.expanded && !ext.companion.shelfIsland && island.actor.reactive, 'Escape closes the native Regal and restores the capsule');
         } finally { await press(Clutter.ButtonState.RELEASED); destination.force_exit(); island.close(); await move(20, 600); }
