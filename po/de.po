@@ -322,7 +322,7 @@ msgstr "Rechner"
 msgid "laptop"
 msgstr "Laptop"
 
-#. Translators: how the computer is named on the phone, e.g. „Laptop von Matthias“.
+#. Translators: how the computer is named on the phone, e.g. „Laptop von Alex“.
 #: helper/share_page.py:52
 #, python-format
 msgid "%(name)s’s %(device)s"
@@ -3023,13 +3023,13 @@ msgstr "Datei wird verarbeitet …"
 msgid "Processing failed"
 msgstr "Verarbeitung fehlgeschlagen"
 
-#: src/services/outputs.js:72
-msgid "The AirPlay search has ended."
-msgstr "AirPlay-Suche wurde beendet."
-
-#: src/services/outputs.js:74
+#: src/services/outputs.js:101
 msgid "PipeWire is not available."
 msgstr "PipeWire ist nicht verfügbar."
+
+#: src/services/outputs.js:99
+msgid "The AirPlay search has ended."
+msgstr "AirPlay-Suche wurde beendet."
 
 #: src/services/share.js:104
 msgid "Sharing ended unexpectedly"
@@ -3106,7 +3106,7 @@ msgstr "%s fehlgeschlagen"
 msgid "%s is waiting"
 msgstr "%s wartet"
 
-#: src/ui/agentBubble.js:147
+#: src/ui/agentBubble.js:152
 #, javascript-format
 msgid "%1$s: %2$s, %3$d session"
 msgid_plural "%1$s: %2$s, %3$d sessions"

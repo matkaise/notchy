@@ -31,6 +31,8 @@ run_one() {
         *) build=(--build-arg "UBUNTU=${base#*:}") ;;
     esac
     rm -rf "$out"; mkdir -p "$out"
+    # The container's test user rarely has the host user's id (GitHub's runner is 1001).
+    chmod a+rwx "$out"
     docker build -q -t "$image" "${build[@]}" tests/matrix >"$out/build.log" 2>&1 || { cat "$out/build.log" >&2; return 1; }
     docker run -i --rm --shm-size=1g -e "SUITE=$suite" "${passthrough[@]}" \
         -v "$PWD:/src:ro" -v "$PWD/$out:/out" "$image" bash -s <<'EOF'

@@ -56,7 +56,7 @@ export async function run() {
     // helper can time out during the longer suite; it needs no explicit Exit.
     const perfHelper = await Scripting._getPerfHelper(); perfHelper._autoExit = false;
     Main.overview.hide(); await Scripting.sleep(500);
-    const record = Main.extensionManager.lookup('notchy@matthias.local');
+    const record = Main.extensionManager.lookup('notchy@matkaise.github.io');
     assert(record && record.stateObj, 'extension loaded');
     const ext = record.stateObj;
     // Translations: the installed package carries the compiled catalog, and
@@ -229,7 +229,13 @@ export async function run() {
         for (const k of [...keys].reverse()) { keyboard.notify_keyval(GLib.get_monotonic_time(), k, Clutter.KeyState.RELEASED); await Scripting.sleep(30); }
         await Scripting.sleep(500);
     };
-    assert(ext.borrowedKeys.has('switch-input-source') && ext.borrowedKeys.has('switch-input-source-backward') && Main.wm._allowedKeybindings['switch-input-source'] === Shell.ActionMode.NONE, 'with one keyboard layout GNOME\'s Super+Space layout switch yields to Notchy');
+    assert(ext.borrowedKeys.has('switch-input-source') && Main.wm._allowedKeybindings['switch-input-source'] === Shell.ActionMode.NONE, 'with one keyboard layout GNOME\'s Super+Space layout switch yields to Notchy');
+    // The clipboard has no shortcut of its own by default (GNOME's guidelines), so Shift+Super+Space stays GNOME's until one is given.
+    assert(!ext.borrowedKeys.has('switch-input-source-backward') && ext.settings.get_strv('toggle-clipboard').length === 0, 'without a clipboard shortcut GNOME keeps Shift+Super+Space');
+    ext.settings.set_strv('toggle-clipboard', ['<Super><Shift>space']); await Scripting.sleep(200);
+    assert(ext.borrowedKeys.has('switch-input-source-backward'), 'a clipboard shortcut on Shift+Super+Space borrows that key too');
+    ext.settings.reset('toggle-clipboard'); await Scripting.sleep(200);
+    assert(!ext.borrowedKeys.has('switch-input-source-backward') && Main.wm._allowedKeybindings['switch-input-source-backward'] === Shell.ActionMode.ALL, 'clearing it hands the key back');
     let opened = 0;
     for (let i = 0; i < 4; i++) { await chord(Clutter.KEY_Super_L, Clutter.KEY_space); if (island.expanded && island.page === 'search') opened++; island.close(true); await Scripting.sleep(250); }
     assert(opened === 4, `Super+Space opens the search every time (${opened}/4)`);
@@ -612,9 +618,9 @@ async function interactionRegressions(ext, path, screenshot) {
         const incoming = (sender, name) => Gio.File.new_for_path(`${airdropDir}/incoming`).replace_contents(`${sender}|${name}\n`, null, false, Gio.FileCreateFlags.NONE, null);
         const answer = async () => { for (let i = 0; i < 60 && !GLib.file_test(`${airdropDir}/answer`, GLib.FileTest.EXISTS); i++) await Scripting.sleep(100); const [, bytes] = GLib.file_get_contents(`${airdropDir}/answer`); GLib.unlink(`${airdropDir}/answer`); return new TextDecoder().decode(bytes).trim(); };
         // An incoming photo asks in the notch; „Annehmen“ lets it in, and it joins the Regal.
-        incoming('Matthias’ iPhone', 'IMG_2048.HEIC');
+        incoming('Alex’ iPhone', 'IMG_2048.HEIC');
         for (let i = 0; i < 40 && island.peekKind !== 'airdrop-ask'; i++) await Scripting.sleep(100);
-        assert(island.peekKind === 'airdrop-ask' && airdrop.question?.sender === 'Matthias’ iPhone' && styled(island.body, 'notchy-peek-title')[0]?.text === 'Matthias’ iPhone', 'an incoming AirDrop asks for consent in the notch');
+        assert(island.peekKind === 'airdrop-ask' && airdrop.question?.sender === 'Alex’ iPhone' && styled(island.body, 'notchy-peek-title')[0]?.text === 'Alex’ iPhone', 'an incoming AirDrop asks for consent in the notch');
         await Scripting.sleep(400); await screenshot('airdrop-ask');
         buttons(island.body, 'Annehmen')[0].emit('clicked', 1);
         assert(await answer() === 'accepted', 'Annehmen accepts the transfer through the backend\'s hook');
@@ -1517,10 +1523,10 @@ async function airpodsRegressions(ext, path, screenshot) {
         try {
             await waitFor(() => ext.media.state?.playing);
             island.open('media'); await Scripting.sleep(300);
-            airpods.testDevice({address: '68:CA:C4:DE:31:F3', name: 'Matthias’ AirPods Pro', product: 0x2024, connected: true});
+            airpods.testDevice({address: '12:34:56:78:9A:BC', name: 'Alex’ AirPods Pro', product: 0x2024, connected: true});
             await waitFor(() => airpods.backend === 'aap' && airpods.state.battery.case === 90, 4000);
             const aap = airpods.state;
-            assert(aap.backend === 'aap' && aap.name === 'Matthias’ AirPods Pro' && aap.model === 'A3048' && aap.battery.left === 96 && aap.battery.right === 98 && aap.charging.case,
+            assert(aap.backend === 'aap' && aap.name === 'Alex’ AirPods Pro' && aap.model === 'A3048' && aap.battery.left === 96 && aap.battery.right === 98 && aap.charging.case,
                 `without airpods-helper Notchy reads the AirPods over AAP itself (${aap.backend}: ${aap.battery.left}/${aap.battery.right}/${aap.battery.case})`);
             assert(aap.features.includes('anc') && aap.features.includes('adaptive') && aap.features.includes('ca') && airpods.modes.join('|') === 'noise|transparency|adaptive|off', `the model's features come from its product id (${aap.features.join(', ')})`);
             assert(!island.peeking && island.airpodsPending, 'with a tab open the connection card waits');

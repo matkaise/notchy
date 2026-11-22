@@ -42,7 +42,7 @@ export NOTCHY_AAP_LOG="$PWD/tests/output/aap-sent.log"
 export NOTCHY_SHARE_ADDRESS=127.0.0.1
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
 filters=(--extra-filter org.notchy.FileTray --extra-filter org.notchy.DropTarget --extra-filter org.notchy.DropSource --extra-filter tray.py --extra-filter python3 --extra-filter gjs --extra-filter org.gnome.Shell.Extensions --extra-filter org.notchy.PreferencesTest --extra-filter org.notchy.LayerFixture)
-bundle="$PWD/dist/notchy@matthias.local.shell-extension.zip"
+bundle="$PWD/dist/notchy@matkaise.github.io.shell-extension.zip"
 if gnome-shell-test-tool --help | grep -- '--extension' >/dev/null; then
     dbus-run-session -- gnome-shell-test-tool --headless "${filters[@]}" --extension "$bundle" "$PWD/tests/shell.js" 2>&1 | tee tests/output/shell.log
 else
@@ -52,7 +52,7 @@ else
     gnome-extensions install --force "$bundle"
     export GSETTINGS_BACKEND=keyfile
     mkdir -p "$XDG_CONFIG_HOME/glib-2.0/settings"
-    printf '[org/gnome/shell]\nenabled-extensions=["notchy@matthias.local"]\n' > "$XDG_CONFIG_HOME/glib-2.0/settings/keyfile"
+    printf '[org/gnome/shell]\nenabled-extensions=["notchy@matkaise.github.io"]\n' > "$XDG_CONFIG_HOME/glib-2.0/settings/keyfile"
     dbus-run-session -- gnome-shell-test-tool --headless "${filters[@]}" "$PWD/tests/shell.js" 2>&1 | tee tests/output/shell.log
 fi
 if [[ -n "${NOTCHY_TEST_CORNERS_ONLY:-}" ]]; then

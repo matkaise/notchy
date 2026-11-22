@@ -27,7 +27,7 @@ LAPTOPS = {8, 9, 10, 11, 14, 30, 31, 32}
 
 
 def computer_name():
-    """How the computer is called on the phone: its pretty hostname, else „Laptop von Matthias“."""
+    """How the computer is called on the phone: its pretty hostname, else „Laptop von Alex“."""
     try:
         for line in Path('/etc/machine-info').read_text().splitlines():
             if line.startswith('PRETTY_HOSTNAME='):
@@ -48,7 +48,7 @@ def computer_name():
     first = real.split()[0] if real else ''
     if not first:
         return socket.gethostname()[:60] or 'Notchy'
-    # Translators: how the computer is named on the phone, e.g. „Laptop von Matthias“.
+    # Translators: how the computer is named on the phone, e.g. „Laptop von Alex“.
     return _("%(name)s’s %(device)s") % {'name': first, 'device': device}
 
 

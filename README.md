@@ -23,7 +23,9 @@ The user interface speaks **German and English** and follows the GNOME/system la
 bash scripts/install.sh
 ```
 
-Or install the built package: `gnome-extensions install --force dist/notchy@matthias.local.shell-extension.zip`. On Wayland, GNOME loads changed extensions only after logging out and back in. Then run `gnome-extensions enable notchy@matthias.local`.
+Or install the built package: `gnome-extensions install --force dist/notchy@matkaise.github.io.shell-extension.zip`. On Wayland, GNOME loads changed extensions only after logging out and back in. Then run `gnome-extensions enable notchy@matkaise.github.io`.
+
+Up to version 10 Notchy's id was `notchy@matthias.local`. `scripts/install.sh` removes that copy, enables the new one for the next login and points agent hooks set up before at the new helpers; the settings stay.
 
 ## Usage
 
@@ -44,7 +46,7 @@ Or install the built package: `gnome-extensions install --force dist/notchy@matt
 - **Radial menu (right click on the island or Super + Shift + R):** area, window, screen, recording, text (OCR). Screenshots land in the shelf, recognised text in the clipboard, recordings use GNOME's screen recorder.
 - **Styles:** *Notch* (black, hanging from the top edge and fading into glass; the black share is adjustable; its outer top corners widen as the notch grows) and *Capsule* (floating below the edge). Settings → Appearance → „Glaseffekt“ switches the glass off entirely: the notch is then black, the capsule a solid surface, and nothing behind the island is cloned or blurred.
 
-Shortcuts: Super + Space (search), Super + Ctrl + Space (island), Super + Shift + Space (clipboard), Super + Shift + B (basket), Super + Shift + R (radial menu). All can be changed or cleared. GNOME uses Super + Space and Shift + Super + Space to switch keyboard layouts: with a single layout configured, Notchy takes these keys over while it runs (no setting is changed); with several layouts GNOME keeps them, so choose other Notchy shortcuts.
+Shortcuts: Super + Space (search), Super + Ctrl + Space (island), Super + Shift + B (basket), Super + Shift + R (radial menu). The clipboard has no shortcut until you give it one in Settings (Super + Shift + Space works well), as GNOME's extension guidelines ask. All can be changed or cleared. GNOME uses Super + Space and Shift + Super + Space to switch keyboard layouts: with a single layout configured, Notchy takes these keys over while it runs (no setting is changed); with several layouts GNOME keeps them, so choose other Notchy shortcuts.
 
 **Droplets** (Pomodoro, notes, weather, terminal …) are removed for now and will return later under a new name. The full source before that redesign is kept locally under `archive/` (not part of the repository).
 
@@ -132,7 +134,7 @@ The Codex desktop app and IDE extension share Codex's configuration directory, b
 
 Any phone in the same Wi-Fi can receive files from Notchy and send files to it — Android or iPhone, without an app or an account — through the same banners as AirDrop, not a second surface:
 
-- **Sending:** drop files on „An Handy senden“ below the clock, or use „An Handy senden“ in the Regal and the basket. Without AirDrop's backend the banner shows a QR code at once; with it, AirDrop searches as before and a small pill „AirDrop | QR-Code“ switches to the code (AirDrop is stopped then, as it holds the Wi-Fi card; the code appears once the Wi-Fi is back). The phone scans it with its camera, its browser opens a page in Notchy's look — a notch naming this computer („Rechner von Matthias“, from its pretty hostname or the user's first name), the files as tiles with previews for photos, „Alle laden (ZIP)“ for several, a ✓ on each file once it arrived — and the banner shows who downloads and how far — bytes Notchy really delivered — then „An Pixel 8 gesendet“. The link ends with the banner.
+- **Sending:** drop files on „An Handy senden“ below the clock, or use „An Handy senden“ in the Regal and the basket. Without AirDrop's backend the banner shows a QR code at once; with it, AirDrop searches as before and a small pill „AirDrop | QR-Code“ switches to the code (AirDrop is stopped then, as it holds the Wi-Fi card; the code appears once the Wi-Fi is back). The phone scans it with its camera, its browser opens a page in Notchy's look — a notch naming this computer („Rechner von Alex“, from its pretty hostname or the user's first name), the files as tiles with previews for photos, „Alle laden (ZIP)“ for several, a ✓ on each file once it arrived — and the banner shows who downloads and how far — bytes Notchy really delivered — then „An Pixel 8 gesendet“. The link ends with the banner.
 - **Receiving:** the button in the island's header (AirDrop's) opens the receive banner: visible to iPhones with AirDrop, or a QR code. The phone picks files and sends; the notch asks first with AirDrop's question („Pixel 8 möchte 3 Dateien senden (12,4 MB)“), and only „Annehmen“ lets them in. The phone's page shows the chosen files as tiles, waits for the answer, then a ring with each file's progress. They land in the Regal and in the AirDrop folder (Settings); the banner counts them („1 Datei empfangen · bereit für mehr“) and stays open, so „Weitere senden“ on the phone works. Receiving ends 10 minutes after the last transfer or with the banner.
 - **How:** `helper/share.py` runs a small web server for one session, in its own process (nothing of it runs in the Shell). The link carries a random key; only private-network addresses are served (never the internet); file names a phone sends are reduced to plain names inside the chosen folder; nothing is stored before „Annehmen“. The page is plain HTML with no external resources under a strict CSP; photo previews are scaled down on the computer (GdkPixbuf), and an old link shows „Dieser Link gilt nicht mehr“. The QR code is Notchy's own encoder (`src/qrcode.js`, checked against zbar).
 - **Limits:** phone and computer must be in the same network (guest Wi-Fi with client isolation prevents it). The link is plain http in the local network: someone reading the same Wi-Fi could see the files (https would need a self-signed certificate the phone warns about). AirDrop and the QR code cannot run at the same time with the MediaTek card, hence the pill. A firewall (ufw) must allow incoming connections from the local network on a random port.
@@ -243,3 +245,7 @@ MCP configuration for a local client:
 ```
 
 The MCP bridge offers `list_shelf`, `add_files`, `set_activity`, `clear_activity`, `live_activity` and `live_activity_end` (a live activity of your own, see [docs/ACTIVITIES.md](docs/ACTIVITIES.md)), and for agent sessions `agent_status` (agent, session, state, optional status, project and real progress) and `agent_end`. It opens no network port and never returns clipboard history.
+
+## License
+
+Notchy is free software under the GNU General Public License, version 2 or (at your option) any later version (`GPL-2.0-or-later`), the terms GNOME Shell itself uses. See [LICENSE](LICENSE).

@@ -299,7 +299,7 @@ test('a finished task stays „done“ until it was seen (as Herdr does)', () =>
 test('switching to an agent only when its window is unambiguous', () => {
     const w = title => ({title});
     assert.equal(pickWindow([w('anything')], 'Notchy').title, 'anything', 'the only window of its app');
-    assert.equal(pickWindow([w('matthias@pc: ~/Notchy'), w('matthias@pc: ~/Website')], 'Notchy').title, 'matthias@pc: ~/Notchy');
+    assert.equal(pickWindow([w('alex@pc: ~/Notchy'), w('alex@pc: ~/Website')], 'Notchy').title, 'alex@pc: ~/Notchy');
     assert.equal(pickWindow([w('Notchy — bash'), w('Notchy — tests')], 'Notchy'), null, 'two candidates: none');
     assert.equal(pickWindow([w('NotchyFork'), w('x')], 'Notchy'), null, 'a word, not a substring');
     assert.equal(pickWindow([w('a'), w('b')], ''), null, 'no project: no guess');

@@ -62,7 +62,7 @@ export default class Notchy extends Extension {
     enable() {
         this.settings = this.getSettings(); this.life = new Lifetime(); this.islands = [];
         try {
-            if (!Notchy.described) { Notchy.described = true; console.log(`Notchy ${this.metadata.version}: ${Compat.describe()}`); }
+            if (!Notchy.described) { Notchy.described = true; console.log(`Notchy ${this.metadata['version-name'] ?? this.metadata.version}: ${Compat.describe()}`); }
             // Notchy's language: the system's, or the one chosen in its preferences.
             this.life.cleanups.push(startTranslations(this, this.settings));
             this.store = new Store(); this.shelf = new Shelf(this.store); this.clipboard = new Clipboard(this.settings, this.store);

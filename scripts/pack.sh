@@ -23,9 +23,9 @@ python3 scripts/i18n.py check
 python3 scripts/i18n.py compile "$stage/locale" >/dev/null
 if command -v msgfmt >/dev/null; then for po in po/*.po; do msgfmt --check --output-file=/dev/null "$po"; done; fi
 gnome-extensions pack "$stage" --force --out-dir="$PWD/dist" --extra-source=src --extra-source=helper --extra-source=README.md --extra-source=docs --extra-source=scripts --extra-source=locale
-python3 - "$PWD/dist/notchy@matthias.local.shell-extension.zip" <<'PY'
+python3 - "$PWD/dist/notchy@matkaise.github.io.shell-extension.zip" <<'PY'
 import sys, zipfile
 names = zipfile.ZipFile(sys.argv[1]).namelist()
 assert 'locale/de/LC_MESSAGES/notchy.mo' in names, 'the package lacks the German catalog'
 PY
-printf 'Bundle: %s/dist/notchy@matthias.local.shell-extension.zip\n' "$PWD"
+printf 'Bundle: %s/dist/notchy@matkaise.github.io.shell-extension.zip\n' "$PWD"

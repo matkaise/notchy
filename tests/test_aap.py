@@ -82,7 +82,7 @@ class AapTest(unittest.TestCase):
                 os.write(write, b'{"anc": "noise"}\n')
                 os.close(write)
                 with os.fdopen(read) as stdin:
-                    aap.run('68:CA:C4:DE:31:F3', out, stdin)
+                    aap.run('12:34:56:78:9A:BC', out, stdin)
             finally:
                 del os.environ['NOTCHY_AAP_REPLAY'], os.environ['NOTCHY_AAP_LOG']
             states = [json.loads(line) for line in out.getvalue().splitlines()]

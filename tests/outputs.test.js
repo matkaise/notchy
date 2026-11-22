@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {OutputGuard, homeOutput, SETTLE_MS} from '../src/services/outputModel.js';
 
 const hdmi = {name: 'alsa_output.pci-0000_01_00.1.hdmi-stereo', airplay: false, local: true};
-const headset = {name: 'bluez_output.68_CA_C4_DE_31_F3.1', airplay: false, local: true};
+const headset = {name: 'bluez_output.12_34_56_78_9A_BC.1', airplay: false, local: true};
 const sunshine = {name: 'sink-sunshine-stereo', airplay: false, local: false};
-const bedroom = {name: 'raop_sink.Sonos-804AF29E79F6.local.192.168.1.111.7000', airplay: true, local: false};
-const kitchen = {name: 'raop_sink.Wohnzimmer.local.192.168.1.108.7000', airplay: true, local: false};
+const bedroom = {name: 'raop_sink.Sonos-0A1B2C3D4E5F.local.192.0.2.11.7000', airplay: true, local: false};
+const kitchen = {name: 'raop_sink.Kitchen.local.192.0.2.12.7000', airplay: true, local: false};
 
 // A guard whose outputs are all present, with the receivers found at login and this computer's output settled.
 function settled(present = [hdmi, sunshine, bedroom, kitchen]) {

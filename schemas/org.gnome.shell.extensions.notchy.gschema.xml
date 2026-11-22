@@ -76,7 +76,7 @@
   <key name="indicators-max" type="i"><default>0</default><range min="0" max="12"/><summary>Maximum number of indicators beside the notch; further ones join the "+N" group (0 = as many as fit)</summary></key>
   <key name="toggle-search" type="as"><default>['&lt;Super&gt;space']</default><summary>Thunderstorm search in the island</summary></key>
     <key name="toggle-island" type="as"><default>['&lt;Super&gt;&lt;Control&gt;space']</default><summary>Toggle island</summary></key>
-    <key name="toggle-clipboard" type="as"><default>['&lt;Super&gt;&lt;Shift&gt;space']</default><summary>Open clipboard</summary></key>
+    <key name="toggle-clipboard" type="as"><default>[]</default><summary>Open clipboard</summary></key>
     <key name="toggle-basket" type="as"><default>['&lt;Super&gt;&lt;Shift&gt;b']</default><summary>Open floating basket</summary></key>
     <key name="toggle-ring" type="as"><default>['&lt;Super&gt;&lt;Shift&gt;r']</default><summary>Open radial capture menu</summary></key>
   </schema>
