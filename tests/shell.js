@@ -922,6 +922,9 @@ async function interactionRegressions(ext, path, screenshot) {
             await screenshot('regal-select-all');
             await headerClick('clear');
             assert(ext.companion.shelfSelected === 0, `a real click on the X clears the selection (${ext.companion.shelfSelected})`);
+            // The drop destination is done; it would take the click meant to focus the Regal (on GitHub's runners it did).
+            destination.force_exit();
+            for (let i = 0; i < 60 && global.get_window_actors().some(a => a.meta_window.get_title() === 'Notchy Drop Destination'); i++) await Scripting.sleep(50);
             await click(tile);
             const escapeFrame = currentPane().get_frame_rect();
             await move(escapeFrame.x + escapeFrame.width / 2, escapeFrame.y + 16);
